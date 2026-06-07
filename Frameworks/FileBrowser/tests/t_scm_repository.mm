@@ -38,7 +38,7 @@ void test_scm_repository_observes_cxx_info ()
 	// same info_t and will have its callback fired in the meantime.
 	scm::info_ptr info = scm::info(jail.path());
 	OAK_ASSERT(info);
-	scm::wait_for_status(info);
+	OAK_ASSERT(scm::wait_for_status(info));
 
 	NSURL* url = [NSURL fileURLWithPath:[NSString stringWithUTF8String:jail.path().c_str()] isDirectory:YES];
 	SCMRepository* repository = [SCMManager.sharedInstance repositoryAtURL:url];

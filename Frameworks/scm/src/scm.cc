@@ -435,7 +435,7 @@ namespace scm
 		return res;
 	}
 
-	void wait_for_status (info_ptr info)
+	bool wait_for_status (info_ptr info, CFTimeInterval timeout)
 	{
 		__block bool shouldWait = true;
 		CFRunLoopRef runLoop = CFRunLoopGetCurrent();
@@ -445,10 +445,22 @@ namespace scm
 			CFRunLoopStop(runLoop);
 		});
 
+		// Bounded wait: drive the run loop in chunks until the callback
+		// fires or the deadline passes. Without this bound the loop could
+		// spin forever waiting on an FSEvents notification that never
+		// arrives — see WISHLIST / HANDOFF for the GitHub Actions hangs
+		// (PR #9 and PR #17 merge runs).
+		CFAbsoluteTime const deadline = CFAbsoluteTimeGetCurrent() + timeout;
 		while(shouldWait)
-			CFRunLoopRun();
+		{
+			CFTimeInterval const remaining = deadline - CFAbsoluteTimeGetCurrent();
+			if(remaining <= 0)
+				break;
+			CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining, false);
+		}
 
 		info->pop_callback();
+		return !shouldWait;
 	}
 
 } /* scm */
