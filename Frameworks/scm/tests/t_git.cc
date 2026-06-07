@@ -15,7 +15,7 @@ struct setup_t
 		{
 			if(info = scm::info(jail.path()))
 			{
-				wait_for_status(info);
+				OAK_MASSERT("timed out waiting for git scm callback", scm::wait_for_status(info));
 			}
 			else
 			{
