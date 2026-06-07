@@ -3,8 +3,6 @@
 #
 # Module to assist in building the Contributors page using git commit history.
 #
-$KCODE = 'U' if RUBY_VERSION < "1.9"
-
 require 'digest/md5'
 require 'fileutils'
 require 'net/https'
@@ -12,7 +10,7 @@ require 'uri'
 require 'cgi'
 require 'dbm'
 require 'date'
-require 'yaml'
+require 'json'
 require 'set'
 
 # Helper class to handle searching for GitHub users
@@ -66,50 +64,81 @@ class GitHubLookup
     @db['71c216d75354dda636b879dfc95654fb'] = 'charliepark'
     @db['c8591aebaf7659f1ff429898345f446a'] = 'olegam'
     @db['f275727e33d63e05cc0abab1bfc41da7'] = 'sudara'
+    # textmatelives fork contributors
+    @db['8c31c603c339e672556eb6a80755b790'] = 'dayglojesus'  # dayglojesus@gmail.com
+    @db['01209ad974dd6086f1275ba21ccf8e2e'] = 'dayglojesus'  # dayglojesus@users.noreply.github.com
     ObjectSpace.define_finalizer(@db, proc {|id| db.close })
   end
 
-  def self.user_by_email(email)
+  # Resolve a commit author's GitHub login. The legacy "search user by
+  # email address" API is gone, so we look up the commit by SHA via the
+  # GitHub REST API (repos/{repo}/commits/{sha}) and read author.login.
+  # Cache by MD5(email) so subsequent commits with the same email reuse
+  # the result. Returns nil (and caches "") on any failure, retaining a
+  # marker that we already tried so we don't refetch on every build.
+  def self.user_by_email(email, repo=nil, sha=nil)
     emailhash = Digest::MD5.hexdigest(email)
     if @db.has_key?(emailhash)
-      return @db[emailhash]
+      cached = @db[emailhash].to_s
+      return cached.empty? ? nil : cached if @db.has_key?("tried:#{emailhash}") || !cached.empty?
     end
 
-    url = 'https://api.github.com/legacy/user/email/' + email
+    return nil unless repo && sha
+
+    url = "https://api.github.com/repos/#{repo}/commits/#{sha}"
     uri = URI.parse(url)
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = true
-    http.verify_mode = OpenSSL::SSL::VERIFY_NONE
 
-    # issue request
-    request = Net::HTTP::Get.new(uri.request_uri, {'User-Agent' => 'curl'})
-    response = http.request(request)
+    request = Net::HTTP::Get.new(uri.request_uri, {
+      'User-Agent' => 'textmatelives-build',
+      'Accept'     => 'application/vnd.github+json'
+    })
+    request['Authorization'] = "Bearer #{ENV['GITHUB_TOKEN']}" if ENV['GITHUB_TOKEN'] && !ENV['GITHUB_TOKEN'].empty?
 
-    # we may be rate-limited
-    if response.code == '403'
-      return @db[emailhash] = nil
+    begin
+      response = http.request(request)
+    rescue StandardError
+      return nil  # network error: don't poison cache, retry next build
     end
 
-    # could be a 404, return nil if so
-    if response.code == '404'
-      return @db[emailhash] = nil
+    @db["tried:#{emailhash}"] = '1'
+
+    unless response.code == '200'
+      @db[emailhash] = ''
+      return nil
     end
 
-    user = YAML.load(response.body)
-    return nil if user.nil?
-    # save result to k/v store
-    return @db[emailhash] = user['user']['login']
+    data = JSON.parse(response.body) rescue nil
+    login = data && data['author'].is_a?(Hash) ? data['author']['login'] : nil
+    @db[emailhash] = login.to_s
+    return login && !login.empty? ? login : nil
   end
 
+end
+
+def detect_github_repo
+  origin = `git remote get-url origin 2>/dev/null`.strip
+  match = origin.match(%r{github\.com[:/]([^/]+/[^/.]+?)(?:\.git)?\z})
+  match ? match[1] : nil
+end
+
+# Show only contributions that have actually made it onto the project's
+# primary branch. Without this, a build from a feature branch would
+# list its in-flight commits as published contributions.
+def detect_log_ref
+  %w[origin/main main HEAD].find { |r| system("git rev-parse --verify --quiet #{r} >/dev/null") } || 'HEAD'
 end
 
 def generate_credits(dbm_file, warn=false)
   GitHubLookup.initialize(dbm_file)
   did_warn_db = Set.new
+  repo = detect_github_repo
+  log_ref = detect_log_ref
 
   # use git's log command to pull out basic info:
   # git hash, author name, email address, author date, commit summary
-  cmd = 'git log -z --date=iso --pretty=format:"%H%n%an%n%ae%n%ad%n%s%n%B"'
+  cmd = %Q{git log #{log_ref} -z --date=iso --pretty=format:"%H%n%an%n%ae%n%ad%n%s%n%B"}
 
   `#{cmd}`.force_encoding('UTF-8').split(/\x00/).each {|commit|
     fields = commit.split(/\n/, 6).map { |f| f.force_encoding('UTF-8') }
@@ -123,11 +152,20 @@ def generate_credits(dbm_file, warn=false)
       hash = fields[0]
       name = CGI.escapeHTML(fields[1])
       # locate the GitHub login for the author's email address
-      user = GitHubLookup.user_by_email(fields[2])
+      user = GitHubLookup.user_by_email(fields[2], repo, hash)
       date = DateTime.parse(fields[3])
       subject = CGI.escapeHTML(fields[4])
       body = CGI.escapeHTML(fields[5].sub(fields[4], '').sub(/[\s\x00]+$/, '').sub(/^[\s\x00]+/, ''))
-      userpic = "https://www.gravatar.com/avatar/#{emailhash}?s=48&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png"
+      # Prefer the per-username GitHub avatar so the same person renders
+      # identically regardless of which commit-author email they used
+      # (e.g. real email vs {login}@users.noreply.github.com from
+      # GitHub-UI PR-merge commits). Fall back to Gravatar+identicon for
+      # unknowns.
+      userpic = if user && !user.empty?
+        "https://github.com/#{user}.png?size=48"
+      else
+        "https://www.gravatar.com/avatar/#{emailhash}?s=48&amp;d=identicon"
+      end
 
       # if we have a github username, populate a link to their
       # profile.
