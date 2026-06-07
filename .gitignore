@@ -2,3 +2,4 @@ build.ninja
 local.rave
 Frameworks/license/src/revoked_serials.cc
 .claude/
+*.DS_Store
