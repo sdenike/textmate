@@ -19,7 +19,10 @@
 
 - (id)init
 {
-	if(self = [super initWithNibName:nil label:@"Software Update" image:[NSImage imageNamed:@"Software Update" inSameBundleAsClass:[self class]]])
+	NSImage* icon = [NSImage imageNamed:@"Software Update" inSameBundleAsClass:[self class]];
+	if(@available(macos 11.0, *))
+		icon = [NSImage imageWithSystemSymbolName:@"arrow.triangle.2.circlepath" accessibilityDescription:@"Software Update"];
+	if(self = [super initWithNibName:nil label:@"Software Update" image:icon])
 	{
 		// Single release stream for now; prerelease reinstated with a beta stream (see WISHLIST.md).
 		[OakStringListTransformer createTransformerWithName:@"OakSoftwareUpdateChannelTransformer" andObjectsArray:@[ kSoftwareUpdateChannelRelease ]];
