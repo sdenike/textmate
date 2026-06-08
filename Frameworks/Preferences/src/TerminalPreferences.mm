@@ -153,7 +153,10 @@ static bool uninstall_mate (std::string const& path)
 @implementation TerminalPreferences
 - (id)init
 {
-	if(self = [super initWithNibName:@"TerminalPreferences" label:@"Terminal" image:[NSImage imageNamed:@"Terminal" inSameBundleAsClass:[self class]]])
+	NSImage* icon = [NSImage imageNamed:@"Terminal" inSameBundleAsClass:[self class]];
+	if(@available(macos 11.0, *))
+		icon = [NSImage imageWithSystemSymbolName:@"terminal" accessibilityDescription:@"Terminal"];
+	if(self = [super initWithNibName:@"TerminalPreferences" label:@"Terminal" image:icon])
 	{
 		[OakStringListTransformer createTransformerWithName:@"OakRMateInterfaceTransformer" andObjectsArray:@[ kRMateServerListenLocalhost, kRMateServerListenRemote ]];
 
