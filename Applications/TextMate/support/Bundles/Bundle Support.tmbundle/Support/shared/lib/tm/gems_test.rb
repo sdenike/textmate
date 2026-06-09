@@ -54,6 +54,11 @@ class GemsTest < Minitest::Test
     assert_match(/frame-two/, log)
   end
 
+  def test_preinstall_returns_false_and_logs_on_missing_gemfile
+    refute TextMate::Gems.preinstall(File.join(@tmp, "nope", "Gemfile"))
+    assert_match(/no Gemfile/, File.read(TextMate::Gems.log_path))
+  end
+
   def test_write_log_appends_rather_than_truncates
     2.times { |i| TextMate::Gems.write_log(TextMate::Gems::Error.new("err-#{i}")) }
     log = File.read(TextMate::Gems.log_path)
