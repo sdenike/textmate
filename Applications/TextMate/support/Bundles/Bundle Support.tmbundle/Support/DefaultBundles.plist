@@ -328,6 +328,22 @@
 			<key>autoUpdate</key>
 			<true/>
 			<key>category</key>
+			<string>Languages</string>
+			<key>description</key>
+			<string>GFM syntax highlighting and preview.</string>
+			<key>name</key>
+			<string>Markdown (GitHub)</string>
+			<key>ref</key>
+			<string>main</string>
+			<key>url</key>
+			<string>https://github.com/textmatelives/GitHub-Markdown.tmbundle</string>
+			<key>uuid</key>
+			<string>A9CF0E77-E848-417C-90F4-77E1231FF1B9</string>
+		</dict>
+		<dict>
+			<key>autoUpdate</key>
+			<true/>
+			<key>category</key>
 			<string>Other</string>
 			<key>description</key>
 			<string>Support for performing different calculations inside TextMate.</string>
