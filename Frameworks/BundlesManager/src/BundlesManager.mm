@@ -544,6 +544,39 @@ static NSString* SafeBasename (NSString* name)
 	return NO;
 }
 
+// After a bundle is installed or updated, warm its RubyGems dependencies (when
+// it ships Support/Gemfile) into TextMate's shared gem store, so the first
+// command that needs them does not pay the install cost. Asynchronous and
+// non-blocking: tm/gems logs any failure to the store's install.log and the
+// lazy setup path surfaces it at actual use time, so nothing here alerts.
+static void WarmBundleGems (NSString* bundlePath)
+{
+	NSString* gemfile = [bundlePath stringByAppendingPathComponent:@"Support/Gemfile"];
+	if(![NSFileManager.defaultManager fileExistsAtPath:gemfile])
+		return;
+
+	// Use the embedded shared support so tm/gems always matches this binary
+	// (a Managed copy can lag). The gem store path is independent of this.
+	NSString* supportPath = [NSBundle.mainBundle.sharedSupportPath stringByAppendingPathComponent:@"Bundles/Bundle Support.tmbundle/Support/shared"];
+
+	NSTask* task = [NSTask new];
+	task.launchPath = @"/usr/bin/ruby";
+	task.arguments  = @[ @"-e", @"require \"#{ENV['TM_SUPPORT_PATH']}/lib/tm/gems\"; TextMate::Gems.preinstall(ARGV[0])", gemfile ];
+	NSMutableDictionary* env = [NSProcessInfo.processInfo.environment mutableCopy];
+	env[@"TM_SUPPORT_PATH"] = supportPath;
+	task.environment = env;
+	task.terminationHandler = ^(NSTask* t){
+		if(t.terminationStatus != 0)
+			os_log_error(OS_LOG_DEFAULT, "WarmBundleGems: ruby exited %d for %{public}@", t.terminationStatus, bundlePath);
+	};
+	@try {
+		[task launch];
+	}
+	@catch(NSException* e) {
+		os_log_error(OS_LOG_DEFAULT, "WarmBundleGems: launch failed: %{public}@", e.reason);
+	}
+}
+
 - (NSProgress*)installBundles:(NSArray<Bundle*>*)someBundles completionHandler:(void(^)(NSArray<Bundle*>*))callback
 {
 	if(someBundles.count == 0)
@@ -592,6 +625,7 @@ static NSString* SafeBasename (NSString* name)
 				bundle.lastUpdated = spec.installedAt;
 				[self reloadPath:destURL.path recursive:YES];
 				[installed addObject:bundle];
+				WarmBundleGems(destURL.path);
 			}
 			dispatch_group_leave(group);
 		}];
@@ -659,6 +693,7 @@ static NSString* SafeBasename (NSString* name)
 				path::set_attr(destURL.path.fileSystemRepresentation, kBundleAttributeUpdated, to_s(resolvedSHA ?: @""));
 				[self reloadPath:destURL.path recursive:YES];
 				[installed addObject:registered];
+				WarmBundleGems(destURL.path);
 			}
 			dispatch_group_leave(group);
 		}];

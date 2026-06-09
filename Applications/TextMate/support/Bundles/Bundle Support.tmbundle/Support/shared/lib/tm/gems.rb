@@ -44,6 +44,18 @@ module TextMate
       fail!(e, name)
     end
 
+    # Warm the store ahead of first use: install a bundle's dependencies
+    # without alerting or aborting. Called by the post-install hook when a
+    # bundle ships a Gemfile. Logs on failure and returns false; the lazy
+    # setup path surfaces any problem at actual use time.
+    def preinstall(gemfile = default_gemfile)
+      prepare(gemfile)
+      true
+    rescue => e
+      write_log(e)
+      false
+    end
+
     # Activate the Gemfile from the shared store, installing it first if needed.
     # Raises on any failure (used directly by tests).
     def prepare(gemfile = default_gemfile)
