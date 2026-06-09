@@ -421,15 +421,6 @@
 			<key>description</key><string>Syntax highlight for man pages (http://en.wikipedia.org/wiki/Manual_page_(Unix)) and a few commands.</string>
 </dict>
 <dict>
-	<key>uuid</key><string>A9CF0E77-E848-417C-90F4-77E1231FF1B9</string>
-	<key>name</key><string>Markdown (GitHub)</string>
-	<key>url</key><string>https://github.com/textmatelives/GitHub-Markdown.tmbundle</string>
-	<key>ref</key><string>main</string>
-	<key>autoUpdate</key><true/>
-	<key>category</key><string>Languages</string>
-			<key>description</key><string>GFM syntax highlighting and preview.</string>
-</dict>
-<dict>
 	<key>uuid</key><string>D2B42D16-FDEB-4079-9293-725312736384</string>
 	<key>name</key><string>Mathematica</string>
 	<key>url</key><string>https://github.com/textmatelives/mathematica-tmbundle</string>
