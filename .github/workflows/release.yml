@@ -294,7 +294,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          set -euo pipefail
+          # -beta versions publish as GitHub prereleases: excluded from
+          # releases/latest (the stable update feed), picked up by the beta
+          # channel's list endpoint.
+          PRERELEASE_FLAG=""
+          case "${VERSION}" in
+            *-beta*) PRERELEASE_FLAG="--prerelease" ;;
+          esac
           gh release create "v${VERSION}" \
+            ${PRERELEASE_FLAG} \
             --target "${GITHUB_SHA}" \
             --title "TextMate ${VERSION}" \
             --notes-file "${{ steps.notes.outputs.notes_file }}" \

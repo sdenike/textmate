@@ -24,8 +24,7 @@
 		icon = [NSImage imageWithSystemSymbolName:@"arrow.triangle.2.circlepath" accessibilityDescription:@"Software Update"];
 	if(self = [super initWithNibName:nil label:@"Software Update" image:icon])
 	{
-		// Single release stream for now; prerelease reinstated with a beta stream (see WISHLIST.md).
-		[OakStringListTransformer createTransformerWithName:@"OakSoftwareUpdateChannelTransformer" andObjectsArray:@[ kSoftwareUpdateChannelRelease ]];
+		[OakStringListTransformer createTransformerWithName:@"OakSoftwareUpdateChannelTransformer" andObjectsArray:@[ kSoftwareUpdateChannelRelease, kSoftwareUpdateChannelPrerelease ]];
 	}
 	return self;
 }
@@ -129,6 +128,7 @@
 
 	MBMenu const updateChannelMenuItems = {
 		{ @"Normal releases", .tag = 0 },
+		{ @"Prereleases",     .tag = 1 },
 	};
 	MBCreateMenu(updateChannelMenuItems, updateChannelPopUp.menu);
 
