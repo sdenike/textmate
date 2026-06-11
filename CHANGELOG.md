@@ -2,6 +2,37 @@ Title: Release Notes
 
 # Changes
 
+## 2026-06-10 (v2.1.2-undead)
+
+Feature release: a working prerelease (beta) update channel, a shared RubyGems store that lets bundles declare gem dependencies, GitHub-flavored Markdown by default, and a fork identity pass across the About window, preferences, and themes. See [all changes since v2.1.1-undead](https://github.com/textmatelives/textmate/compare/v2.1.1-undead...v2.1.2-undead).
+
+### Software Update
+
+* **Prerelease (beta) channel implemented.** The beta channel now reads the repository's release *list* and offers the highest-version non-draft release, prerelease or stable — so beta users get betas as they appear and converge back onto stable when it catches up. The "Prereleases" item returns to the Software Update preferences, and versions containing `-beta` publish as GitHub prereleases, keeping `releases/latest` (the stable feed) on the stable build. ([#24](https://github.com/textmatelives/textmate/pull/24), `d2c9a504`)
+
+### Bundles
+
+* **Shared gem store for bundles.** A bundle can declare a `Support/Gemfile`; `TextMate::Gems` installs it once into a shared, Ruby-ABI-keyed store under `~/Library/Application Support/TextMate/Gems`. Failures alert natively and log full detail; nothing falls back to system gems. ([#21](https://github.com/textmatelives/textmate/pull/21), `b93c76cf`)
+* **Gems warm at install time.** Installing a Gemfile-bearing bundle starts its gem install in the background immediately, so the first command that needs them doesn't stall. ([#22](https://github.com/textmatelives/textmate/pull/22), `014e57a3`)
+* **Markdown (GitHub) is a default bundle.** GFM syntax highlighting and preview (rendered by redcarpet + Rouge — no Python dependency) now installs out of the box instead of being opt-in. ([#23](https://github.com/textmatelives/textmate/pull/23), `15da2268`)
+
+### App and UI
+
+* **Undead theme ships**, a Twilight-derived fork theme. ([#19](https://github.com/textmatelives/textmate/pull/19), `3d9da91c`)
+* **SF Symbols in the preferences toolbar** replace the legacy raster icons. ([#20](https://github.com/textmatelives/textmate/pull/20), `2bb377b2`)
+* **About window fork pass**: fork-branded background and feedback link (`7655cfda`), Contributions repointed at the fork with avatars and ref scope fixed (`03c3d5f3`), missing third-party attributions added to Legal (`bdf30345`), and the defunct Bundles tab removed (`151149ab`). ([#17](https://github.com/textmatelives/textmate/pull/17))
+* **License/registration subsystem retired.** The vestigial serial-number machinery is gone. ([#15](https://github.com/textmatelives/textmate/pull/15), `bae9095e`)
+
+### Fixed
+
+* **SCM `wait_for_status` bounded**, fixing an occasional CI hang. ([#18](https://github.com/textmatelives/textmate/pull/18), `c8a8ce74`)
+
+### CI and docs
+
+* **Releases gate on an isolated build + test** via a reusable workflow. ([#14](https://github.com/textmatelives/textmate/pull/14), `c64a7e0e`)
+* **`actions/checkout` bumped to v5** (Node 24 runtime). ([#16](https://github.com/textmatelives/textmate/pull/16), `077a579d`)
+* **Stale `api.textmate.org` notes corrected** in the contributor docs. ([#13](https://github.com/textmatelives/textmate/pull/13), `0aeda5b6`)
+
 ## 2026-05-28 (v2.1.1-undead)
 
 Maintenance release: the software-update mechanism is rebuilt on GitHub Releases, all remaining calls to the retired `api.textmate.org` are removed, and the app is classified as a macOS application again. See [all changes since v2.1.0-undead](https://github.com/textmatelives/textmate/compare/v2.1.0-undead...v2.1.1-undead).
