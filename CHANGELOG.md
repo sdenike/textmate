@@ -2,6 +2,14 @@ Title: Release Notes
 
 # Changes
 
+## 2026-06-11 (v2.1.4-undead)
+
+Bugfix release: the GitHub Markdown preview no longer dies with a `LoadError` on installs that predate 2026-06-08 ([#29](https://github.com/textmatelives/textmate/issues/29)). See [all changes since v2.1.3-undead](https://github.com/textmatelives/textmate/compare/v2.1.3-undead...v2.1.4-undead).
+
+### Bundles
+
+* **Stale Bundle Support installs heal themselves.** The shared gem store (`tm/gems`) had landed only in the app's embedded copy of Bundle Support — the upstream bundle repository and its pin never changed, so existing installs kept a copy without it while the auto-updating Markdown (GitHub) bundle began requiring it. The library (and the Markdown (GitHub) default-bundle promotion from [#23](https://github.com/textmatelives/textmate/pull/23), which had drifted the same way) is now published upstream, and the bumped pin makes every stale install re-copy Bundle Support on next launch. ([#30](https://github.com/textmatelives/textmate/pull/30), `f71b6df2`)
+
 ## 2026-06-11 (v2.1.3-undead)
 
 Bugfix release: the app no longer talks to the metered GitHub API at all, fixing update checks that failed around the clock on networks whose unauthenticated quota (60 requests/hour per IP, shared by every tool on the network) was exhausted ([#26](https://github.com/textmatelives/textmate/issues/26)). See [all changes since v2.1.2-undead](https://github.com/textmatelives/textmate/compare/v2.1.2-undead...v2.1.3-undead).
