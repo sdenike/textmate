@@ -2,6 +2,19 @@ Title: Release Notes
 
 # Changes
 
+## 2026-06-11 (v2.1.3-undead)
+
+Bugfix release: the app no longer talks to the metered GitHub API at all, fixing update checks that failed around the clock on networks whose unauthenticated quota (60 requests/hour per IP, shared by every tool on the network) was exhausted ([#26](https://github.com/textmatelives/textmate/issues/26)). See [all changes since v2.1.2-undead](https://github.com/textmatelives/textmate/compare/v2.1.2-undead...v2.1.3-undead).
+
+### Software Update
+
+* **Update checks can no longer be rate-limited.** The update feed moved from the GitHub Releases API to git's smart-HTTP ref advertisement — the same unmetered endpoint `git ls-remote` reads. The newest `refs/tags/v*` tag is the latest version (the beta channel includes `-beta` tags, release skips them) and the download URL follows the release asset convention. ([#27](https://github.com/textmatelives/textmate/pull/27), `c355ab70`)
+* **Errors now say what went wrong.** A rate-limited network reports “GitHub API rate limit reached for this network. Try again after ⟨reset time⟩.” instead of “Incomplete server response.”; other server errors surface the server's own message, and an unexpected content type (e.g. a captive portal) names itself. ([#27](https://github.com/textmatelives/textmate/pull/27), `c355ab70`)
+
+### Bundles
+
+* **Bundle updates no longer spend API quota.** Ref-to-SHA resolution uses the same unmetered ref advertisement instead of one Releases-API call per bundle per poll, so a busy network can no longer starve bundle updates either. ([#27](https://github.com/textmatelives/textmate/pull/27), `c355ab70`)
+
 ## 2026-06-10 (v2.1.2-undead)
 
 Feature release: a working prerelease (beta) update channel, a shared RubyGems store that lets bundles declare gem dependencies, GitHub-flavored Markdown by default, and a fork identity pass across the About window, preferences, and themes. See [all changes since v2.1.1-undead](https://github.com/textmatelives/textmate/compare/v2.1.1-undead...v2.1.2-undead).
