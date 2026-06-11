@@ -18,61 +18,183 @@ NSString* const kSoftwareUpdateChannelRelease                                  =
 NSString* const kSoftwareUpdateChannelPrerelease                               = @"beta";
 NSString* const kSoftwareUpdateChannelCanary                                   = @"nightly";
 
-// Maps a parsed feed dictionary to (url, version). Handles the GitHub Releases
-// API schema (tag_name + the .tbz entry in assets[].browser_download_url) and
-// the legacy { url, version } shape.
-static void OakExtractUpdateInfo (NSDictionary* dict, NSURL** outURL, NSString** outVersion)
+static BOOL is_hex (char ch)
 {
-	if(![dict isKindOfClass:NSDictionary.class])
-		return;
-
-	if(NSString* tag = dict[@"tag_name"]) // GitHub Releases API
-	{
-		*outVersion = [tag hasPrefix:@"v"] ? [tag substringFromIndex:1] : tag;
-		for(NSDictionary* asset in dict[@"assets"])
-		{
-			if([asset isKindOfClass:NSDictionary.class] && [[asset[@"name"] pathExtension] isEqualToString:@"tbz"])
-			{
-				if(NSString* downloadURL = asset[@"browser_download_url"])
-					*outURL = [NSURL URLWithString:downloadURL];
-				break;
-			}
-		}
-	}
-	else // legacy { url, version }
-	{
-		*outURL     = dict[@"url"] ? [NSURL URLWithString:dict[@"url"]] : nil;
-		*outVersion = dict[@"version"];
-	}
+	return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
 }
 
-NSDictionary* OakSelectGitHubRelease (NSArray* releases, BOOL includePrereleases)
+// Parses a git-upload-pack ref advertisement into a refname → SHA map.
+// Returns nil when the data is not valid pkt-line format.
+static NSDictionary<NSString*, NSString*>* OakRefsInUploadPackAdvertisement (NSData* data)
 {
-	NSDictionary* best = nil;
-	NSString* bestVersion = nil;
+	if(!data.length)
+		return nil;
 
-	for(NSDictionary* release in releases)
+	NSMutableDictionary<NSString*, NSString*>* shaForName = [NSMutableDictionary dictionary];
+
+	char const* bytes = (char const*)data.bytes;
+	NSUInteger size = data.length;
+	for(NSUInteger offset = 0; offset + 4 <= size; )
 	{
-		if(![release isKindOfClass:NSDictionary.class] || [release[@"draft"] boolValue])
-			continue;
-		if(!includePrereleases && [release[@"prerelease"] boolValue])
-			continue;
-
-		NSString* tag = release[@"tag_name"];
-		if(![tag isKindOfClass:NSString.class])
-			continue;
-
-		// The list is ordered by creation date, not version, so compare
-		// explicitly (a hotfix can be published after a newer beta).
-		NSString* version = [tag hasPrefix:@"v"] ? [tag substringFromIndex:1] : tag;
-		if(!best || OakCompareVersionStrings(bestVersion, version) == NSOrderedAscending)
+		NSUInteger pktLength = 0;
+		for(NSUInteger i = 0; i < 4; ++i)
 		{
-			best        = release;
-			bestVersion = version;
+			char ch = bytes[offset + i];
+			if(!is_hex(ch))
+				return nil;
+			pktLength = (pktLength << 4) | (NSUInteger)(ch <= '9' ? ch - '0' : (ch | 0x20) - 'a' + 10);
 		}
+
+		if(pktLength == 0) // flush packet
+		{
+			offset += 4;
+			continue;
+		}
+
+		if(pktLength < 4 || offset + pktLength > size)
+			return nil;
+
+		// Payload is “<40-hex-sha> <refname>[\0capabilities]\n”; the leading
+		// “# service=…” pkt and anything else non-conforming is skipped.
+		char const* payload = bytes + offset + 4;
+		NSUInteger payloadLength = pktLength - 4;
+		offset += pktLength;
+
+		if(payloadLength < 42 || payload[40] != ' ')
+			continue;
+
+		BOOL shaValid = YES;
+		for(NSUInteger i = 0; i < 40 && shaValid; ++i)
+			shaValid = is_hex(payload[i]);
+		if(!shaValid)
+			continue;
+
+		NSUInteger nameEnd = 41;
+		while(nameEnd < payloadLength && payload[nameEnd] != '\0' && payload[nameEnd] != '\n')
+			++nameEnd;
+		if(nameEnd == 41)
+			continue;
+
+		NSString* sha  = [[NSString alloc] initWithBytes:payload length:40 encoding:NSASCIIStringEncoding];
+		NSString* name = [[NSString alloc] initWithBytes:payload + 41 length:nameEnd - 41 encoding:NSUTF8StringEncoding];
+		if(name)
+			shaForName[name] = sha;
 	}
 
+	return shaForName;
+}
+
+NSString* OakSHAForRefInUploadPackAdvertisement (NSData* data, NSString* ref)
+{
+	if(!ref.length)
+		return nil;
+
+	NSDictionary<NSString*, NSString*>* shaForName = OakRefsInUploadPackAdvertisement(data);
+
+	NSArray<NSString*>* candidates;
+	if([ref isEqualToString:@"HEAD"])
+		candidates = @[ @"HEAD" ];
+	else if([ref hasPrefix:@"refs/"])
+		candidates = @[ [ref stringByAppendingString:@"^{}"], ref ];
+	else
+		candidates = @[ [@"refs/heads/" stringByAppendingString:ref], [NSString stringWithFormat:@"refs/tags/%@^{}", ref], [@"refs/tags/" stringByAppendingString:ref] ];
+
+	for(NSString* candidate in candidates)
+	{
+		if(NSString* sha = shaForName[candidate])
+			return sha;
+	}
+	return nil;
+}
+
+NSString* OakLatestVersionInUploadPackAdvertisement (NSData* data, BOOL includePrereleases)
+{
+	NSString* best = nil;
+	for(NSString* name in OakRefsInUploadPackAdvertisement(data))
+	{
+		if(![name hasPrefix:@"refs/tags/v"])
+			continue;
+
+		NSString* tag = [name substringFromIndex:[@"refs/tags/v" length]];
+		if([tag hasSuffix:@"^{}"]) // peeled duplicate of an annotated tag
+			tag = [tag substringToIndex:tag.length - 3];
+
+		if(!tag.length || !isdigit([tag characterAtIndex:0])) // v2.1.0 yes, vendor-drop no
+			continue;
+		if(!includePrereleases && [tag containsString:@"-beta"]) // release.yml’s prerelease marker
+			continue;
+
+		if(!best || OakCompareVersionStrings(best, tag) == NSOrderedAscending)
+			best = tag;
+	}
 	return best;
+}
+
+NSURL* OakUpdateAssetURLForVersion (NSString* version, NSURL* advertisementURL)
+{
+	if(!version.length)
+		return nil;
+
+	// Expect /{owner}/{repo}.git/info/refs
+	NSArray<NSString*>* parts = advertisementURL.path.pathComponents;
+	if(parts.count != 5 || ![parts[1] length] || ![parts[2] hasSuffix:@".git"] || [parts[2] length] < 5 || ![parts[3] isEqualToString:@"info"] || ![parts[4] isEqualToString:@"refs"])
+		return nil;
+
+	NSString* repo = [parts[2] substringToIndex:[parts[2] length] - 4];
+	return [NSURL URLWithString:[NSString stringWithFormat:@"https://%@/%@/%@/releases/download/v%@/TextMate-%@.tbz", advertisementURL.host, parts[1], repo, version, version]];
+}
+
+// Case-insensitive header lookup (HTTP/2 lowercases header names; the
+// 10.15-only -valueForHTTPHeaderField: is below this framework's floor).
+static NSString* OakHTTPHeaderValue (NSHTTPURLResponse* response, NSString* field)
+{
+	for(NSString* key in response.allHeaderFields)
+	{
+		if([key caseInsensitiveCompare:field] == NSOrderedSame)
+		{
+			NSString* value = response.allHeaderFields[key];
+			return [value isKindOfClass:NSString.class] ? value : nil;
+		}
+	}
+	return nil;
+}
+
+NSError* OakGitHubResponseError (NSURLResponse* response, id body)
+{
+	if(![response isKindOfClass:NSHTTPURLResponse.class])
+		return nil;
+
+	NSHTTPURLResponse* http = (NSHTTPURLResponse*)response;
+	if(http.statusCode / 100 == 2)
+		return nil;
+
+	NSString* message;
+	if([OakHTTPHeaderValue(http, @"x-ratelimit-remaining") isEqualToString:@"0"])
+	{
+		// The unauthenticated api.github.com quota (60 requests/hour per IP,
+		// shared with everything else on the network) is exhausted — the
+		// common cause of failed checks (issue #26). GitHub's own body
+		// message is poor dialog copy, so say what happened and when the
+		// quota resets.
+		message = @"GitHub API rate limit reached for this network.";
+		if(NSTimeInterval reset = OakHTTPHeaderValue(http, @"x-ratelimit-reset").doubleValue)
+		{
+			NSDateFormatter* formatter = [NSDateFormatter new];
+			formatter.dateStyle = NSDateFormatterNoStyle;
+			formatter.timeStyle = NSDateFormatterShortStyle;
+			message = [message stringByAppendingFormat:@" Try again after %@.", [formatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:reset]]];
+		}
+	}
+	else if([body isKindOfClass:NSDictionary.class] && [body[@"message"] isKindOfClass:NSString.class] && [body[@"message"] length])
+	{
+		message = body[@"message"]; // GitHub error bodies carry a human-readable “message”
+	}
+	else
+	{
+		message = [NSString stringWithFormat:@"HTTP %ld from update server.", (long)http.statusCode];
+	}
+
+	return [NSError errorWithDomain:@"SoftwareUpdate" code:http.statusCode userInfo:@{ NSLocalizedDescriptionKey: message }];
 }
 
 // Team Identifier of the currently running application, or nil if unsigned /
@@ -254,33 +376,34 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 
 			if(!error)
 			{
-				if(NSString* contentType = ((NSHTTPURLResponse*)response).allHeaderFields[@"Content-Type"])
+				NSString* contentType = ((NSHTTPURLResponse*)response).allHeaderFields[@"Content-Type"];
+
+				// Error bodies (e.g. from a proxy or a metered endpoint) are
+				// JSON; the feed itself is a ref advertisement.
+				id body = nil;
+				if([contentType hasPrefix:@"application/json"])
+					body = [NSJSONSerialization JSONObjectWithData:data options:0 error:nullptr];
+
+				if(NSError* httpError = OakGitHubResponseError(response, body))
 				{
-					id plist;
-					if([contentType hasPrefix:@"application/json"]) // GitHub sends "application/json; charset=utf-8"
-							plist = [NSJSONSerialization JSONObjectWithData:data options:0 error:nullptr];
-					else	plist = [NSPropertyListSerialization propertyListWithData:data options:NSPropertyListImmutable format:nil error:nil];
-
-					// The “list releases” endpoint (beta channel) returns an array;
-					// reduce it to the best entry. Empty dictionary keeps us on the
-					// “Incomplete server response” path when nothing qualifies.
-					if([plist isKindOfClass:NSArray.class])
-						plist = OakSelectGitHubRelease(plist, ![updateChannel isEqualToString:kSoftwareUpdateChannelRelease]) ?: @{ };
-
-					if([plist isKindOfClass:NSDictionary.class])
-					{
-						OakExtractUpdateInfo(plist, &remoteURL, &remoteVersion);
-						if(!remoteURL || !remoteVersion)
-							error = [NSError errorWithDomain:@"SoftwareUpdate" code:0 userInfo:@{ NSLocalizedDescriptionKey: @"Incomplete server response." }];
-					}
-					else
-					{
-						error = [NSError errorWithDomain:@"SoftwareUpdate" code:0 userInfo:@{ NSLocalizedDescriptionKey: @"Malformed server response." }];
-					}
+					error = httpError;
+				}
+				else if([contentType hasPrefix:@"application/x-git-upload-pack-advertisement"])
+				{
+					BOOL includePrereleases = [updateChannel isEqualToString:kSoftwareUpdateChannelPrerelease];
+					remoteVersion = OakLatestVersionInUploadPackAdvertisement(data, includePrereleases);
+					remoteURL     = OakUpdateAssetURLForVersion(remoteVersion, url);
+					if(!remoteURL || !remoteVersion)
+						error = [NSError errorWithDomain:@"SoftwareUpdate" code:0 userInfo:@{ NSLocalizedDescriptionKey: @"No release tags in server response." }];
 				}
 				else
 				{
-					error = [NSError errorWithDomain:@"SoftwareUpdate" code:0 userInfo:@{ NSLocalizedDescriptionKey: @"Missing Content-Type in server response." }];
+					// 200 with the wrong content type — e.g. a captive portal’s
+					// HTML — names itself instead of “Incomplete server response.”
+					// (Message built outside the dictionary literal: a comma there
+					// breaks the enclosing os_activity_initiate macro expansion.)
+					NSString* message = [@"Unexpected response type from update server: " stringByAppendingString:contentType ?: @"none"];
+					error = [NSError errorWithDomain:@"SoftwareUpdate" code:0 userInfo:@{ NSLocalizedDescriptionKey: message }];
 				}
 			}
 

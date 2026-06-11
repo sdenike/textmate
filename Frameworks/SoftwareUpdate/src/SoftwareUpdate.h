@@ -19,7 +19,31 @@ extern NSString* const kSoftwareUpdateChannelCanary;
 
 NSComparisonResult OakCompareVersionStrings (NSString* lhsString, NSString* rhsString);
 
-// Given a GitHub “list releases” response, returns the release with the
-// highest version (per OakCompareVersionStrings on tag_name), skipping drafts
-// and — unless includePrereleases — prereleases. Returns nil if none qualify.
-NSDictionary* OakSelectGitHubRelease (NSArray* releases, BOOL includePrereleases);
+// The update feed is git’s smart-HTTP ref advertisement (the body of
+// GET {repo}.git/info/refs?service=git-upload-pack — what `git ls-remote`
+// uses). Unlike api.github.com it is unmetered, so update checks cannot be
+// starved by the 60-requests/hour-per-IP API quota (issue #26).
+
+// Extracts the commit SHA for `ref` from a ref advertisement. A bare name
+// tries refs/heads/<ref> first, then refs/tags/<ref> — preferring the peeled
+// (^{}) commit of an annotated tag over the tag object. Returns nil when the
+// ref is absent or the data is not a valid advertisement.
+NSString* OakSHAForRefInUploadPackAdvertisement (NSData* data, NSString* ref);
+
+// Returns the highest version (per OakCompareVersionStrings) among the
+// advertisement’s refs/tags/v<digit>… tags, stripped of the leading “v”.
+// Versions containing “-beta” are skipped unless includePrereleases — the
+// same convention release.yml uses to mark a release as a prerelease.
+// Returns nil if no tag qualifies or the data is malformed.
+NSString* OakLatestVersionInUploadPackAdvertisement (NSData* data, BOOL includePrereleases);
+
+// Builds the release-asset URL for a version by convention — release.yml
+// uploads TextMate-{version}.tbz onto release v{version} — from the
+// advertisement URL’s {host}/{owner}/{repo}.git/info/refs shape. Returns nil
+// when either input doesn’t fit.
+NSURL* OakUpdateAssetURLForVersion (NSString* version, NSURL* advertisementURL);
+
+// Maps a non-2xx HTTP response to an NSError, preferring the “message” field
+// GitHub puts in error bodies (e.g. “API rate limit exceeded for …”) over a
+// bare status code. Returns nil for 2xx or non-HTTP responses.
+NSError* OakGitHubResponseError (NSURLResponse* response, id body);
