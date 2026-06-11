@@ -46,6 +46,35 @@ static void OakExtractUpdateInfo (NSDictionary* dict, NSURL** outURL, NSString**
 	}
 }
 
+NSDictionary* OakSelectGitHubRelease (NSArray* releases, BOOL includePrereleases)
+{
+	NSDictionary* best = nil;
+	NSString* bestVersion = nil;
+
+	for(NSDictionary* release in releases)
+	{
+		if(![release isKindOfClass:NSDictionary.class] || [release[@"draft"] boolValue])
+			continue;
+		if(!includePrereleases && [release[@"prerelease"] boolValue])
+			continue;
+
+		NSString* tag = release[@"tag_name"];
+		if(![tag isKindOfClass:NSString.class])
+			continue;
+
+		// The list is ordered by creation date, not version, so compare
+		// explicitly (a hotfix can be published after a newer beta).
+		NSString* version = [tag hasPrefix:@"v"] ? [tag substringFromIndex:1] : tag;
+		if(!best || OakCompareVersionStrings(bestVersion, version) == NSOrderedAscending)
+		{
+			best        = release;
+			bestVersion = version;
+		}
+	}
+
+	return best;
+}
+
 // Team Identifier of the currently running application, or nil if unsigned /
 // ad-hoc signed (e.g. a local development build).
 static NSString* OakRunningApplicationTeamIdentifier ()
@@ -227,10 +256,16 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 			{
 				if(NSString* contentType = ((NSHTTPURLResponse*)response).allHeaderFields[@"Content-Type"])
 				{
-					NSDictionary* plist;
+					id plist;
 					if([contentType hasPrefix:@"application/json"]) // GitHub sends "application/json; charset=utf-8"
 							plist = [NSJSONSerialization JSONObjectWithData:data options:0 error:nullptr];
 					else	plist = [NSPropertyListSerialization propertyListWithData:data options:NSPropertyListImmutable format:nil error:nil];
+
+					// The “list releases” endpoint (beta channel) returns an array;
+					// reduce it to the best entry. Empty dictionary keeps us on the
+					// “Incomplete server response” path when nothing qualifies.
+					if([plist isKindOfClass:NSArray.class])
+						plist = OakSelectGitHubRelease(plist, ![updateChannel isEqualToString:kSoftwareUpdateChannelRelease]) ?: @{ };
 
 					if([plist isKindOfClass:NSDictionary.class])
 					{

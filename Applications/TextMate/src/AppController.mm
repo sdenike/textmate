@@ -488,14 +488,17 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 	// Fork update feed: the GitHub Releases API for textmatelives/textmate.
 	// SoftwareUpdate adapts the API's JSON (tag_name + .tbz asset) into the
-	// { url, version } shape it expects. The fork publishes a single release
-	// stream, so all channels point at the same endpoint; the prefs UI only
-	// exposes "Normal releases" anyway.
-	NSString* const feedURL = @"https://api.github.com/repos/textmatelives/textmate/releases/latest";
+	// { url, version } shape it expects. Release uses releases/latest, which
+	// excludes prereleases; the beta channel lists all releases and picks the
+	// highest version, prerelease or not, so beta users converge back onto
+	// stable when it catches up. No nightly stream exists, so Canary stays on
+	// the stable endpoint.
+	NSString* const stableFeedURL = @"https://api.github.com/repos/textmatelives/textmate/releases/latest";
+	NSString* const betaFeedURL   = @"https://api.github.com/repos/textmatelives/textmate/releases?per_page=20";
 	SoftwareUpdate.sharedInstance.channels = @{
-		kSoftwareUpdateChannelRelease:    [NSURL URLWithString:feedURL],
-		kSoftwareUpdateChannelPrerelease: [NSURL URLWithString:feedURL],
-		kSoftwareUpdateChannelCanary:     [NSURL URLWithString:feedURL],
+		kSoftwareUpdateChannelRelease:    [NSURL URLWithString:stableFeedURL],
+		kSoftwareUpdateChannelPrerelease: [NSURL URLWithString:betaFeedURL],
+		kSoftwareUpdateChannelCanary:     [NSURL URLWithString:stableFeedURL],
 	};
 
 	settings_t::set_default_settings_path([[[NSBundle mainBundle] pathForResource:@"Default" ofType:@"tmProperties"] fileSystemRepresentation]);

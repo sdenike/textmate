@@ -18,3 +18,8 @@ extern NSString* const kSoftwareUpdateChannelCanary;
 @end
 
 NSComparisonResult OakCompareVersionStrings (NSString* lhsString, NSString* rhsString);
+
+// Given a GitHub “list releases” response, returns the release with the
+// highest version (per OakCompareVersionStrings on tag_name), skipping drafts
+// and — unless includePrereleases — prereleases. Returns nil if none qualify.
+NSDictionary* OakSelectGitHubRelease (NSArray* releases, BOOL includePrereleases);
