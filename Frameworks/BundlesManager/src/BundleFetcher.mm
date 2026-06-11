@@ -1,14 +1,11 @@
 #import "BundleFetcher.h"
 #import "BundleSpec.h"
+#import <SoftwareUpdate/SoftwareUpdate.h> // OakSHAForRefInUploadPackAdvertisement()
 #import <oak/debug.h>
 
 static NSString* const kErrorDomain = @"BundleFetcher";
 
-static NSString* const kHeaderETag         = @"ETag";
-static NSString* const kHeaderIfNoneMatch  = @"If-None-Match";
 static NSString* const kHeaderUserAgent    = @"User-Agent";
-static NSString* const kHeaderAccept       = @"Accept";
-static NSString* const kGitHubV3MediaType  = @"application/vnd.github+json";
 
 @interface BundleFetcher ()
 + (NSString*)userAgentString;
@@ -18,12 +15,8 @@ static NSString* const kGitHubV3MediaType  = @"application/vnd.github+json";
 {
 @public
 	NSString* _sha;
-	NSString* _etag;
-	BOOL      _notModified;
 }
 - (NSString*)sha  { return _sha; }
-- (NSString*)etag { return _etag; }
-- (BOOL)notModified { return _notModified; }
 @end
 
 // =====================
@@ -304,7 +297,7 @@ static NSString* const kGitHubV3MediaType  = @"application/vnd.github+json";
 	return YES;
 }
 
-- (void)resolveSHAForSpec:(BundleSpec*)spec conditionalEtag:(NSString*)etag completion:(void(^)(BundleSHAResolution*, NSError*))completion
+- (void)resolveSHAForSpec:(BundleSpec*)spec completion:(void(^)(BundleSHAResolution*, NSError*))completion
 {
 	NSString* owner = nil;
 	NSString* repo  = nil;
@@ -314,14 +307,13 @@ static NSString* const kGitHubV3MediaType  = @"application/vnd.github+json";
 		return;
 	}
 
-	NSString* encodedRef = [spec.ref stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLPathAllowedCharacterSet];
-	NSString* urlStr = [NSString stringWithFormat:@"https://api.github.com/repos/%@/%@/commits/%@", owner, repo, encodedRef];
+	// git's smart-HTTP ref advertisement: unauthenticated and exempt from
+	// the api.github.com rate limit (issue #26).
+	NSString* ref = spec.ref;
+	NSString* urlStr = [NSString stringWithFormat:@"https://github.com/%@/%@.git/info/refs?service=git-upload-pack", owner, repo];
 
 	NSMutableURLRequest* req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlStr] cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:30];
 	[req setValue:[BundleFetcher userAgentString] forHTTPHeaderField:kHeaderUserAgent];
-	[req setValue:kGitHubV3MediaType forHTTPHeaderField:kHeaderAccept];
-	if(etag.length)
-		[req setValue:etag forHTTPHeaderField:kHeaderIfNoneMatch];
 
 	NSURLSessionDataTask* task = [NSURLSession.sharedSession dataTaskWithRequest:req completionHandler:^(NSData* data, NSURLResponse* response, NSError* error){
 		dispatch_async(dispatch_get_main_queue(), ^{
@@ -332,30 +324,20 @@ static NSString* const kGitHubV3MediaType  = @"application/vnd.github+json";
 			}
 
 			NSHTTPURLResponse* http = (NSHTTPURLResponse*)response;
-			BundleSHAResolution* result = [BundleSHAResolution new];
-			result->_etag = http.allHeaderFields[kHeaderETag];
-
-			if(http.statusCode == 304)
-			{
-				result->_notModified = YES;
-				result->_etag = etag; // server omits ETag on 304 sometimes
-				completion(result, nil);
-				return;
-			}
-
 			if(http.statusCode / 100 != 2)
 			{
-				completion(nil, [NSError errorWithDomain:kErrorDomain code:http.statusCode userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"HTTP %ld from GitHub API (%@)", (long)http.statusCode, urlStr] }]);
+				completion(nil, [NSError errorWithDomain:kErrorDomain code:http.statusCode userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"HTTP %ld from github.com (%@)", (long)http.statusCode, urlStr] }]);
 				return;
 			}
 
-			NSDictionary* json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-			NSString* sha = json[@"sha"];
+			NSString* sha = OakSHAForRefInUploadPackAdvertisement(data, ref);
 			if(sha.length != 40)
 			{
-				completion(nil, [NSError errorWithDomain:kErrorDomain code:4 userInfo:@{ NSLocalizedDescriptionKey: @"Missing or malformed sha in GitHub response" }]);
+				completion(nil, [NSError errorWithDomain:kErrorDomain code:4 userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Cannot resolve ‘%@’ in %@/%@", ref, owner, repo] }]);
 				return;
 			}
+
+			BundleSHAResolution* result = [BundleSHAResolution new];
 			result->_sha = sha;
 			completion(result, nil);
 		});

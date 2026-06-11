@@ -220,12 +220,10 @@ static NSString* SafeBasename (NSString* name)
 			spec.installedAt  = [NSDate date];
 
 			// Resolve the actual SHA so installedSHA is meaningful.
-			[BundleFetcher.sharedInstance resolveSHAForSpec:spec conditionalEtag:nil completion:^(BundleSHAResolution* resolution, NSError* resolveError){
+			[BundleFetcher.sharedInstance resolveSHAForSpec:spec completion:^(BundleSHAResolution* resolution, NSError* resolveError){
 				if(resolution.sha.length)
 				{
 					spec.installedSHA = resolution.sha;
-					if(resolution.etag.length)
-						spec.etag = resolution.etag;
 				}
 				else
 				{
@@ -454,22 +452,10 @@ static NSString* SafeBasename (NSString* name)
 	}
 
 	// Branch/tag: resolve current SHA first, then fetch only if changed or missing.
-	[BundleFetcher.sharedInstance resolveSHAForSpec:spec conditionalEtag:spec.etag completion:^(BundleSHAResolution* resolution, NSError* err){
+	[BundleFetcher.sharedInstance resolveSHAForSpec:spec completion:^(BundleSHAResolution* resolution, NSError* err){
 		if(err)
 		{
 			os_log_error(OS_LOG_DEFAULT, "SHA resolve failed for %{public}@: %{public}@", spec.name, err.localizedDescription);
-			[self processSpecs:specs index:i+1 bundlesDir:bundlesDir completion:completion];
-			return;
-		}
-
-		if(resolution.etag.length)
-		{
-			spec.etag = resolution.etag;
-			[BundleRegistry.sharedInstance updateSpec:spec];
-		}
-
-		if(resolution.notModified && isInstalled)
-		{
 			[self processSpecs:specs index:i+1 bundlesDir:bundlesDir completion:completion];
 			return;
 		}
