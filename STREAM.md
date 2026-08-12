@@ -4,6 +4,57 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Task 4 fix round 1/5 (bundle ID isolation) complete
+
+**What:** Fixed an Important review finding in `bin/bench/measure.sh`:
+`official`, `undead`, and any real TextMate a developer has installed all
+share the identical `CFBundleIdentifier` `com.macromates.TextMate`, but
+every Apple Event the harness sends was addressed `tell application id
+"$BUNDLE_ID"` — which macOS resolves to whichever process currently owns
+that id system-wide, not necessarily the instance this script just
+launched at `$APP`. Added `other_instance_pid()`, which finds any process
+with the same executable name whose full command line does not start with
+`"$APP"/`, and wired it in at two points: an upfront gate right after
+`BUNDLE_ID` is computed (skips the entire launch/RSS section — reporting
+`not measured (bundle id owned by another process)` — before even calling
+`open -a`, since `open -a` itself could activate the wrong instance), and
+inside `osascript_bounded` itself, the one chokepoint all five flagged
+call sites already run through, as defense-in-depth against a conflicting
+instance appearing mid-run. Verified with an isolated test against the
+function extracted from the committed file — nothing running (no
+conflict), the script's own launch queried against its own path (no
+conflict), and the same running process queried against a *different*
+build's path (conflict correctly detected) — using only scratch-directory
+builds, never `/Applications`, and without re-running the full benchmark
+or producing new baseline numbers, per instruction. Also added three
+disclosure-only bullets to `docs/benchmarks/2026-08-12-baseline.md`'s
+"Measurement limits" section for two deferred Minor findings
+(`hdiutil attach` has no timeout; the warm-up launch's readiness loop has
+no failure branch and can silently make the "second launch onward" claim
+false for a row) plus the shared-bundle-id constraint itself.
+
+**Why:** an id-addressed quit landing on a user's real, open TextMate
+session would destroy their working state, and a readiness poll answering
+off the wrong process would corrupt the very numbers Phase 3 and Phase 7
+are judged against — silently, with no error, producing a plausible-looking
+but meaningless numbers. This machine has exactly that real
+`/Applications/TextMate.app` installed at the same bundle id, so the risk
+was not theoretical. Fixed the shared chokepoint rather than each of the
+five flagged call sites individually so no future call site can bypass the
+guard by omission.
+
+### If interrupted here
+
+Fix round 1/5 committed, nothing left in progress. The recorded baseline
+table in `docs/benchmarks/2026-08-12-baseline.md` is unchanged from the
+prior round — this round touched the harness and the limits section only,
+per instruction not to re-run benchmarks. `.superpowers/sdd/.../task-4-report.md`
+has a "Fix round 1/5" section appended with full reasoning. If further
+review rounds land (2/5 through 5/5 per the coordinator's message), resume
+from there; no known issues remain open in this round.
+
+---
+
 ## 2026-08-12 — Task 5 (2021-tree build attempt) complete: does not build, Phase 1 is the oracle
 
 **What:** Attempted the inherited 2021 tree on today's toolchain (macOS 26.6.1, Xcode 26.6,
