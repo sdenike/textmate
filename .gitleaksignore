@@ -1,0 +1,11 @@
+# Pre-existing false positive, not a credential. Predates our fork.
+#
+# Finding: rule generic-api-key, Frameworks/OakTextView/src/OakDocumentView.mm:130,
+# commit 3c79f275 (upstream, 2012-08-23, Allan Odgaard). The match is
+# kSettingsThemeKey, a theme UUID constant — high-entropy enough to trip the
+# generic-api-key heuristic, but a fixed identifier, not a secret.
+#
+# Scoped to this exact commit+file+rule+line fingerprint on purpose: a genuinely
+# new secret anywhere else, including a different line or a later commit to this
+# same file, still gets caught.
+3c79f275f1a504aa3fedf6b4aca600fc7ed808f6:Frameworks/OakTextView/src/OakDocumentView.mm:generic-api-key:130

@@ -24,6 +24,22 @@ Developing patches should follow this workflow:
 3.	cd into your repo: `cd textmate`
 4.	Set up remote upstream: `git remote add -f upstream git://github.com/textmate/textmate.git`
 
+### Development Setup
+
+This repository is public; a leaked secret is compromised the moment it is pushed. Before your
+first commit, install the local secret-scanning hook:
+
+	bin/setup-hooks
+
+This registers a `pre-commit` hook (via `git config core.hooksPath`) that runs `gitleaks`
+against your staged changes and blocks the commit if it finds one. It requires `gitleaks` to be
+installed (`brew install gitleaks`); the script checks for this and tells you if it's missing.
+
+**This is a local convenience, not the backstop.** `core.hooksPath` is git config, so it is
+never transmitted by `git clone` — every fresh clone needs to run `bin/setup-hooks` again to get
+local protection. The `gitleaks` job in `.github/workflows/gitleaks.yml` is what actually
+protects the repository regardless of whether a given contributor has set up the local hook.
+
 ### Adding a Feature
 
 1.	Create a branch for the new feature: `git checkout -b my_new_feature`

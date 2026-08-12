@@ -1,0 +1,50 @@
+name: gitleaks
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+  schedule:
+    # gitleaks-action passes --log-opts=<baseRef>^..<headRef> for push and
+    # pull_request (src/gitleaks.js Scan()), scanning only the commits in
+    # that event. For "schedule"/"workflow_dispatch" it passes no
+    # --log-opts at all (src/index.js:176-181), and gitleaks then defaults
+    # to `git log -p -U0 --full-history --all` — verified by running that
+    # exact invocation against a repo with a secret buried in a non-HEAD
+    # commit; it was found. This cron is what restores the full-history
+    # coverage the old curl-based step had.
+    - cron: "0 4 * * *" # once a day at 4 AM UTC
+
+permissions:
+  contents: read
+  # gitleaks-action lists a pull request's commits via the GitHub API to
+  # scope its scan (GET .../pulls/{n}/commits, "Pull requests" read
+  # permission). PR comments are explicitly disabled below, so no
+  # pull-requests: write is granted.
+  pull-requests: read
+
+jobs:
+  scan:
+    # CI runs only on the canonical public repository. Forks and private
+    # clones must never run Actions. Update this string when the repo is
+    # renamed in Phase 4 — missing it silently disables all CI.
+    if: github.repository == 'sdenike/textmate'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No GITLEAKS_LICENSE: free for a repo owned by a personal GitHub
+          # account (sdenike) — only organizations need one. See "Do I need
+          # a free license key?" in https://github.com/gitleaks/gitleaks-action.
+          # GITLEAKS_VERSION intentionally left unset: the action bumps its
+          # bundled gitleaks version on its own releases. Dependabot bumps
+          # the @v3 tag itself via .github/dependabot.yml (github-actions
+          # ecosystem, weekly) — that, not dependabot_security_updates
+          # (CVE advisories only), is what fixes hand-pinned-curl staleness.
+          GITLEAKS_ENABLE_COMMENTS: "false"
