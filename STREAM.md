@@ -4,6 +4,29 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Task 2 (CI repository guard on build.yml) complete
+
+**What:** Added `if: github.repository == 'sdenike/textmate'` as the first key of the `build` job
+in `.github/workflows/build.yml`, immediately before `runs-on`, matching the guard idiom Task 1
+established in `gitleaks.yml`. `build.yml` has exactly one job, so it's the only one that needed
+it. No other change — the workflow still brew-installs boost/capnp/sparsehash/multimarkdown/
+ninja/ragel and runs `./configure && ninja TextMate` on `macOS-latest`, unmodified. Verified the
+YAML parses and the job's `if` is non-`None` with the exact `python3 -c "import yaml..."` command
+from the task brief, run inside a throwaway venv (system Homebrew python3 has no `yaml` module
+and is externally managed; used a scratch venv rather than `pip install --break-system-packages`).
+
+**Why:** CI must never run Actions on forks or private clones of this public repo. `build.yml`
+predates that control; this closes the gap the same way `gitleaks.yml` already does. Deliberately
+did not fix, modernize, or otherwise touch the 2021-era build steps — attempting that build and
+recording what breaks is Task 5's job, not this one's.
+
+### If interrupted here
+
+Task 2 committed, nothing left in progress. Next: Phase 0 Task 3 per
+`docs/superpowers/plans/2026-08-12-phase-0-baseline-and-hygiene.md`.
+
+---
+
 ## 2026-08-12 — Task 1 fix round 3/5: suppress the one pre-existing finding by fingerprint
 
 **What:** Round 2 verdicted all three items ADDRESSED. One item remained: the pre-existing

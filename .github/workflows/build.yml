@@ -4,6 +4,7 @@ on: [push]
 
 jobs:
   build:
+    if: github.repository == 'sdenike/textmate'
     runs-on: macOS-latest
 
     steps:
