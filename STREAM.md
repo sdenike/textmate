@@ -4,6 +4,46 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Phase 2 planned: Xcode migration via XcodeGen, not by porting PR #1469
+
+**What:** Wrote `docs/superpowers/plans/2026-08-12-phase-2-xcode-migration.md` (8 tasks).
+
+**Approach decided by measurement, not preference.** PR #1469's committed `project.pbxproj` is
+6506 lines defining only **7 targets** at deployment target 10.11/12.4. It references the
+`license` and `updater` frameworks textmatelives deleted (25 references), expects
+`bl`/`CompareMate`/`QuickLookExtensions` we do not have, and omits `NewApplication` and
+`QuickLookGenerator` we do. 50+ edits before it would parse, and all 46 frameworks still
+unwired. Rejected.
+
+Instead: generate the project with **XcodeGen** (2.46.0, already installed) from a checked-in
+`project.yml`, itself derived from the `.rave` files by a converter we write. The `.rave`
+directives are mechanically readable (`sources` globs, `require` dep lists, `tests` globs).
+Both `project.yml` and the generated `.xcodeproj` get committed so contributors need only Xcode.
+
+**The load-bearing risk is `ExportHeader`** — 369 edges, no native Xcode equivalent. rave
+flattens every framework's public headers into one build-side include root, which is what makes
+`#include <buffer/buffer.h>` resolve across 46 frameworks. Task 3 decides the replacement by
+experiment (plain `-I` vs a symlink farm vs header maps) and records the evidence; every later
+task depends on that answer.
+
+Full rule inventory taken from the live `build.ninja` rather than guessed: CopyFile 1536,
+CompileClang 736, ExportHeader 369, Link 84, GenTest/RunTest 54 each, CompileMarkdown 32,
+Codesign 30, CompileXib 28, ExpandVariables 26, RunExecutable 18, RunApplication 12, PCH 8,
+ConvertToUTF16 8, CompileRagel 2, CompileIcon 2. Ragel is two files, not a pervasive dependency.
+
+**ninja stays authoritative until Task 7 proves parity.** Task 8 — deleting rave, switching CI,
+stripping Intel — is the only irreversible task and is gated on that proof.
+
+**Why:** Phase 2 unblocks Swift compilation, which Phase 6's SwiftUI islands and Liquid Glass
+require; the rave build has no Swift support.
+
+### If interrupted here
+
+Plan committed on `phase-2/xcode-migration`. Phase 1 is merged to master (`ef1db3f2`); a working
+build is installed at `/Applications/TextMate.app` as TextMate Revived 3.0.0-revived.1. Next:
+Phase 2 Task 1 (`bin/rave2yaml` inventory pass).
+
+
 ## 2026-08-12 — Visible identity: "TextMate Revived 3.0.0-revived.1" shipped to /Applications
 
 **What:** Pulled the *visible* half of Phase 4 forward so the installed build is identifiable
