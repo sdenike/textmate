@@ -4,6 +4,61 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Task 5 (2021-tree build attempt) complete: does not build, Phase 1 is the oracle
+
+**What:** Attempted the inherited 2021 tree on today's toolchain (macOS 26.6.1, Xcode 26.6,
+Apple clang 21.0.0/clang-2100.1.1.101) per the Phase 0 plan. `git submodule update --init
+--recursive` succeeded cleanly. `./configure` on a truly clean checkout **fails** (exit 1):
+`dependency missing: '/usr/local/include/boost/crc.hpp'`. Root cause: `configure` hardcodes
+`/usr/local/{include,lib}` as the only search location for boost/capnp/sparsehash; Homebrew
+on Apple Silicon installs to `/opt/homebrew`. All six declared dependencies are genuinely
+installed (boost 1.90.0_1, capnp 1.5.0, google-sparsehash 2.0.4, multimarkdown 6.8.0, ninja
+1.13.2, ragel 6.11) — `configure` just never looks where Homebrew actually put them. Found a
+second bug while reproducing this: `configure` writes part of `local.rave` *before*
+validating headers exist, so a failed run still leaves the file behind, and an unmodified
+retry silently skips validation and reports success without ever confirming the dependency
+paths are real — a false green light, reproduced twice with no hand edits.
+
+Proceeding to `ninja TextMate` against that state: first attempt hit `error: unable to open
+output file ...: 'Operation not permitted'` against the default build directory
+(`~/build/textmate/release`), which turned out to contain a `root`-owned subtree timestamped
+the day before this session — unrelated prior activity on this machine, not a toolchain
+finding. Worked around by pointing `bin/rave` at a clean directory via `configure`'s own
+pre-existing `$builddir` mechanism (no file edited, no flag added). Against a clean build
+dir: ninja dispatched 239/853 targets before stopping (default `-k1`), 3 steps failed, 3
+genuinely distinct errors surfaced (documented in full in
+`docs/benchmarks/2026-08-12-build-attempt.md`): the `/usr/local` vs `/opt/homebrew` boost
+miss confirmed at actual compile time (`Shared/PCH/prelude.cc:24: fatal error: 'boost/crc.hpp'
+file not found`, blocking the shared PCH nearly everything else transitively depends on —
+which is why only 239/853 targets were even attempted), and an unrelated Ruby `LoadError`
+generating `Contributions.html` (system Ruby 2.6 loading a gem built for a different,
+`chruby`-managed Ruby 3.3.6). Did not reach 5 distinct errors because the PCH miss blocks
+almost everything downstream — no path to more without patching `local.rave`'s include
+paths, which is out of scope. Both attempts finished in ~2 seconds, nowhere near the
+20-minute time-box. No test suite was run; the build never succeeded.
+
+**Why:** Task 5 exists to answer, honestly, whether Phase 0 hands later phases a working
+regression oracle. It does not: the 86 inherited CxxTest suites cannot run until the tree
+builds, and it doesn't. Per the plan's pre-agreed fallback, Phase 1's gate becomes
+"textmatelives' suites pass on our merged tree" — their CI builds and they ship releases, so
+their tree is the only one that currently produces a green oracle. A failed build here was
+the expected, correctly time-boxed outcome, not a task failure; the value was in getting the
+*real* errors (a stale Apple-Silicon path assumption, confirmed at compile time, not left as
+an unverified pre-flight check) rather than a misleading filesystem-permission artifact from
+unrelated prior activity on this machine.
+
+### If interrupted here
+
+Task 5 committed, nothing left in progress. `local.rave` and `build.ninja` exist in the
+working tree as generated artifacts (both gitignored, neither staged/committed, confirmed via
+`git status --porcelain`). Next: Task 6 (GitHub milestones, labels, Phase 1 issue) per
+`docs/superpowers/plans/2026-08-12-phase-0-baseline-and-hygiene.md` — Phase 1's issue should
+cite this task's finding directly: its gate is "textmatelives' suites pass on our merged
+tree," not "the inherited CxxTest suites still pass," since the latter can't be evaluated
+until the tree builds at all.
+
+---
+
 ## 2026-08-12 — Spec corrected: Phase 7 premise disproved, plan bugs fixed
 
 **What:** Two rounds of spec/plan corrections, covering commit `8ab88020` (which landed without
