@@ -4,6 +4,53 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Phase 1: merged textmatelives/main; first working build deployed
+
+**What:** Merged `textmatelives/main` (130 commits) into a `phase-1/rebase-textmatelives`
+branch off the freshly-merged Phase 0 master. Only **2 conflicts** across 300 changed files:
+
+- `.gitignore` — kept our credential-coverage block, added their `.claude/` entry.
+- `.github/workflows/build.yml` — they deleted it; accepted the deletion, since their
+  `build-and-test.yml` / `ci.yml` / `release.yml` supersede it.
+
+Their workflows arrived with **no repository guards** (`build-and-test.yml` 2 jobs,
+`ci.yml`, `release.yml` — 0 guards between them). Added
+`if: github.repository == 'sdenike/textmate'` to every job. An unguarded `release.yml`
+on a fork is the worst case of the three.
+
+Built and deployed. `bin/build` and `bin/deploy-local` added.
+
+**Build blockers hit, both environmental rather than code:**
+
+1. `configure`'s `/usr/local` hardcoding — **fixed by the merge**; textmatelives'
+   `configure` now queries `brew --prefix`. This was Task 5's blocking finding, resolved
+   for free exactly as Phase 1's issue predicted.
+2. Leaked `GEM_HOME`/`GEM_PATH` from chruby made system Ruby 2.6 dlopen gems built for
+   3.3.6: `Symbol not found: _rb_cArray (LoadError)`.
+3. `~/Library/Caches/com.macromates.TextMate/githubcredits.db` was **root-owned** (Aug 11
+   22:22), so `DBM.new` failed EACCES. Removable without sudo — unlink needs write on the
+   directory, not the file. Second root-owned artifact from that date; something ran a
+   build under sudo on Aug 11.
+
+`bin/build` handles 2 and 3 automatically so nobody re-derives them.
+
+**Result:** 340/340 targets, arm64-only, 27 MB, launches and is responsive.
+Deployed to `/Applications/TextMate.app` via `bin/deploy-local`, which verified the
+existing bundle's `CFBundleIdentifier` matched before replacing it.
+
+**Known and expected:** the build is **ad-hoc signed**, not Developer ID / notarized —
+this replaced a notarized textmatelives build with an unnotarized local one. Proper
+signing is Phase 5. About still reads "TextMate 2.1.4-undead"; the rename is Phase 4.
+
+**Why:** Phase 1's goal was a tree that builds and runs. It does.
+
+### If interrupted here
+
+Phase 1 merge is committed on `phase-1/rebase-textmatelives`, not yet pushed or PR'd.
+A working build is installed at `/Applications/TextMate.app`. Next: push, open the PR
+against master closing issue #1, then Phase 2 (Xcode migration).
+
+
 ## 2026-08-12 — Final whole-branch review fix wave (4 findings) complete
 
 **What:** Fixed all four findings from Phase 0's final whole-branch review, in one commit. (1)

@@ -1,0 +1,32 @@
+#!/bin/bash
+# Build wrapper. Exists because two things about a developer's shell reliably
+# break this build, and both produce errors that point at the wrong culprit.
+#
+# 1. Ruby version managers (chruby, rbenv, rvm) export GEM_HOME/GEM_PATH into
+#    the environment. The build's helper scripts run under system Ruby 2.6 via
+#    `#!/usr/bin/env ruby`, which then tries to dlopen native gems built for a
+#    different Ruby and fails with:
+#        Symbol not found: _rb_cArray (LoadError)
+#    That reads like a broken build; it is a leaked shell environment.
+#
+# 2. bin/gen_credits.rb opens a DBM cache at
+#    ~/Library/Caches/com.macromates.TextMate/githubcredits.db
+#    If an earlier build ever ran under sudo, that file is root-owned and
+#    DBM.new fails with EACCES even though the directory is yours. Deleting it
+#    needs write permission on the directory, not the file, so no sudo is
+#    required to clear it.
+set -euo pipefail
+
+CACHE="$HOME/Library/Caches/com.macromates.TextMate/githubcredits.db"
+if [ -e "$CACHE" ] && [ ! -O "$CACHE" ]; then
+	echo "build: clearing foreign-owned credits cache at $CACHE" >&2
+	rm -f "$CACHE" || {
+		echo "build: could not remove $CACHE -- remove it manually and re-run." >&2
+		exit 1
+	}
+fi
+
+[ -f build.ninja ] || ./configure
+
+exec env -u GEM_HOME -u GEM_PATH -u RUBYLIB -u RUBYOPT -u BUNDLE_GEMFILE \
+	ninja "${@:-TextMate}"
