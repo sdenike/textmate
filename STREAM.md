@@ -4,6 +4,47 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Task 6 (GitHub milestones, labels, Phase 1 issue) complete
+
+**What:** Created all 11 Phase 0–9 milestones and all 6 custom labels
+(`phase-0`, `security`, `build`, `ported`, `perf`, `ui`) on `sdenike/textmate`
+per the Task 6 brief, then opened the Phase 1 tracking issue
+(`https://github.com/sdenike/textmate/issues/1`, milestone "Phase 1 —
+Rebase onto textmatelives", labels `ported`+`build`). Found the repo had
+Issues disabled (`has_issues: false`) — undocumented in the brief or the
+task's "existing state" notes — and enabled it via `gh api -X PATCH
+.../repos/sdenike/textmate -f has_issues=true` since opening the tracking
+issue was an explicit, unambiguous task requirement and the whole
+milestone/label scaffold exists to support issues. Posted the issue body
+with the CORRECTED Phase 1 gate per this task's course-correction:
+"textmatelives' test suites pass on our merged tree" (not the inherited
+CxxTest suites, which Task 5 proved cannot run — 614/853 targets blocked
+by the `/usr/local` vs `/opt/homebrew` `configure` bug), referencing both
+`docs/benchmarks/2026-08-12-build-attempt.md` and
+`docs/benchmarks/2026-08-12-baseline.md`, noting upstream PR #1457 and
+textmatelives' `fix/configure-homebrew-prefix` branch as an unverified
+possible fix, keeping the GPLv3 attribution requirement, and stating the
+130-commit divergence explicitly.
+
+**Why:** Phase 0's exit criteria require the 11 milestones, 6 labels, and
+open Phase 1 issue to exist before Phase 1 can begin, and the brief's
+original Phase 1 gate ("tests green") was rendered false by Task 5's
+finding that the inherited tree doesn't build — posting the stale gate
+would have pointed Phase 1 at a test oracle that cannot run.
+
+### If interrupted here
+
+Task 6 fully complete: 11/11 milestones, 15/15 labels (9 default + 6 new),
+issue #1 open with correct milestone/labels/body, all verified via `gh
+api`/`gh issue view`. No repository files were created by this task other
+than this STREAM.md entry — the only change to commit. Full detail in
+`.superpowers/sdd/2026-08-12-phase-0-baseline-and-hygiene/task-6-report.md`.
+Note: `docs/superpowers/specs/2026-08-12-textmate-revived-design.md` has an
+unrelated uncommitted modification (27 insertions) present before this task
+started — not touched here, left for whichever task owns it.
+
+---
+
 ## 2026-08-12 — Task 4 fix round 1/5 (bundle ID isolation) complete
 
 **What:** Fixed an Important review finding in `bin/bench/measure.sh`:
