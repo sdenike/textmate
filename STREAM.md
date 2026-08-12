@@ -4,6 +4,52 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Phase 2 Task 2: ninja build parity baseline recorded
+
+**What:** `./bin/build TextMate` succeeds (confirmed via zero `FAILED:` lines plus a clean
+idempotent re-run, exit 0) and produces **41 artifacts** (executables only — zero `.a`,
+zero `.dylib`, consistent with Task 4's static-linking finding). Discovered **26** test
+targets (matches Task 1's `bin/rave2yaml --inventory` `tests`-directive count exactly) and
+ran every one individually. Wrote `docs/benchmarks/2026-08-12-ninja-parity.md` with the full
+artifact list, the 20 CI-included targets' pass/fail, and the six CI-excluded targets called
+out separately, per the task's decided points.
+
+**Three findings, none fixed (diagnostic task):**
+
+1. **Genuine local failure outside the six CI excludes:** `scm/test` fails — `hg`/`svn` are
+   both absent from `PATH` here, while CI's own workflow `brew install`s both before testing.
+   Environment gap, not a code defect; 19 of the 20 CI-included targets pass.
+2. **Ninja's `RunTest` progress line is mislabeled for every target** — always prints `Run
+   tests for 'scope'…` regardless of which framework is actually running, because `bin/rave`
+   emits one `RunTest` rule per framework but ninja rules are looked up by name and all share
+   the name `RunTest`, so only one `description` string survives into `build.ninja`. The
+   command itself runs the correct per-target binary (confirmed via each failure's own
+   correctly-named source paths) — only the human-readable text is wrong. Worked around by
+   invoking each of the 26 targets as its own `./bin/build <name>/test` call rather than
+   trusting the brief's single combined command's log for per-target attribution.
+3. **Half of the six CI-excluded targets don't actually fail locally:** `layout`, `command`,
+   and `editor` all pass cleanly on this interactive, logged-in machine — CI's stated causes
+   (parallel-runner contention; `NSApp` nil on a headless runner) are specific to CI's
+   environment and don't hold here. `buffer` and `file` fail exactly as CI documents; `cf`
+   crashes with SIGBUS (exit 138), consistent with CI's trap/segfault characterization.
+
+Also caught and corrected the task brief's own inline test-discovery snippet: it keeps the
+`Frameworks/` path prefix (`sed 's|/default.rave||'`), producing names ninja rejects.
+`bin/rave`'s real phony targets are bare names (`target[:identifier]`, e.g. `authorization`,
+not `Frameworks/authorization`) — used CI's actual `dirname | basename` pipeline instead,
+per the brief's own pointer to `build-and-test.yml` as authoritative.
+
+**Why:** Task 8 deletes the rave/ninja build permanently and is gated on Task 7 proving the
+Xcode build matches this baseline. Without a recorded, honest baseline — including the
+failures, not just the passes — that gate has nothing real to check against.
+
+### If interrupted here
+
+Task 2 committed, nothing left in progress. Next: Phase 2 Task 4 (pilot framework under
+XcodeGen) per `docs/superpowers/plans/2026-08-12-phase-2-xcode-migration.md`.
+
+---
+
 ## 2026-08-12 — Phase 2 Task 1 fix round 1/5: config-scope leak closed, PlugIns claim corrected
 
 **What:** Review (SPEC OK, parser output confirmed byte-correct against the repo) raised
