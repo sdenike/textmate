@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the `rave`/ninja build with a native Xcode project that opens and builds with Cmd-B, builds from CLI with `xcodebuild`, keeps all 54 test binaries running, and unblocks Swift compilation for Phase 6.
+**Goal:** Replace the `rave`/ninja build with a native Xcode project that opens and builds with Cmd-B, builds from CLI with `xcodebuild`, keeps all 26 test targets running, and unblocks Swift compilation for Phase 6.
 
 **Architecture:** Generate the project with **XcodeGen** from a checked-in `project.yml`, itself derived from the existing `.rave` files by a converter we write. Both `project.yml` and the generated `.xcodeproj` are committed, so contributors need only Xcode; XcodeGen is required solely to regenerate. The ninja build stays working and authoritative until parity is proven, then is deleted in one commit.
 
-**Tech Stack:** XcodeGen 2.46.0, Xcode 26.6, `xcodebuild`, Swift 6 language mode, C++23, CxxTest.
+**Tech Stack:** XcodeGen 2.46.0, Xcode 26.6, `xcodebuild`, Swift 6 language mode, C++20 (matching the tree's current `-std=c++2a`; see Task 3's corrections), CxxTest.
 
 ## Global Constraints
 
@@ -37,7 +37,7 @@ Every rule in the current `build.ninja`, with its edge count and how Xcode cover
 | CompileClang | 736 | Native compile sources |
 | **ExportHeader** | **369** | **See "The header problem" — the load-bearing risk** |
 | Link | 84 | Native |
-| GenTest / RunTest | 54 / 54 | Script phase per test target invoking `bin/gen_test` + CxxTest |
+| GenTest / RunTest | 54 / 54 | Script phase per test target invoking `bin/gen_test` + CxxTest. NOTE: 54 is the EDGE count (27 targets x 2 configurations). Task 2 measured **26 discovered test targets** — that is the number Task 7 is judged against. |
 | CompileMarkdown | 32 | Script phase invoking `bin/gen_html` (multimarkdown) |
 | Codesign | 30 | Native code signing |
 | CompileXib | 28 | Native |
@@ -407,7 +407,7 @@ Every executable and static library ninja produced must have an Xcode counterpar
 
 - [ ] **Step 2: Run every test target under Xcode**
 
-All 54 must build; all must pass except the six CI excludes. Record the results in the parity doc.
+All 26 test targets must build; all must pass except the six CI excludes and `scm` (needs `hg`/`svn`, which CI installs). Record the results in the parity doc.
 
 - [ ] **Step 3: Commit the generated project**
 
@@ -468,7 +468,7 @@ git commit -m "build!: replace rave/ninja with the Xcode project"
 
 - [ ] `open TextMate.xcodeproj` → Cmd-B → app builds and runs.
 - [ ] `xcodebuild -scheme TextMate -configuration Release build` succeeds from a clean clone.
-- [ ] All 54 test targets build; all pass except the six documented CI excludes.
+- [ ] All 26 test targets build; all pass except the six documented CI excludes and the hg/svn-dependent scm suite.
 - [ ] Artifact parity with Task 2's ninja baseline, or every difference explained in the parity doc.
 - [ ] `lipo -archs` reports `arm64` only.
 - [ ] No `.rave` file, `configure`, `bin/rave`, or `.travis.yml` remains.
