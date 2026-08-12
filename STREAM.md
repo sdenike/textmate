@@ -4,6 +4,44 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Phase 2 Task 3: header strategy decided by experiment
+
+**What:** `ExportHeader` (369 edges, the largest Phase 2 risk) reproduced in Xcode via a
+nesting-preserving symlink farm. Wrote `Xcode/Base.xcconfig` and
+`docs/benchmarks/2026-08-12-header-strategy.md`.
+
+**The finding that matters:** rave copies `Frameworks/<n>/src/x.h` to `_Include/<n>/<n>/x.h` and
+grants `-I_Include/<dep>` **only for frameworks a target declares in `require`**. The double
+nesting means a framework's headers are reachable only by targets that depend on it — the
+`require` graph is compiler-enforced, not documentation. The obvious shortcut
+(`-I$(SRCROOT)/Frameworks`) would compile and silently destroy that, with nothing failing to
+warn us.
+
+Verified both directions rather than assuming: with dependencies granted, compilation proceeds
+past every cross-framework include; withholding one produces
+`fatal error: 'regexp/find.h' file not found`. Chosen approach is 46 directory symlinks instead
+of 369 file copies, with per-target include paths generated from each `require` list.
+
+**Two plan assumptions the build contradicted:**
+
+1. Plan said `c++23`; `build.ninja` compiles `-std=c++2a`. Raising the standard across ~92K
+   lines is a behavioural change and gets its own commit with tests behind it, not a silent
+   rider on a build migration. xcconfig uses `c++20`.
+2. `build.ninja` still emits `-mmacosx-version-min=10.12`, inherited from upstream and untouched
+   by the textmatelives merge — their macOS 26 governed release packaging, not the compile flag.
+   Phase 2 is the first point the compiler is told the truth. Watch for `@available`-guarded
+   code behaving differently once the deployment target really is 26.0; the test suite is the
+   check.
+
+**Why:** Every remaining Phase 2 task generates include paths, so getting this wrong would have
+been invisible until the whole project was wired.
+
+### If interrupted here
+
+Tasks 1 and 3 done. Task 2 (ninja parity baseline) still outstanding — it is independent and was
+skipped ahead of, not lost. Next: Task 2, then Task 4 (pilot framework under XcodeGen).
+
+
 ## 2026-08-12 — Phase 2 Task 1: `bin/rave2yaml --inventory` parses all 60 rave targets
 
 **What:** Added `bin/rave2yaml`, a Ruby parser that walks `Frameworks/*/default.rave` +

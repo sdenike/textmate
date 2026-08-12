@@ -1,0 +1,74 @@
+// Base build settings shared by every target in the generated Xcode project.
+//
+// Every value here was derived from the live `build.ninja` rather than chosen,
+// so the Xcode build starts from what rave actually does. Where a value
+// deliberately DIFFERS from rave, it is called out below.
+
+// ---- Architecture --------------------------------------------------------
+// Apple Silicon only. macOS 26 does not run on Intel, so there is no reason to
+// carry a second slice.
+ARCHS = arm64
+ONLY_ACTIVE_ARCH = YES
+VALID_ARCHS = arm64
+
+// ---- Deployment target ---------------------------------------------------
+// CHANGED from rave. build.ninja still emits -mmacosx-version-min=10.12, a
+// leftover from upstream that survived the textmatelives merge: their macOS 26
+// target governed release packaging, not the compile flag. Phase 2 is where
+// the compiler is finally told the truth.
+MACOSX_DEPLOYMENT_TARGET = 26.0
+
+// ---- Language standards --------------------------------------------------
+// MATCHES rave: build.ninja compiles with -std=c++2a. The Phase 2 plan
+// originally specified C++23; that was wrong to do here. Raising the standard
+// across ~92K lines of C++ is a behavioural change that deserves its own
+// commit with the test suite behind it, not a silent rider on a build-system
+// migration. Keep parity now, raise it deliberately later.
+CLANG_CXX_LANGUAGE_STANDARD = c++20
+GCC_C_LANGUAGE_STANDARD = c99
+CLANG_ENABLE_OBJC_ARC = YES
+
+// Swift is not used yet. Phase 6's SwiftUI islands are the first consumer, and
+// unblocking them is a large part of why this migration exists.
+SWIFT_VERSION = 6.0
+
+// ---- Header search -------------------------------------------------------
+// The load-bearing setting. See docs/benchmarks/2026-08-12-header-strategy.md.
+//
+// rave's ExportHeader rule (369 edges) copies Frameworks/<name>/src/x.h to
+// _Include/<name>/<name>/x.h, then puts -I_Include/<dep> on a target's command
+// line ONLY for frameworks it declares in `require`. The double nesting is not
+// incidental: it means a framework's headers are reachable only by targets
+// that depend on it. That is compiler-enforced dependency isolation.
+//
+// A flat "-I$(SRCROOT)/Frameworks" would compile and silently destroy that
+// property, letting any framework include any other's headers while the
+// `require` graph quietly stopped meaning anything. Verified by experiment:
+// withholding one dependency's include directory produces
+// "'regexp/find.h' file not found", exactly as it should.
+//
+// So the per-target HEADER_SEARCH_PATHS is generated per framework from its
+// `require` list. Only the roots common to every target live here.
+HEADER_SEARCH_PATHS = $(SRCROOT)/Shared/include /opt/homebrew/include
+
+// ---- Prefix header -------------------------------------------------------
+// rave precompiles Shared/PCH/prelude.{c,cc,m,mm} per language. Xcode carries
+// one prefix header per target; the per-language split is handled by the
+// generated project rather than here.
+GCC_PRECOMPILE_PREFIX_HEADER = YES
+
+// ---- Warnings ------------------------------------------------------------
+// The inherited tree is from 2021 and compiles clean-ish under clang 2100 with
+// deprecation warnings. Do not turn warnings into errors during the migration:
+// a build-system change that also fails on pre-existing warnings makes it
+// impossible to tell which problem you are looking at.
+GCC_TREAT_WARNINGS_AS_ERRORS = NO
+GCC_WARN_ABOUT_RETURN_TYPE = YES
+CLANG_WARN_DOCUMENTATION_COMMENTS = NO
+
+// ---- Signing -------------------------------------------------------------
+// Ad-hoc, matching rave's `set CS_IDENTITY "-"`. Real Developer ID signing and
+// notarization are Phase 5.
+CODE_SIGN_IDENTITY = -
+CODE_SIGN_STYLE = Manual
+ENABLE_HARDENED_RUNTIME = YES
