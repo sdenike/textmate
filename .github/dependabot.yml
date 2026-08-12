@@ -2,13 +2,17 @@
 # (enabled separately via the API) covers CVE advisories against pinned
 # versions; it does not open routine "bump to latest" PRs — this file is
 # what does, and it's what makes the gitleaks/gitleaks-action@v3 pin in
-# .github/workflows/gitleaks.yml (and actions/checkout@v4 in every
-# workflow) actually trackable instead of just structurally capable of
-# being tracked.
+# .github/workflows/gitleaks.yml (and that workflow's own
+# actions/checkout@v4) actually trackable instead of just structurally
+# capable of being tracked. build.yml still pins actions/checkout@v2;
+# that's Phase 2's Xcode migration to update, not this file's job.
 #
-# github-actions only, deliberately: the repo's other dependencies (boost,
-# Cap'n Proto, sparsehash, ragel, multimarkdown, ninja) are being removed
-# in Phase 3, so configuring an ecosystem for them now would be churn.
+# github-actions only, deliberately: the repo's other Homebrew
+# dependencies leave across several phases, not all at once — Cap'n
+# Proto in Phase 1 (already removed via the textmatelives merge), ninja
+# in Phase 2 (the Xcode migration), and boost, sparsehash, ragel, and
+# multimarkdown in Phase 3 — so configuring an ecosystem for them now
+# would be churn.
 version: 2
 updates:
   - package-ecosystem: "github-actions"

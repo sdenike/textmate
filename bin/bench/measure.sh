@@ -101,44 +101,61 @@ if spctl --assess --type execute "$APP" >/dev/null 2>&1; then
 		# that do not reflect what a user experiences on every later launch.
 		# Recorded numbers below are the documented "second launch onward";
 		# this is what makes that true rather than aspirational.
-		open -a "$APP"
-		WARM_DEADLINE=$((SECONDS + 30))
-		while [ "$SECONDS" -lt "$WARM_DEADLINE" ]; do
-			osascript_bounded 2 "tell application id \"$BUNDLE_ID\" to count windows" && break
-			sleep 0.05
-		done
-		osascript_bounded 3 "tell application id \"$BUNDLE_ID\" to quit" || true
-		GONE_DEADLINE=$((SECONDS + 5))
-		while pgrep -f "$APP" >/dev/null 2>&1 && [ "$SECONDS" -lt "$GONE_DEADLINE" ]; do
-			sleep 0.1
-		done
+		# Re-check immediately before this open -a: a conflict can appear
+		# in the window since the upfront gate above ran, and open -a could
+		# still activate that other instance instead of starting ours.
+		if conflict=$(other_instance_pid); then
+			echo "measure.sh: pid $conflict already owns \"$BUNDLE_ID\" and is not at $APP -- skipping launch measurement for $LABEL" >&2
+			LAUNCH_MS="not measured (bundle id owned by another process)"
+			RSS_MB="not measured (bundle id owned by another process)"
+		else
+			open -a "$APP"
+			WARM_DEADLINE=$((SECONDS + 30))
+			while [ "$SECONDS" -lt "$WARM_DEADLINE" ]; do
+				osascript_bounded 2 "tell application id \"$BUNDLE_ID\" to count windows" && break
+				sleep 0.05
+			done
+			osascript_bounded 3 "tell application id \"$BUNDLE_ID\" to quit" || true
+			GONE_DEADLINE=$((SECONDS + 5))
+			while pgrep -f "$APP" >/dev/null 2>&1 && [ "$SECONDS" -lt "$GONE_DEADLINE" ]; do
+				sleep 0.1
+			done
+		fi
 
 		# Time to responsive: the app answers an Apple Event only once its
 		# main run loop is up, which is a real "ready to use" signal rather
 		# than a proxy for it.
-		START=$(python3 -c 'import time; print(time.time())')
-		open -a "$APP"
+		# Re-check immediately before this open -a too, for the same reason
+		# as the warm-up launch above: a conflict appearing since the
+		# upfront gate must not fall through into open -a here either.
+		if conflict=$(other_instance_pid); then
+			echo "measure.sh: pid $conflict already owns \"$BUNDLE_ID\" and is not at $APP -- skipping launch measurement for $LABEL" >&2
+			LAUNCH_MS="not measured (bundle id owned by another process)"
+			RSS_MB="not measured (bundle id owned by another process)"
+		else
+			START=$(python3 -c 'import time; print(time.time())')
+			open -a "$APP"
 
-		READY=0
-		DEADLINE=$((SECONDS + 30))
-		while [ "$SECONDS" -lt "$DEADLINE" ]; do
-			if osascript_bounded 2 "tell application id \"$BUNDLE_ID\" to count windows"; then
-				READY=1
-				break
-			fi
-			sleep 0.05
-		done
-		END=$(python3 -c 'import time; print(time.time())')
+			READY=0
+			DEADLINE=$((SECONDS + 30))
+			while [ "$SECONDS" -lt "$DEADLINE" ]; do
+				if osascript_bounded 2 "tell application id \"$BUNDLE_ID\" to count windows"; then
+					READY=1
+					break
+				fi
+				sleep 0.05
+			done
+			END=$(python3 -c 'import time; print(time.time())')
 
-		if [ "$READY" -eq 1 ]; then
-			LAUNCH_MS=$(python3 -c "print(round(($END - $START) * 1000))")
-			# Guard against an empty pid reaching `ps -p`: BSD ps given an
-			# empty -p argument prints an "Invalid process id" diagnostic that
-			# includes uninitialized memory, which is not valid UTF-8 and
-			# crashes Python's text-mode subprocess decoding (observed while
-			# building this harness). Report 'n/a' instead, as originally
-			# intended, rather than letting that crash the whole measurement.
-			RSS_MB=$(python3 -c "
+			if [ "$READY" -eq 1 ]; then
+				LAUNCH_MS=$(python3 -c "print(round(($END - $START) * 1000))")
+				# Guard against an empty pid reaching `ps -p`: BSD ps given an
+				# empty -p argument prints an "Invalid process id" diagnostic that
+				# includes uninitialized memory, which is not valid UTF-8 and
+				# crashes Python's text-mode subprocess decoding (observed while
+				# building this harness). Report 'n/a' instead, as originally
+				# intended, rather than letting that crash the whole measurement.
+				RSS_MB=$(python3 -c "
 import subprocess
 pid = subprocess.run(['pgrep','-n','-f','$APP'],capture_output=True,text=True).stdout.strip()
 if pid:
@@ -147,9 +164,10 @@ if pid:
 else:
     print('n/a')
 ")
-		else
-			LAUNCH_MS="not measured (timeout)"
-			RSS_MB="not measured (timeout)"
+			else
+				LAUNCH_MS="not measured (timeout)"
+				RSS_MB="not measured (timeout)"
+			fi
 		fi
 
 		# Best-effort quit, bounded the same way, then a plain SIGTERM

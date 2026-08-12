@@ -18,8 +18,11 @@ if [ $status -eq 1 ]; then
 COMMIT BLOCKED: gitleaks detected a secret in your staged changes.
 
 This repository is public. Do not bypass this check.
-If the finding is a false positive, add a narrowly-scoped allowlist
-entry to .gitleaks.toml rather than disabling the hook.
+If the finding is a false positive, add its fingerprint to
+.gitleaksignore (format: commit:file:rule-id:start-line) rather than
+disabling the hook. The fingerprint is scoped to that one commit,
+file, rule, and line on purpose -- the rest of the file stays live,
+so a real secret elsewhere still trips.
 EOF
     exit 1
 fi

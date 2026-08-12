@@ -4,6 +4,50 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Final whole-branch review fix wave (4 findings) complete
+
+**What:** Fixed all four findings from Phase 0's final whole-branch review, in one commit. (1)
+`.githooks/pre-commit`'s false-positive guidance pointed contributors at `.gitleaks.toml`, a file
+that has never existed in this repo; rewrote it to name the actual mechanism, `.gitleaksignore`
+(`commit:file:rule-id:start-line` fingerprints, added in `0090d044`), and to state why the
+fingerprint scope is deliberate — the rest of the file stays live, so a real secret elsewhere still
+trips. (2) `.github/dependabot.yml`'s comment claimed `actions/checkout@v4` is used "in every
+workflow" (false: `build.yml:9` still pins `v2`, out of scope until Phase 2) and that boost, Cap'n
+Proto, sparsehash, ragel, multimarkdown, and ninja "are being removed in Phase 3" (false: Cap'n
+Proto already left in Phase 1 via the textmatelives merge, ninja leaves in Phase 2's Xcode
+migration, and only boost/sparsehash/ragel/multimarkdown are actually Phase 3). Fixed both claims;
+the actual ecosystem/directory/interval config is untouched, confirmed by parsing the YAML in a
+scratch venv. (3) `docs/benchmarks/2026-08-12-baseline.md`'s "Targets these numbers set" section
+still hedged rpath dylib count as a live Phase 7 metric "needing re-scoping" — stale since
+`b1880890` already resolved Phase 7's gate to launch time/installed size/large-file open,
+explicitly not dylib count. Replaced the hedge with that resolved gate; the measured numbers and
+the "Measurement limits" section (where the rpath=0 finding itself lives) are untouched. (4)
+`bin/bench/measure.sh`'s two `open -a "$APP"` calls each ran after only an
+`osascript_bounded ... quit || true`, whose `|| true` could swallow a conflict that appeared after
+the upfront `other_instance_pid` gate and fall through into `open -a` unguarded. Wrapped each call
+in the same `other_instance_pid` if/else the upfront gate already uses, reusing its exact echo
+message and `not measured (bundle id owned by another process)` assignments rather than inventing
+a new pattern — built with a small Python script operating on exact original-file line indices so
+the untouched `RSS_MB` Python-heredoc content couldn't be accidentally re-indented, then verified
+with `bash -n` and a full `git diff` read-through.
+
+**Why:** All four were documentation/tooling drift the whole-branch review caught: guidance
+pointing at a file that doesn't exist, a comment asserting things checkably false against this same
+branch's other files, a stale hedge contradicted by a later commit already on this branch, and a
+benchmark harness with one residual unguarded window next to an otherwise-sound conflict check.
+None touch application code — scope stayed inside hygiene/docs/harness per the review's
+constraints — and no benchmark was re-run, so the recorded baseline numbers are unchanged.
+
+### If interrupted here
+
+Fix wave committed as a single commit on `phase-0/baseline-and-hygiene`, nothing left in progress.
+Not pushed. Full detail in
+`.superpowers/sdd/2026-08-12-phase-0-baseline-and-hygiene/final-fix-report.md`. Next:
+`superpowers:finishing-a-development-branch` to integrate this branch into `master`, then Phase 1
+(merge `textmatelives/main`, 130 commits) per `sdenike/textmate` issue #1.
+
+---
+
 ## 2026-08-12 — Spec: changelog and About window pipeline
 
 **What:** Added a "Changelog and About window" section to the design spec, per user request that
