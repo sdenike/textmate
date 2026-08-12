@@ -84,7 +84,17 @@ def parse_file(path, vendor:)
 
   targets = []
   target  = nil # current Target, nil outside any `target` block
-  depth   = 0   # nesting depth of `config` blocks inside the current target
+
+  # Names of currently-open `config { }` blocks, innermost last; also
+  # doubles as a depth counter (config_stack.empty? == not inside one).
+  # Both real config blocks in this tree (Applications/TextMate debug/
+  # release) contain only `add PLIST_FLAGS`, an INERT_DIRECTIVES member --
+  # but that's verified below, not assumed: a GLOB/LIST/SCALAR directive
+  # inside a config block errors rather than silently merging into the
+  # enclosing target's unconditional fields as though it applied to every
+  # configuration (--inventory has no per-config representation to merge
+  # it into correctly).
+  config_stack = []
 
   File.readlines(path).each_with_index do |raw, idx|
     line   = raw.chomp
@@ -98,8 +108,8 @@ def parse_file(path, vendor:)
     next if comment
 
     if close_brace
-      if depth > 0
-        depth -= 1
+      if !config_stack.empty?
+        config_stack.pop
       elsif target
         targets << target
         target = nil
@@ -119,7 +129,8 @@ def parse_file(path, vendor:)
         target = Target.new(resolve(raw_name, vars, path, lineno), vendor, path, lineno)
       when 'config'
         raise RaveError, "#{path}:#{lineno}: 'config' outside a target block" unless target
-        depth += 1
+        config_name = args.fetch(0) { raise RaveError, "#{path}:#{lineno}: 'config' needs a name" }
+        config_stack.push(config_name)
       else
         raise RaveError, "#{path}:#{lineno}: unrecognised directive '#{command}' " \
                           '(only target/config may open a { } block)'
@@ -130,6 +141,17 @@ def parse_file(path, vendor:)
     raise RaveError, "#{path}:#{lineno}: directive '#{command}' outside a target block" unless target
 
     tvars = vars.merge('target' => target.name)
+
+    scoped = GLOB_DIRECTIVES.include?(command) || LIST_DIRECTIVES.include?(command) ||
+             SCALAR_DIRECTIVES.include?(command)
+    if scoped && !config_stack.empty?
+      raise RaveError, "#{path}:#{lineno}: '#{command}' is config-scoped (inside " \
+                        "config #{config_stack.join(' > ')} for target #{target.name}); " \
+                        "--inventory has no per-config representation, so merging it into " \
+                        "the target's unconditional fields would silently misreport which " \
+                        'configuration it applies to -- move it out of the config block, ' \
+                        'or extend rave2yaml to carry config scope through to the inventory'
+    end
 
     if GLOB_DIRECTIVES.include?(command)
       target.lists[command] += args.map { |a| File.join(dir, resolve(a, tvars, path, lineno)) }
@@ -150,7 +172,7 @@ def parse_file(path, vendor:)
     end
   end
 
-  raise RaveError, "#{path}: unterminated block (missing '}')" if target || depth > 0
+  raise RaveError, "#{path}: unterminated block (missing '}')" if target || !config_stack.empty?
 
   targets
 end

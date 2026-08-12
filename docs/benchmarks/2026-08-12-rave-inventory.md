@@ -96,14 +96,19 @@ resolves to real files (verified: `vendor/kvdb/vendor/kvdb/kvdb.h`,
 
 ## Out of scope for this task (not walked)
 
-`PlugIns/dialog*/default.rave` (2 files, targets `tm_dialog`/`Dialog2` and
-`tm_dialog`/`Dialog`) and the nested
+`PlugIns/dialog*/default.rave` (2 files: `PlugIns/dialog/default.rave` declares
+`tm_dialog2` + `Dialog2`; `PlugIns/dialog-1.x/default.rave` declares `tm_dialog` +
+`Dialog`) and the nested
 `Applications/TextMate/support/Bundles/Bundle Support.tmbundle/src/default.rave` (target
 `find_app`) exist but are not part of `Frameworks/*/default.rave` /
 `Applications/*/default.rave` / `vendor/*/default.rave`, so `bin/rave2yaml` does not walk
-them, matching the task brief's explicit walk instruction. They also use directives this
-tool doesn't implement (`arch`, `notarize`, `define`), confirming they're intentionally
-out of scope rather than accidentally missed. `Applications/TextMate/default.rave`
+them, matching the task brief's explicit walk instruction. **The two `PlugIns/dialog*`
+files use only directives this tool already implements** (`target sources executable
+frameworks add prefix files`) — they are out of scope purely because the walk scope
+never included `PlugIns/`, not because of a grammar gap. Only the nested Bundle Support
+file actually uses directives this tool doesn't implement (`arch`, `notarize`, `define`);
+that's the one file in this group genuinely excluded for grammar-coverage reasons, not
+just walk scope. `Applications/TextMate/default.rave`
 embeds two of them by name (`copy @Dialog @Dialog2 "PlugIns"`) — Task 4 will need to
 account for `Dialog`/`Dialog2` some other way, since they're invisible to this inventory.
 Also out of scope: the root `default.rave` itself, which sets global flags applied to

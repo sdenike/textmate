@@ -4,6 +4,51 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Phase 2 Task 1 fix round 1/5: config-scope leak closed, PlugIns claim corrected
+
+**What:** Review (SPEC OK, parser output confirmed byte-correct against the repo) raised
+two Important findings against `bin/rave2yaml`, both fixed:
+
+1. **Docs error:** `docs/benchmarks/2026-08-12-rave-inventory.md` and
+   `task-1-report.md` (3 places) falsely claimed `PlugIns/dialog*/default.rave` was
+   out of scope because it used unimplemented directives (`arch`/`notarize`/`define`).
+   Re-read both files: they use only already-implemented directives
+   (`target sources executable frameworks add prefix files`); only the nested
+   `Bundle Support.tmbundle/src/default.rave` genuinely uses `arch`/`notarize`/`define`.
+   Exclusion was always correct (walk scope never included `PlugIns/`), the *reason*
+   given was wrong. Also fixed a swapped target-name pairing (`PlugIns/dialog` is
+   `tm_dialog2`+`Dialog2`, not `tm_dialog`+`Dialog2`).
+2. **Real bug:** `config { }` block content flowed through the same per-line dispatch
+   as target-level content, with only a bare depth counter — nothing stopped a
+   `sources`/`require`/`frameworks`/`libraries`/`executable`/`prefix` line inside a
+   `config` block from silently merging into the target's unconditional fields as if
+   config-independent. Never manifested (both real `config` blocks contain only inert
+   `add PLIST_FLAGS`) — luck, not enforcement. Fixed: `config_stack` (replacing the old
+   `depth` int) now tracks open config names, and a GLOB/LIST/SCALAR directive found
+   while any config block is open raises `RaveError` with file, line, directive,
+   config name(s), and target — rather than being recorded with no per-config
+   representation. `INERT_DIRECTIVES` still permitted inside `config` (never surfaced,
+   so can't misreport). Chose fail-loud over recording config scope, since the
+   `--inventory` interface never asked for per-config fields (Task 1 decided point 2).
+
+Full detail and checks in `task-1-report.md`'s "Fix round 1/5" section (gitignored,
+`.superpowers/sdd/2026-08-12-phase-2-xcode-migration/`). `bash tests/rave2yaml_test.sh`
+still reports `PASS: 57 targets, all dependencies resolve` — neither fix changes the
+target count or dependency graph, since the real tree's one `config` usage was already
+`add`-only.
+
+**Why:** A checklist stating a false "verified by reading" claim is worse than making no
+claim, since later tasks are measured against it. Silent config-scope merging is the same
+failure class the brief called out as the one thing to get right — one level deeper than
+an unrecognised directive: silent *misapplication* instead of silent *dropping*.
+
+### If interrupted here
+
+Fix round 1/5 committed on `phase-2/xcode-migration`, not yet merged. Two Minor findings
+(`BLOCK_DIRECTIVES` unreferenced; `resolve`'s variable regex narrower than `bin/rave`'s)
+were explicitly deferred to final review per the coordinator — do not fix until asked.
+Next: await round 2/5 or final review outcome.
+
 ## 2026-08-12 — Phase 2 Task 3: header strategy decided by experiment
 
 **What:** `ExportHeader` (369 edges, the largest Phase 2 risk) reproduced in Xcode via a
