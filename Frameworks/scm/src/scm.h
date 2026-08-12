@@ -2,6 +2,7 @@
 #define SCM_NG_H_FXJGXN9B
 
 #include "status.h"
+#include <CoreFoundation/CoreFoundation.h>
 
 namespace scm
 {
@@ -48,7 +49,13 @@ namespace scm
 	std::string root_for_path (std::string const& path);
 	bool scm_enabled_for_path (std::string const& path);
 	info_ptr info (std::string path);
-	void wait_for_status (info_ptr info);
+	// Block until the SCM driver delivers a status callback for `info`,
+	// or until `timeout` seconds elapse. Returns true if a callback
+	// fired in time, false on timeout. The previous unbounded version
+	// could hang indefinitely when the callback never fired (intermittent
+	// FSEvents/runner-environment behaviour), exhausting the GitHub
+	// Actions step budget and cancelling the whole test job.
+	bool wait_for_status (info_ptr info, CFTimeInterval timeout = 30.0);
 
 } /* scm */
 

@@ -1,0 +1,317 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - CHANGELOG.md
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Rationale for running manually
+        required: false
+        default: manual release
+
+jobs:
+  # Fresh build + test gate. A release must not ship an untested build, so the
+  # publish job below depends on this. Reuses the same isolated build/test jobs
+  # as CI via the reusable workflow (`build` and `test`, each on macos-26).
+  verify:
+    if: github.repository == 'sdenike/textmate'
+    uses: ./.github/workflows/build-and-test.yml
+
+  release:
+    if: github.repository == 'sdenike/textmate'
+    needs: verify   # publish only if build AND test passed
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: write
+
+    env:
+      KEYCHAIN_PWD: ${{ github.run_id }}-${{ github.run_attempt }}
+      CERT_IDENTITY_NAME: "Developer ID Application"
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Extract version from CHANGELOG.md
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -om1 '^## .* (v.*)$' CHANGELOG.md \
+                    | sed 's/.*(v\(.*\))/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "::error::No version line found in CHANGELOG.md"
+            exit 1
+          fi
+          echo "Detected: v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if not an -undead release
+        id: guard
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          case "${VERSION}" in
+            *-undead*)
+              echo "should_release=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::notice::Top version '${VERSION}' is not an undead release; skipping"
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Skip if tag already exists
+        if: steps.guard.outputs.should_release == 'true'
+        id: tagcheck
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q "refs/tags/${TAG}$"; then
+            echo "::notice::Tag ${TAG} already exists on origin; nothing to do"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install build dependencies
+        if: steps.tagcheck.outputs.should_release == 'true'
+        run: brew install boost google-sparsehash multimarkdown ninja ragel
+
+      - name: Import signing certificate into temporary keychain
+        if: steps.tagcheck.outputs.should_release == 'true'
+        env:
+          P12_B64: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          P12_PWD: ${{ secrets.MAC_CERTIFICATE_PWD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          P12_PATH="$RUNNER_TEMP/cert.p12"
+
+          echo "$P12_B64" | base64 --decode > "$P12_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security import "$P12_PATH" -P "$P12_PWD" -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | grep "$CERT_IDENTITY_NAME" | head -n1 | awk '{print $2}')
+          if [ -z "$IDENTITY" ]; then
+            echo "ERROR: no Developer ID Application identity found in imported keychain"
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+            exit 1
+          fi
+          echo "Resolved identity hash: $IDENTITY"
+          echo "CS_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Pre-seed local.rave (arm64 + signing identity + hardened runtime)
+        if: steps.tagcheck.outputs.should_release == 'true'
+        run: |
+          cat > local.rave <<EOF
+          add FLAGS    "-I/opt/homebrew/include"
+          add LN_FLAGS "-L/opt/homebrew/lib"
+          set CS_IDENTITY "${CS_IDENTITY}"
+          add CS_FLAGS "--options runtime --timestamp"
+          EOF
+
+      - name: Configure
+        if: steps.tagcheck.outputs.should_release == 'true'
+        run: ./configure
+
+      - name: Build signed TextMate.app
+        if: steps.tagcheck.outputs.should_release == 'true'
+        run: ninja TextMate
+
+      - name: Locate built app
+        if: steps.tagcheck.outputs.should_release == 'true'
+        id: app
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find "$HOME/build" -type d -name 'TextMate.app' -path '*/release/*' 2>/dev/null | head -n1)
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "TextMate.app not found under \$HOME/build/" >&2
+            find "$HOME/build" -maxdepth 5 -name 'TextMate.app' 2>/dev/null || true
+            exit 1
+          fi
+          echo "Located: $APP_PATH"
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Re-sign every embedded Mach-O asset
+        if: steps.tagcheck.outputs.should_release == 'true'
+        run: |
+          set -euo pipefail
+          APP="${{ steps.app.outputs.app_path }}"
+          # Every embedded Mach-O (frameworks, helpers, SharedSupport Ruby
+          # native .bundle extensions) needs our Dev ID + hardened runtime
+          # + timestamp before notarization.
+          count=0
+          while IFS= read -r -d '' f; do
+            if /usr/bin/file -b "$f" | grep -q 'Mach-O'; then
+              codesign --force --sign "$CS_IDENTITY" --options runtime --timestamp "$f"
+              count=$((count+1))
+            fi
+          done < <(find "$APP/Contents" -type f \
+                     \( -path "*/Frameworks/*" \
+                     -o -path "*/MacOS/*" \
+                     -o -path "*/SharedSupport/*" \
+                     -o -path "*/PlugIns/*" \) -print0)
+          echo "Re-signed $count Mach-O files"
+
+      - name: Re-seal nested bundles (after modifying their contents)
+        if: steps.tagcheck.outputs.should_release == 'true'
+        run: |
+          set -euo pipefail
+          APP="${{ steps.app.outputs.app_path }}"
+          # Re-signing Mach-O binaries inside a signed bundle (e.g.
+          # Dialog.tmplugin/Contents/Resources/tm_dialog) invalidates the
+          # bundle's CodeResources seal. Each enclosing bundle must be
+          # codesigned again, inside-out, before we re-sign the outer .app.
+          count=0
+          while IFS= read -r -d '' b; do
+            codesign --force --sign "$CS_IDENTITY" --options runtime --timestamp "$b"
+            count=$((count+1))
+          done < <(find "$APP/Contents" \
+                     \( -name "*.tmplugin" -o -name "*.framework" \
+                     -o -name "*.qlgenerator" -o -name "*.appex" \) \
+                     -type d -print0)
+          echo "Re-sealed $count nested bundles"
+
+      - name: Re-sign outer .app with entitlements (after modifying contents)
+        if: steps.tagcheck.outputs.should_release == 'true'
+        run: |
+          set -euo pipefail
+          APP="${{ steps.app.outputs.app_path }}"
+          ENT="$RUNNER_TEMP/Entitlements.plist"
+          # Entitlements.plist has a ${CS_GET_TASK_ALLOW} placeholder; release
+          # builds set this to false (Applications/TextMate/default.rave:14-16).
+          sed 's|${CS_GET_TASK_ALLOW}|false|g' \
+            Applications/TextMate/Entitlements.plist > "$ENT"
+          codesign --force --sign "$CS_IDENTITY" --options runtime --timestamp \
+            --entitlements "$ENT" "$APP"
+
+      - name: Verify codesign + hardened runtime
+        if: steps.tagcheck.outputs.should_release == 'true'
+        run: |
+          codesign --verify --deep --strict --verbose=2 "${{ steps.app.outputs.app_path }}"
+          codesign -dvv "${{ steps.app.outputs.app_path }}" 2>&1 | tee /tmp/codesign.out
+          grep -q "flags=.*runtime" /tmp/codesign.out \
+            || { echo "ERROR: hardened runtime flag missing"; exit 1; }
+
+      - name: Notarize via notarytool
+        if: steps.tagcheck.outputs.should_release == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PWD: ${{ secrets.APPLE_ID_PWD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          APP="${{ steps.app.outputs.app_path }}"
+          ZIP="$RUNNER_TEMP/TextMate-notarize.zip"
+          /usr/bin/ditto -ck --keepParent --norsrc --noextattr --noacl --noqtn "$APP" "$ZIP"
+
+          # notarytool --wait can exit 0 even when status is Invalid; parse JSON ourselves.
+          OUT=$(xcrun notarytool submit "$ZIP" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_ID_PWD" \
+            --wait \
+            --output-format json)
+          echo "$OUT"
+          STATUS=$(echo "$OUT" | jq -r .status)
+          SUBMIT_ID=$(echo "$OUT" | jq -r .id)
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "::error::Notarization failed (status=$STATUS, id=$SUBMIT_ID). Fetching log:"
+            xcrun notarytool log "$SUBMIT_ID" \
+              --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_ID_PWD" || true
+            exit 1
+          fi
+
+      - name: Staple ticket onto .app
+        if: steps.tagcheck.outputs.should_release == 'true'
+        run: |
+          set -euo pipefail
+          # notarytool --wait returns once Apple accepts, but stapler reads from
+          # CloudKit which can lag a minute or two. Retry until propagated.
+          attempts=0
+          max_attempts=10
+          until xcrun stapler staple "${{ steps.app.outputs.app_path }}"; do
+            attempts=$((attempts+1))
+            if [ "$attempts" -ge "$max_attempts" ]; then
+              echo "Stapler failed after $max_attempts attempts" >&2
+              exit 1
+            fi
+            echo "Stapler attempt $attempts failed; ticket likely not propagated yet — sleeping 30s..." >&2
+            sleep 30
+          done
+
+      - name: Verify Gatekeeper acceptance
+        if: steps.tagcheck.outputs.should_release == 'true'
+        run: spctl --assess --type execute --verbose=4 "${{ steps.app.outputs.app_path }}"
+
+      - name: Build distribution .tbz
+        if: steps.tagcheck.outputs.should_release == 'true'
+        id: archive
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          ARCHIVE="$RUNNER_TEMP/TextMate-${VERSION}.tbz"
+          /usr/bin/tar --disable-copyfile -cjf "$ARCHIVE" \
+            -C "$(dirname '${{ steps.app.outputs.app_path }}')" \
+            "$(basename '${{ steps.app.outputs.app_path }}')"
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
+      - name: Extract release notes for v${VERSION}
+        if: steps.tagcheck.outputs.should_release == 'true'
+        id: notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          bin/extract_changes -v "$VERSION" -o "$NOTES_FILE" CHANGELOG.md
+          echo "::group::Extracted release notes"
+          cat "$NOTES_FILE"
+          echo "::endgroup::"
+          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        if: steps.tagcheck.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          # -beta versions publish as GitHub prereleases: excluded from
+          # releases/latest (the stable update feed), picked up by the beta
+          # channel's list endpoint.
+          PRERELEASE_FLAG=""
+          case "${VERSION}" in
+            *-beta*) PRERELEASE_FLAG="--prerelease" ;;
+          esac
+          gh release create "v${VERSION}" \
+            ${PRERELEASE_FLAG} \
+            --target "${GITHUB_SHA}" \
+            --title "TextMate ${VERSION}" \
+            --notes-file "${{ steps.notes.outputs.notes_file }}" \
+            --generate-notes \
+            "${{ steps.archive.outputs.archive }}"
+
+      - name: Cleanup keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/build.keychain-db" || true

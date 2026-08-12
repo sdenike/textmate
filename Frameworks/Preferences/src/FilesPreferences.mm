@@ -14,7 +14,10 @@
 @implementation FilesPreferences
 - (id)init
 {
-	if(self = [super initWithNibName:nil label:@"Files" image:[NSImage imageNamed:NSImageNameMultipleDocuments]])
+	NSImage* icon = [NSImage imageNamed:NSImageNameMultipleDocuments];
+	if(@available(macos 11.0, *))
+		icon = [NSImage imageWithSystemSymbolName:@"doc.on.doc" accessibilityDescription:@"Files"];
+	if(self = [super initWithNibName:nil label:@"Files" image:icon])
 	{
 		[OakStringListTransformer createTransformerWithName:@"OakLineEndingsSettingsTransformer" andObjectsArray:@[ @"\\n", @"\\r", @"\\r\\n" ]];
 

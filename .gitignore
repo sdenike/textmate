@@ -49,3 +49,6 @@ secrets/
 *.secret
 notarize.json
 notarization-credentials.plist
+
+# ---- Agent tooling ----
+.claude/

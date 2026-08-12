@@ -17,7 +17,10 @@
 @implementation ProjectsPreferences
 - (id)init
 {
-	if(self = [super initWithNibName:nil label:@"Projects" image:[NSImage imageNamed:@"Projects" inSameBundleAsClass:[self class]]])
+	NSImage* icon = [NSImage imageNamed:@"Projects" inSameBundleAsClass:[self class]];
+	if(@available(macos 11.0, *))
+		icon = [NSImage imageWithSystemSymbolName:@"folder" accessibilityDescription:@"Projects"];
+	if(self = [super initWithNibName:nil label:@"Projects" image:icon])
 	{
 		[OakStringListTransformer createTransformerWithName:@"OakFileBrowserPlacementSettingsTransformer" andObjectsArray:@[ @"left", @"right" ]];
 		[OakStringListTransformer createTransformerWithName:@"OakHTMLOutputPlacementSettingsTransformer" andObjectsArray:@[ @"bottom", @"right", @"window" ]];

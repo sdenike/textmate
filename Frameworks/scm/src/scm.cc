@@ -1,5 +1,6 @@
 #include "scm.h"
 #include "drivers/api.h"
+#include "gutter_diff.h"
 #include "snapshot.h"
 #include "fs_events.h"
 #include <io/path.h>
@@ -53,6 +54,11 @@ namespace scm
 		dispatch_time_t _no_check_before = DISPATCH_TIME_NOW;
 		std::shared_ptr<watcher_t> _watcher;
 		std::set<info_t*> _clients;
+		// Per-repo serial queue. Was a function-local static — one queue
+		// for every shared_info_t — so a slow repo blocked refreshes for
+		// every other repo. Per-repo serialization is the right level
+		// because git's index lock is per-repo.
+		dispatch_queue_t _queue;
 	};
 
 	// ==========
@@ -140,10 +146,12 @@ namespace scm
 
 	shared_info_t::shared_info_t (std::string const& rootPath, scm::driver_t const* driver) : _root_path(rootPath), _driver(driver)
 	{
+		_queue = dispatch_queue_create("org.textmate.scm.status", DISPATCH_QUEUE_SERIAL);
 	}
 
 	shared_info_t::~shared_info_t ()
 	{
+		dispatch_release(_queue);
 	}
 
 	void shared_info_t::add_client (info_t* client)
@@ -227,11 +235,10 @@ namespace scm
 
 		if(CFRunLoopRef currentRunLoop = CFRunLoopGetCurrent())
 		{
-			static dispatch_queue_t queue = dispatch_queue_create("org.textmate.scm.status", DISPATCH_QUEUE_SERIAL);
 			shared_info_weak_ptr weakThis = shared_from_this();
 
 			CFRetain(currentRunLoop);
-			dispatch_after(_no_check_before, queue, ^{
+			dispatch_after(_no_check_before, _queue, ^{
 				async_update(weakThis, currentRunLoop);
 				CFRelease(currentRunLoop);
 			});
@@ -240,6 +247,33 @@ namespace scm
 
 	void shared_info_t::fs_did_change (std::set<std::string> const& changedPaths)
 	{
+		// Drop the gutter-diff HEAD-blob cache when anything that
+		// could move HEAD or rewrite the staged snapshot fires.
+		// .lock paths are already filtered upstream by
+		// scm::is_transient_git_path; the events that reach us are
+		// the real writes. We deliberately don't invalidate on
+		// refs/remotes/** (a fetch doesn't move our working tree)
+		// or objects/** (gc doesn't either).
+		auto const is_repo_meta_change = [](std::string const& p) -> bool {
+			auto const pos = p.find("/.git/");
+			if(pos == std::string::npos)
+				return false;
+			std::string const rel = p.substr(pos + 6);
+			return rel == "HEAD"
+			    || rel == "index"
+			    || rel == "packed-refs"
+			    || rel.compare(0, 11, "refs/heads/") == 0;
+		};
+
+		for(auto const& p : changedPaths)
+		{
+			if(is_repo_meta_change(p))
+			{
+				gutter_diff::invalidate_repo(_root_path);
+				break;
+			}
+		}
+
 		schedule_update();
 	}
 
@@ -401,7 +435,7 @@ namespace scm
 		return res;
 	}
 
-	void wait_for_status (info_ptr info)
+	bool wait_for_status (info_ptr info, CFTimeInterval timeout)
 	{
 		__block bool shouldWait = true;
 		CFRunLoopRef runLoop = CFRunLoopGetCurrent();
@@ -411,10 +445,22 @@ namespace scm
 			CFRunLoopStop(runLoop);
 		});
 
+		// Bounded wait: drive the run loop in chunks until the callback
+		// fires or the deadline passes. Without this bound the loop could
+		// spin forever waiting on an FSEvents notification that never
+		// arrives — see WISHLIST / HANDOFF for the GitHub Actions hangs
+		// (PR #9 and PR #17 merge runs).
+		CFAbsoluteTime const deadline = CFAbsoluteTimeGetCurrent() + timeout;
 		while(shouldWait)
-			CFRunLoopRun();
+		{
+			CFTimeInterval const remaining = deadline - CFAbsoluteTimeGetCurrent();
+			if(remaining <= 0)
+				break;
+			CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining, false);
+		}
 
 		info->pop_callback();
+		return !shouldWait;
 	}
 
 } /* scm */

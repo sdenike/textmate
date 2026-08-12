@@ -4,11 +4,19 @@
 #import <OakAppKit/OakUIConstructionFunctions.h>
 #import <OakAppKit/OakScopeBarView.h>
 
+// File-static mirrors of keys declared file-static in
+// DocumentWindowController.mm. The on-demand bundle prompt also reads/writes
+// the kUserDefaultsBundlesToNeverSuggestKey exported by BundlesManager.h.
+// Keep these in sync with DocumentWindowController.mm:43-44.
+static NSString* const kUserDefaultsDisableBundleSuggestionsKey = @"disableBundleSuggestions";
+static NSString* const kUserDefaultsGrammarsToNeverSuggestKey   = @"grammarsToNeverSuggest";
+
 static NSUserInterfaceItemIdentifier const kTableColumnIdentifierInstalled   = @"Installed";
 static NSUserInterfaceItemIdentifier const kTableColumnIdentifierBundleName  = @"BundleName";
 static NSUserInterfaceItemIdentifier const kTableColumnIdentifierWebLink     = @"WebLink";
 static NSUserInterfaceItemIdentifier const kTableColumnIdentifierUpdated     = @"Updated";
 static NSUserInterfaceItemIdentifier const kTableColumnIdentifierDescription = @"Description";
+static NSUserInterfaceItemIdentifier const kTableColumnIdentifierActions     = @"Actions";
 
 @interface BundleInstallHelper : NSObject
 @property (nonatomic) NSMutableSet* bundlesBeingInstalled;
@@ -129,19 +137,92 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierDescription = @
 }
 @end
 
-@interface BundlesPreferences () <NSTableViewDelegate>
+// ================
+// = Hover-highlight NSTableView subclass
+// ================
+
+@interface OakHoverTableView : NSTableView
+@property (nonatomic) NSInteger hoveredRow;
+@end
+
+@implementation OakHoverTableView
+{
+	NSTrackingArea* _trackingArea;
+}
+
+- (instancetype)initWithFrame:(NSRect)frameRect
+{
+	if(self = [super initWithFrame:frameRect])
+		_hoveredRow = -1;
+	return self;
+}
+
+- (void)updateTrackingAreas
+{
+	[super updateTrackingAreas];
+	if(_trackingArea)
+		[self removeTrackingArea:_trackingArea];
+	_trackingArea = [[NSTrackingArea alloc] initWithRect:NSZeroRect
+		options:(NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved | NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect)
+		owner:self
+		userInfo:nil];
+	[self addTrackingArea:_trackingArea];
+}
+
+- (void)mouseMoved:(NSEvent*)event
+{
+	NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+	[self setHoveredRow:[self rowAtPoint:point]];
+}
+
+- (void)mouseExited:(NSEvent*)event
+{
+	[self setHoveredRow:-1];
+}
+
+- (void)setHoveredRow:(NSInteger)newRow
+{
+	if(_hoveredRow == newRow)
+		return;
+	NSInteger oldRow = _hoveredRow;
+	_hoveredRow = newRow;
+	if(oldRow >= 0 && oldRow < self.numberOfRows)
+		[self setNeedsDisplayInRect:[self rectOfRow:oldRow]];
+	if(newRow >= 0 && newRow < self.numberOfRows)
+		[self setNeedsDisplayInRect:[self rectOfRow:newRow]];
+}
+
+- (void)drawRow:(NSInteger)row clipRect:(NSRect)clipRect
+{
+	if(row == _hoveredRow && ![self.selectedRowIndexes containsIndex:row])
+	{
+		[[NSColor.secondaryLabelColor colorWithAlphaComponent:0.08] set];
+		NSRectFillUsingOperation([self rectOfRow:row], NSCompositingOperationSourceOver);
+	}
+	[super drawRow:row clipRect:clipRect];
+}
+
+@end
+
+@interface BundlesPreferences () <NSTableViewDelegate, NSMenuDelegate>
 {
 	NSMutableSet*              _enabledCategories;
 	NSArrayController*         _arrayController;
 	OakScopeBarViewController* _scopeBar;
 	NSSearchField*             _searchField;
-	NSTableView*               _bundlesTableView;
+	OakHoverTableView*         _bundlesTableView;
+	NSButton*                  _resetDismissedButton;
 }
 @property (nonatomic) NSUInteger selectedIndex;
 @end
 
 @implementation BundlesPreferences
-- (NSImage*)toolbarItemImage { return [NSWorkspace.sharedWorkspace iconForFileType:@"tmbundle"]; }
+- (NSImage*)toolbarItemImage
+{
+	if(@available(macos 11.0, *))
+		return [NSImage imageWithSystemSymbolName:@"puzzlepiece.extension" accessibilityDescription:@"Bundles"];
+	return [NSWorkspace.sharedWorkspace iconForFileType:@"tmbundle"];
+}
 
 - (id)init
 {
@@ -209,6 +290,7 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierDescription = @
 	NSTableColumn* linkTableColumn        = [self columnWithIdentifier:kTableColumnIdentifierWebLink     title:@""            editable:NO  width:16  resizingMask:NSTableColumnNoResizing];
 	NSTableColumn* updatedTableColumn     = [self columnWithIdentifier:kTableColumnIdentifierUpdated     title:@"Updated"     editable:NO  width:90  resizingMask:NSTableColumnNoResizing];
 	NSTableColumn* descriptionTableColumn = [self columnWithIdentifier:kTableColumnIdentifierDescription title:@"Description" editable:NO  width:140 resizingMask:NSTableColumnAutoresizingMask];
+	NSTableColumn* actionsTableColumn     = [self columnWithIdentifier:kTableColumnIdentifierActions     title:@""            editable:NO  width:22  resizingMask:NSTableColumnNoResizing];
 
 	NSButtonCell* installedCell = [[NSButtonCell alloc] init];
 	installedCell.buttonType       = NSButtonTypeSwitch;
@@ -235,12 +317,26 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierDescription = @
 	updatedCell.formatter = updatedFormatter;
 	updatedTableColumn.dataCell = updatedCell;
 
-	_bundlesTableView = [[NSTableView alloc] initWithFrame:NSZeroRect];
+	NSButtonCell* actionsCell = [[NSButtonCell alloc] init];
+	actionsCell.buttonType  = NSButtonTypeMomentaryChange;
+	actionsCell.bezelStyle  = NSBezelStyleInline;
+	actionsCell.bordered    = NO;
+	actionsCell.controlSize = NSControlSizeSmall;
+	actionsCell.title       = @"";
+	actionsCell.action      = @selector(didClickActionGear:);
+	actionsCell.target      = self;
+	actionsTableColumn.dataCell = actionsCell;
+
+	_bundlesTableView = [[OakHoverTableView alloc] initWithFrame:NSZeroRect];
 	_bundlesTableView.allowsColumnReordering  = NO;
 	_bundlesTableView.columnAutoresizingStyle = NSTableViewLastColumnOnlyAutoresizingStyle;
 	_bundlesTableView.delegate                = self;
 
-	for(NSTableColumn* tableColumn in @[ installedTableColumn, bundleTableColumn, linkTableColumn, updatedTableColumn, descriptionTableColumn ])
+	NSMenu* contextMenu = [[NSMenu alloc] initWithTitle:@""];
+	contextMenu.delegate = self;
+	_bundlesTableView.menu = contextMenu;
+
+	for(NSTableColumn* tableColumn in @[ installedTableColumn, bundleTableColumn, linkTableColumn, updatedTableColumn, descriptionTableColumn, actionsTableColumn ])
 		[_bundlesTableView addTableColumn:tableColumn];
 	[_bundlesTableView setIndicatorImage:[NSImage imageNamed:@"NSAscendingSortIndicator"] inTableColumn:bundleTableColumn];
 
@@ -252,6 +348,21 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierDescription = @
 	scrollView.documentView          = _bundlesTableView;
 
 	NSButton* updateBundlesCheckbox = [NSButton checkboxWithTitle:@"Check for and install updates automatically" target:nil action:nil];
+
+	NSButton* suggestBundlesCheckbox = [NSButton checkboxWithTitle:@"Suggest bundle installs for unrecognized file types" target:nil action:nil];
+
+	NSButton* addBundleButton = [NSButton buttonWithTitle:@"+ Add Bundle…" target:self action:@selector(showAddBundleSheet:)];
+	addBundleButton.controlSize = NSControlSizeSmall;
+	addBundleButton.bezelStyle  = NSBezelStyleRounded;
+
+	NSButton* checkNowButton = [NSButton buttonWithTitle:@"Check Now" target:self action:@selector(checkForUpdatesNow:)];
+	checkNowButton.controlSize = NSControlSizeSmall;
+	checkNowButton.bezelStyle  = NSBezelStyleRounded;
+
+	_resetDismissedButton = [NSButton buttonWithTitle:@"Reset Dismissed Bundle Suggestions" target:self action:@selector(resetDismissedSuggestions:)];
+	_resetDismissedButton.controlSize = NSControlSizeSmall;
+	_resetDismissedButton.bezelStyle  = NSBezelStyleRounded;
+	[self updateResetDismissedButtonEnabled];
 
 	NSTextField* statusTextField = [NSTextField labelWithString:@""];
 	statusTextField.textColor = NSColor.secondaryLabelColor;
@@ -278,21 +389,26 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierDescription = @
 	[statusTextField.centerXAnchor constraintEqualToAnchor:footerView.centerXAnchor].active = YES;
 
 	NSDictionary* views = @{
-		@"scopeBar":      _scopeBar.view,
-		@"search":        _searchField,
-		@"scrollView":    scrollView,
-		@"updateBundles": updateBundlesCheckbox,
-		@"footer":        footerView,
+		@"scopeBar":        _scopeBar.view,
+		@"search":          _searchField,
+		@"scrollView":      scrollView,
+		@"addBundle":       addBundleButton,
+		@"checkNow":        checkNowButton,
+		@"updateBundles":   updateBundlesCheckbox,
+		@"resetDismissed":  _resetDismissedButton,
+		@"suggestBundles":  suggestBundlesCheckbox,
+		@"footer":          footerView,
 	};
 
-	NSView* view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 622, 454)];
+	NSView* view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 622, 478)];
 	OakAddAutoLayoutViewsToSuperview(views.allValues, view);
 
 	[view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-8-[scopeBar]-(>=8)-[search(>=50,<=100,==100@250)]-8-|"        options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
 	[view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-[scrollView(>=50)]-|"                                         options:0 metrics:nil views:views]];
-	[view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-[updateBundles]-(>=8)-|"                                      options:0 metrics:nil views:views]];
+	[view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-[addBundle]-8-[checkNow]-(>=8)-[updateBundles]-|"             options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
+	[view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-[resetDismissed]-(>=8)-[suggestBundles]-|"                    options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
 	[view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[footer]|"                                                     options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
-	[view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-8-[search]-8-[scrollView(>=50)]-[updateBundles]-20-[footer]|" options:0 metrics:nil views:views]];
+	[view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-8-[search]-8-[scrollView(>=50)]-[addBundle]-8-[resetDismissed]-20-[footer]|" options:0 metrics:nil views:views]];
 
 	// ============
 	// = Bindings =
@@ -309,7 +425,8 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierDescription = @
 	[updatedTableColumn     bind:NSValueBinding toObject:_arrayController withKeyPath:@"arrangedObjects.downloadLastUpdated" options:nil];
 	[descriptionTableColumn bind:NSValueBinding toObject:_arrayController withKeyPath:@"arrangedObjects.textSummary" options:nil];
 
-	[updateBundlesCheckbox bind:NSValueBinding toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:@"values.disableBundleUpdates" options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
+	[updateBundlesCheckbox  bind:NSValueBinding toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:@"values.disableBundleUpdates"      options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
+	[suggestBundlesCheckbox bind:NSValueBinding toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:@"values.disableBundleSuggestions" options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
 
 	[progressIndicator bind:NSAnimateBinding toObject:BundleInstallHelper.sharedInstance withKeyPath:@"busy" options:nil];
 	[statusTextField   bind:NSValueBinding   toObject:BundleInstallHelper.sharedInstance withKeyPath:@"activityText" options:nil];
@@ -320,6 +437,7 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierDescription = @
 - (void)viewWillAppear
 {
 	BundleInstallHelper.sharedInstance.bundleInstallActivityText = nil;
+	[self updateResetDismissedButtonEnabled];
 }
 
 - (void)viewDidAppear
@@ -401,6 +519,14 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierDescription = @
 		Bundle* bundle = _arrayController.arrangedObjects[rowIndex];
 		[aCell setEnabled:!bundle.isMandatory || !bundle.isInstalled];
 	}
+	else if([aTableColumn.identifier isEqualToString:kTableColumnIdentifierActions])
+	{
+		NSImage* gear = nil;
+		if(@available(macos 11.0, *))
+			gear = [NSImage imageWithSystemSymbolName:@"gearshape" accessibilityDescription:@"Bundle options"];
+		[aCell setImage:gear];
+		[aCell setEnabled:YES];
+	}
 }
 
 - (BOOL)tableView:(NSTableView*)aTableView shouldEditTableColumn:(NSTableColumn*)aTableColumn row:(NSInteger)rowIndex
@@ -416,7 +542,10 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierDescription = @
 - (BOOL)tableView:(NSTableView*)aTableView shouldSelectRow:(NSInteger)rowIndex
 {
 	NSInteger clickedColumn = aTableView.clickedColumn;
-	return clickedColumn != [aTableView columnWithIdentifier:kTableColumnIdentifierInstalled] && clickedColumn != [aTableView columnWithIdentifier:kTableColumnIdentifierWebLink];
+	if(clickedColumn == [aTableView columnWithIdentifier:kTableColumnIdentifierInstalled])   return NO;
+	if(clickedColumn == [aTableView columnWithIdentifier:kTableColumnIdentifierWebLink])     return NO;
+	if(clickedColumn == [aTableView columnWithIdentifier:kTableColumnIdentifierActions])     return NO;
+	return YES;
 }
 
 - (void)didClickBundleLink:(NSTableView*)aTableView
@@ -426,4 +555,350 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierDescription = @
 	if(bundle.htmlURL)
 		[NSWorkspace.sharedWorkspace openURL:bundle.htmlURL];
 }
+
+// ================
+// = Add Bundle UI
+// ================
+
+- (void)showAddBundleSheet:(id)sender
+{
+	NSAlert* alert = [[NSAlert alloc] init];
+	alert.messageText     = @"Add Bundle from URL";
+	alert.informativeText = @"Enter the GitHub URL for a TextMate bundle and the branch, tag, or commit to track. The bundle will be fetched and installed immediately.";
+	[alert addButtonWithTitle:@"Add"];
+	[alert addButtonWithTitle:@"Cancel"];
+
+	NSView* accessory = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 360, 60)];
+
+	NSTextField* urlLabel = [NSTextField labelWithString:@"URL:"];
+	NSTextField* urlField = [[NSTextField alloc] initWithFrame:NSZeroRect];
+	urlField.placeholderString = @"https://github.com/owner/repo.tmbundle";
+	[urlField.cell setWraps:NO];
+	[urlField.cell setScrollable:YES];
+
+	NSTextField* refLabel = [NSTextField labelWithString:@"Ref:"];
+	NSTextField* refField = [[NSTextField alloc] initWithFrame:NSZeroRect];
+	refField.placeholderString = @"main";
+
+	NSDictionary* views = @{ @"urlLabel": urlLabel, @"url": urlField, @"refLabel": refLabel, @"ref": refField };
+	for(NSView* v in views.allValues) { v.translatesAutoresizingMaskIntoConstraints = NO; [accessory addSubview:v]; }
+	[accessory addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[urlLabel(==40)]-[url(>=260)]|" options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
+	[accessory addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[refLabel(==40)]-[ref(>=260)]|" options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
+	[accessory addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[url]-8-[ref]|"                 options:0 metrics:nil views:views]];
+
+	alert.accessoryView = accessory;
+
+	NSWindow* parent = self.view.window;
+	[alert beginSheetModalForWindow:parent completionHandler:^(NSModalResponse response){
+		if(response != NSAlertFirstButtonReturn)
+			return;
+
+		NSString* url = [urlField.stringValue stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+		NSString* ref = [refField.stringValue stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+		if(url.length == 0)
+			return;
+
+		BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Fetching %@…", url];
+
+		[BundlesManager.sharedInstance addBundleFromURL:url ref:ref name:nil completion:^(NSString* sha, NSError* error){
+			if(error)
+			{
+				BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Add failed: %@", error.localizedDescription];
+				NSAlert* errAlert = [NSAlert alertWithError:error];
+				[errAlert beginSheetModalForWindow:parent completionHandler:nil];
+			}
+			else
+			{
+				BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Added bundle @ %@", sha ? [sha substringToIndex:MIN(sha.length, 7u)] : @"(unknown)"];
+			}
+		}];
+	}];
+}
+
+- (void)checkForUpdatesNow:(id)sender
+{
+	BundleInstallHelper.sharedInstance.bundleInstallActivityText = @"Checking for bundle updates…";
+	[BundlesManager.sharedInstance checkForBundleUpdatesNowWithCompletion:^{
+		BundleInstallHelper.sharedInstance.bundleInstallActivityText = @"Bundle check complete.";
+	}];
+}
+
+// ===================================
+// = Reset dismissed bundle prompts =
+// ===================================
+
+- (void)updateResetDismissedButtonEnabled
+{
+	NSArray* bundles  = [NSUserDefaults.standardUserDefaults stringArrayForKey:kUserDefaultsBundlesToNeverSuggestKey];
+	NSArray* grammars = [NSUserDefaults.standardUserDefaults stringArrayForKey:kUserDefaultsGrammarsToNeverSuggestKey];
+	_resetDismissedButton.enabled = (bundles.count + grammars.count) > 0;
+}
+
+- (void)resetDismissedSuggestions:(id)sender
+{
+	[NSUserDefaults.standardUserDefaults removeObjectForKey:kUserDefaultsBundlesToNeverSuggestKey];
+	[NSUserDefaults.standardUserDefaults removeObjectForKey:kUserDefaultsGrammarsToNeverSuggestKey];
+	[self updateResetDismissedButtonEnabled];
+	BundleInstallHelper.sharedInstance.bundleInstallActivityText = @"Reset dismissed bundle suggestions.";
+}
+
+// ================
+// = Menu (gear + right-click) shared builder
+// ================
+
+- (void)populateMenu:(NSMenu*)menu forBundle:(Bundle*)bundle
+{
+	[menu removeAllItems];
+	if(!bundle)
+		return;
+
+	BOOL mandatory = bundle.isMandatory;
+	BOOL isEditedShipped = [BundlesManager.sharedInstance bundleIsEditedShippedDefault:bundle];
+
+	NSMenuItem* autoItem = [menu addItemWithTitle:@"Auto Update" action:@selector(toggleAutoUpdate:) keyEquivalent:@""];
+	autoItem.target = self;
+	autoItem.representedObject = bundle;
+	autoItem.state = bundle.autoUpdateEnabled ? NSControlStateValueOn : NSControlStateValueOff;
+	autoItem.enabled = !mandatory;
+
+	[menu addItem:NSMenuItem.separatorItem];
+
+	NSMenuItem* changeRefItem = [menu addItemWithTitle:@"Change Ref…" action:@selector(showChangeRefSheet:) keyEquivalent:@""];
+	changeRefItem.target = self;
+	changeRefItem.representedObject = bundle;
+	changeRefItem.enabled = !mandatory;
+
+	NSMenuItem* editItem = [menu addItemWithTitle:@"Edit Bundle…" action:@selector(showEditBundleSheet:) keyEquivalent:@""];
+	editItem.target = self;
+	editItem.representedObject = bundle;
+	editItem.enabled = !mandatory;
+
+	[menu addItem:NSMenuItem.separatorItem];
+
+	NSMenuItem* uninstallItem = [menu addItemWithTitle:@"Uninstall" action:@selector(uninstallFromMenu:) keyEquivalent:@""];
+	uninstallItem.target = self;
+	uninstallItem.representedObject = bundle;
+	uninstallItem.enabled = !mandatory && bundle.isInstalled;
+
+	NSMenuItem* removeItem = [menu addItemWithTitle:@"Remove Bundle…" action:@selector(removeFromMenu:) keyEquivalent:@""];
+	removeItem.target = self;
+	removeItem.representedObject = bundle;
+	removeItem.enabled = !mandatory;
+
+	NSMenuItem* revertItem = [menu addItemWithTitle:@"Revert to Default" action:@selector(revertFromMenu:) keyEquivalent:@""];
+	revertItem.target = self;
+	revertItem.representedObject = bundle;
+	revertItem.enabled = isEditedShipped;
+
+	[menu addItem:NSMenuItem.separatorItem];
+
+	NSMenuItem* copyItem = [menu addItemWithTitle:@"Copy URL" action:@selector(copyBundleURL:) keyEquivalent:@""];
+	copyItem.target = self;
+	copyItem.representedObject = bundle;
+	copyItem.enabled = bundle.downloadURL != nil;
+
+	NSMenuItem* revealItem = [menu addItemWithTitle:@"Reveal in Finder" action:@selector(revealBundleInFinder:) keyEquivalent:@""];
+	revealItem.target = self;
+	revealItem.representedObject = bundle;
+	revealItem.enabled = bundle.path != nil;
+}
+
+- (void)menuNeedsUpdate:(NSMenu*)menu
+{
+	NSInteger row = _bundlesTableView.clickedRow;
+	Bundle* bundle = (row >= 0 && row < (NSInteger)[_arrayController.arrangedObjects count]) ? _arrayController.arrangedObjects[row] : nil;
+	[self populateMenu:menu forBundle:bundle];
+}
+
+- (void)didClickActionGear:(NSTableView*)aTableView
+{
+	NSInteger row = aTableView.clickedRow;
+	if(row < 0 || row >= (NSInteger)[_arrayController.arrangedObjects count])
+		return;
+
+	Bundle* bundle = _arrayController.arrangedObjects[row];
+	NSMenu* menu = [[NSMenu alloc] init];
+	[self populateMenu:menu forBundle:bundle];
+
+	NSInteger col = [aTableView columnWithIdentifier:kTableColumnIdentifierActions];
+	NSRect rect = [aTableView frameOfCellAtColumn:col row:row];
+	NSPoint location = NSMakePoint(NSMinX(rect), NSMaxY(rect));
+	[menu popUpMenuPositioningItem:nil atLocation:location inView:aTableView];
+}
+
+// ================
+// = Menu actions
+// ================
+
+- (void)toggleAutoUpdate:(NSMenuItem*)item
+{
+	Bundle* bundle = item.representedObject;
+	if(!bundle || bundle.isMandatory)
+		return;
+	BOOL newValue = !bundle.autoUpdateEnabled;
+	[BundlesManager.sharedInstance setAutoUpdate:newValue forBundle:bundle];
+	bundle.autoUpdateEnabled = newValue;
+}
+
+- (void)showChangeRefSheet:(NSMenuItem*)item
+{
+	Bundle* bundle = item.representedObject;
+	if(!bundle || bundle.isMandatory)
+		return;
+
+	NSAlert* alert = [[NSAlert alloc] init];
+	alert.messageText     = [NSString stringWithFormat:@"Change Ref for “%@”", bundle.name];
+	alert.informativeText = @"Enter a branch, tag, or 40-character commit SHA. The bundle will be re-fetched at the new ref.";
+	[alert addButtonWithTitle:@"Update"];
+	[alert addButtonWithTitle:@"Cancel"];
+
+	NSTextField* field = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 300, 24)];
+	field.placeholderString = @"main";
+	field.stringValue       = bundle.ref ?: @"";
+	alert.accessoryView = field;
+
+	NSWindow* parent = self.view.window;
+	[alert beginSheetModalForWindow:parent completionHandler:^(NSModalResponse response){
+		if(response != NSAlertFirstButtonReturn)
+			return;
+
+		NSString* ref = [field.stringValue stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+		if(ref.length == 0)
+			return;
+
+		BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Fetching “%@” @ %@…", bundle.name, ref];
+		[BundlesManager.sharedInstance updateBundle:bundle url:nil ref:ref completion:^(NSString* sha, NSError* error){
+			if(error)
+			{
+				BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Change failed: %@", error.localizedDescription];
+				NSAlert* errAlert = [NSAlert alertWithError:error];
+				[errAlert beginSheetModalForWindow:parent completionHandler:nil];
+			}
+			else
+			{
+				BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Updated “%@” @ %@", bundle.name, sha ? [sha substringToIndex:MIN(sha.length, 7u)] : @"(unknown)"];
+			}
+		}];
+	}];
+}
+
+- (void)showEditBundleSheet:(NSMenuItem*)item
+{
+	Bundle* bundle = item.representedObject;
+	if(!bundle || bundle.isMandatory)
+		return;
+
+	NSAlert* alert = [[NSAlert alloc] init];
+	alert.messageText     = [NSString stringWithFormat:@"Edit Bundle “%@”", bundle.name];
+	alert.informativeText = @"Change the URL or ref. Changing the URL re-fetches the bundle; the UUID in the fetched info.plist must match. Name is derived from info.plist and cannot be edited here.";
+	[alert addButtonWithTitle:@"Save"];
+	[alert addButtonWithTitle:@"Cancel"];
+
+	NSView* accessory = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 360, 60)];
+	NSTextField* urlLabel = [NSTextField labelWithString:@"URL:"];
+	NSTextField* urlField = [[NSTextField alloc] initWithFrame:NSZeroRect];
+	urlField.stringValue = bundle.downloadURL.absoluteString ?: @"";
+	[urlField.cell setWraps:NO];
+	[urlField.cell setScrollable:YES];
+	NSTextField* refLabel = [NSTextField labelWithString:@"Ref:"];
+	NSTextField* refField = [[NSTextField alloc] initWithFrame:NSZeroRect];
+	refField.stringValue = bundle.ref ?: @"";
+
+	NSDictionary* views = @{ @"urlLabel": urlLabel, @"url": urlField, @"refLabel": refLabel, @"ref": refField };
+	for(NSView* v in views.allValues) { v.translatesAutoresizingMaskIntoConstraints = NO; [accessory addSubview:v]; }
+	[accessory addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[urlLabel(==40)]-[url(>=260)]|" options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
+	[accessory addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[refLabel(==40)]-[ref(>=260)]|" options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
+	[accessory addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[url]-8-[ref]|"                 options:0 metrics:nil views:views]];
+	alert.accessoryView = accessory;
+
+	NSWindow* parent = self.view.window;
+	[alert beginSheetModalForWindow:parent completionHandler:^(NSModalResponse response){
+		if(response != NSAlertFirstButtonReturn)
+			return;
+		NSString* url = [urlField.stringValue stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+		NSString* ref = [refField.stringValue stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+		if(url.length == 0)
+			return;
+
+		BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Fetching “%@”…", bundle.name];
+		[BundlesManager.sharedInstance updateBundle:bundle url:url ref:(ref.length ? ref : nil) completion:^(NSString* sha, NSError* error){
+			if(error)
+			{
+				BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Edit failed: %@", error.localizedDescription];
+				NSAlert* errAlert = [NSAlert alertWithError:error];
+				[errAlert beginSheetModalForWindow:parent completionHandler:nil];
+			}
+			else
+			{
+				BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Updated “%@” @ %@", bundle.name, sha ? [sha substringToIndex:MIN(sha.length, 7u)] : @"(unknown)"];
+			}
+		}];
+	}];
+}
+
+- (void)uninstallFromMenu:(NSMenuItem*)item
+{
+	Bundle* bundle = item.representedObject;
+	if(!bundle || bundle.isMandatory)
+		return;
+	[BundleInstallHelper.sharedInstance uninstallBundle:bundle];
+}
+
+- (void)removeFromMenu:(NSMenuItem*)item
+{
+	Bundle* bundle = item.representedObject;
+	if(!bundle || bundle.isMandatory)
+		return;
+
+	NSAlert* alert = [[NSAlert alloc] init];
+	alert.messageText = [NSString stringWithFormat:@"Remove bundle “%@”?", bundle.name];
+	alert.informativeText = @"The bundle will be uninstalled and removed from the registry. You can re-add it later from the URL.";
+	[alert addButtonWithTitle:@"Remove"];
+	[alert addButtonWithTitle:@"Cancel"];
+	[alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse response){
+		if(response != NSAlertFirstButtonReturn)
+			return;
+		[BundlesManager.sharedInstance removeBundleSpec:bundle];
+		BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Removed bundle “%@”.", bundle.name];
+	}];
+}
+
+- (void)revertFromMenu:(NSMenuItem*)item
+{
+	Bundle* bundle = item.representedObject;
+	if(!bundle)
+		return;
+
+	NSWindow* parent = self.view.window;
+	BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Reverting “%@”…", bundle.name];
+	[BundlesManager.sharedInstance revertBundleToDefault:bundle completion:^(NSString* sha, NSError* error){
+		if(error)
+		{
+			BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Revert failed: %@", error.localizedDescription];
+			NSAlert* errAlert = [NSAlert alertWithError:error];
+			[errAlert beginSheetModalForWindow:parent completionHandler:nil];
+		}
+		else
+		{
+			BundleInstallHelper.sharedInstance.bundleInstallActivityText = [NSString stringWithFormat:@"Reverted “%@” @ %@", bundle.name, sha ? [sha substringToIndex:MIN(sha.length, 7u)] : @"(unknown)"];
+		}
+	}];
+}
+
+- (void)copyBundleURL:(NSMenuItem*)item
+{
+	Bundle* bundle = item.representedObject;
+	if(!bundle.downloadURL)
+		return;
+	[NSPasteboard.generalPasteboard clearContents];
+	[NSPasteboard.generalPasteboard writeObjects:@[ bundle.downloadURL.absoluteString ]];
+}
+
+- (void)revealBundleInFinder:(NSMenuItem*)item
+{
+	Bundle* bundle = item.representedObject;
+	if(bundle.path)
+		[NSWorkspace.sharedWorkspace selectFile:bundle.path inFileViewerRootedAtPath:@""];
+}
+
 @end

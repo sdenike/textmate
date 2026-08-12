@@ -2,11 +2,11 @@
 #import "OakMainMenu.h"
 #import "Favorites.h"
 #import "AboutWindowController.h"
+#import "FirstLaunchBundleInstaller.h"
 #import "TMPlugInController.h"
 #import "RMateServer.h"
 #import <BundleEditor/BundleEditor.h>
 #import <BundlesManager/BundlesManager.h>
-#import <CrashReporter/CrashReporter.h>
 #import <DocumentWindow/DocumentWindowController.h>
 #import <Find/Find.h>
 #import <CommitWindow/CommitWindow.h>
@@ -29,7 +29,6 @@
 #import <bundles/query.h>
 #import <io/path.h>
 #import <regexp/glob.h>
-#import <network/tbz.h>
 #import <ns/ns.h>
 #import <settings/settings.h>
 #import <oak/debug.h>
@@ -487,13 +486,19 @@ BOOL HasDocumentWindow (NSArray* windows)
 	if(NSMenu* menu = [self mainMenu])
 		NSApp.mainMenu = menu;
 
-	NSOperatingSystemVersion osVersion = NSProcessInfo.processInfo.operatingSystemVersion;
-	NSString* parms = [NSString stringWithFormat:@"v=%@&os=%ld.%ld.%ld", [[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet], osVersion.majorVersion, osVersion.minorVersion, osVersion.patchVersion];
-
+	// Fork update feed: git's smart-HTTP ref advertisement for
+	// textmatelives/textmate — what `git ls-remote` reads. Unlike the GitHub
+	// Releases API it is unmetered, so checks cannot be starved by the
+	// 60-requests/hour-per-IP quota (issue #26). SoftwareUpdate picks the
+	// highest refs/tags/v* version — the beta channel includes -beta tags,
+	// the others skip them, so beta users converge back onto stable when it
+	// catches up — and derives the download URL from release.yml's asset
+	// convention. No nightly stream exists, so Canary behaves like Release.
+	NSURL* const feedURL = [NSURL URLWithString:@"https://github.com/textmatelives/textmate.git/info/refs?service=git-upload-pack"];
 	SoftwareUpdate.sharedInstance.channels = @{
-		kSoftwareUpdateChannelRelease:    [NSURL URLWithString:[NSString stringWithFormat:@"" REST_API "/releases/release?%@", parms]],
-		kSoftwareUpdateChannelPrerelease: [NSURL URLWithString:[NSString stringWithFormat:@"" REST_API "/releases/beta?%@", parms]],
-		kSoftwareUpdateChannelCanary:     [NSURL URLWithString:[NSString stringWithFormat:@"" REST_API "/releases/nightly?%@", parms]],
+		kSoftwareUpdateChannelRelease:    feedURL,
+		kSoftwareUpdateChannelPrerelease: feedURL,
+		kSoftwareUpdateChannelCanary:     feedURL,
 	};
 
 	settings_t::set_default_settings_path([[[NSBundle mainBundle] pathForResource:@"Default" ofType:@"tmProperties"] fileSystemRepresentation]);
@@ -507,46 +512,9 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 	[TMPlugInController.sharedInstance loadAllPlugIns:nil];
 
-	std::string dest = path::join(path::home(), "Library/Application Support/TextMate/Managed");
-	if(!path::exists(dest))
-	{
-		if(NSString* archive = [[NSBundle mainBundle] pathForResource:@"DefaultBundles" ofType:@"tbz"])
-		{
-			path::make_dir(dest);
-
-			network::tbz_t tbz(dest);
-			if(tbz)
-			{
-				int fd = open([archive fileSystemRepresentation], O_RDONLY|O_CLOEXEC);
-				if(fd != -1)
-				{
-					char buf[4096];
-					ssize_t len;
-					while((len = read(fd, buf, sizeof(buf))) > 0)
-					{
-						if(write(tbz.input_fd(), buf, len) != len)
-						{
-							os_log_error(OS_LOG_DEFAULT, "Failed writing bytes to tar");
-							break;
-						}
-					}
-					close(fd);
-				}
-
-				std::string output, error;
-				if(!tbz.wait_for_tbz(&output, &error))
-					os_log_error(OS_LOG_DEFAULT, "tar: %{public}s%{public}s", output.c_str(), error.c_str());
-			}
-			else
-			{
-				os_log_error(OS_LOG_DEFAULT, "Unable to launch tar");
-			}
-		}
-		else
-		{
-			os_log_error(OS_LOG_DEFAULT, "No ‘DefaultBundles.tbz’ in TextMate.app");
-		}
-	}
+	// Mandatory bundles come from Contents/SharedSupport/Bundles/ via
+	// BundleRegistry; everything else is fetched lazily by the poll loop.
+	[BundlesManager.sharedInstance ensureMandatoryBundlesOnDisk];
 	[BundlesManager.sharedInstance loadBundlesIndex];
 
 	if(BOOL restoreSession = ![NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsDisableSessionRestoreKey])
@@ -610,12 +578,11 @@ BOOL HasDocumentWindow (NSArray* windows)
 	[TerminalPreferences updateMateIfRequired];
 	[AboutWindowController showChangesIfUpdated];
 
-	[CrashReporter.sharedInstance applicationDidFinishLaunching:aNotification];
-	[CrashReporter.sharedInstance postNewCrashReportsToURLString:[NSString stringWithFormat:@"%s/crashes", REST_API]];
-
 	[OakCommitWindowServer sharedInstance]; // Setup server
 
 	self.didFinishLaunching = YES;
+
+	[FirstLaunchBundleInstaller promptIfNeeded];
 }
 
 - (void)applicationWillResignActive:(NSNotification*)aNotification

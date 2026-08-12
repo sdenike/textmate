@@ -183,7 +183,29 @@ static NSString* const kMASPreferencesSelectedViewKey = @"MASPreferences Selecte
 	{
 		res.label = viewController.title;
 		if([viewController respondsToSelector:@selector(toolbarItemImage)])
-			res.image = viewController.toolbarItemImage;
+		{
+			NSImage* image = viewController.toolbarItemImage;
+			// SF Symbol panes render a larger glyph via scale (keeps the box compact); PNG
+			// fallbacks return nil here and are left as-is.
+			if(@available(macos 11.0, *))
+			{
+				if(NSImage* symbol = [image imageWithSymbolConfiguration:[NSImageSymbolConfiguration configurationWithScale:NSImageSymbolScaleLarge]])
+				{
+					// The preference toolbar positions the label off the bottom of the icon's
+					// box, so pad the box below the glyph to widen the icon→label gap without
+					// changing the glyph size. Kept as a template image so it still tints.
+					CGFloat const kLabelGapPadding = 6;
+					NSSize const glyphSize = symbol.size;
+					NSImage* padded = [NSImage imageWithSize:NSMakeSize(glyphSize.width, glyphSize.height + kLabelGapPadding) flipped:NO drawingHandler:^BOOL(NSRect){
+						[symbol drawInRect:NSMakeRect(0, kLabelGapPadding, glyphSize.width, glyphSize.height)];
+						return YES;
+					}];
+					[padded setTemplate:YES];
+					image = padded;
+				}
+			}
+			res.image = image;
+		}
 	}
 
 	return res;

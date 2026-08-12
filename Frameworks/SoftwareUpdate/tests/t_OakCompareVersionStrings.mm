@@ -23,6 +23,19 @@ void test_trailing_zero ()
 	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2.1-beta",      @"2.0"),          NSOrderedDescending);
 }
 
+// The fork's actual tag forms: stable releases are X.Y.Z-undead, betas are
+// X.Y.Z-undead-beta.N (and one legacy 2.0.23-undead.0). Beta channel users
+// must be offered the next beta AND the stable that supersedes their beta.
+void test_undead_versions ()
+{
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2.1.2-undead-beta.1",  @"2.1.2-undead"),         NSOrderedAscending);
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2.1.2-undead-beta.1",  @"2.1.2-undead-beta.2"),  NSOrderedAscending);
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2.1.2-undead-beta.2",  @"2.1.2-undead-beta.10"), NSOrderedAscending);
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2.1.1-undead",         @"2.1.2-undead-beta.1"),  NSOrderedAscending);
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2.0.23-undead.0",      @"2.1.0-undead"),         NSOrderedAscending);
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2.1.2-undead",         @"2.1.2-undead"),         NSOrderedSame);
+}
+
 void test_null_string ()
 {
 	OAK_ASSERT_EQ(OakCompareVersionStrings(nil, @"2.0"), NSOrderedAscending);
