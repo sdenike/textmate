@@ -1,0 +1,21 @@
+#!/bin/sh
+# Registers this clone's local pre-commit hook (blocks commits containing
+# secrets). core.hooksPath is local git config: it is never transmitted by
+# `git clone`, so every fresh clone or collaborator must run this script
+# once to get local protection — the `gitleaks` CI job is the actual
+# backstop that protects the repository regardless of whether this has
+# been run.
+set -e
+
+cd "$(dirname "$0")/.."
+
+git config core.hooksPath .githooks
+echo "setup-hooks: core.hooksPath -> .githooks"
+
+if command -v gitleaks >/dev/null 2>&1; then
+	echo "setup-hooks: gitleaks found ($(gitleaks version))"
+else
+	echo "setup-hooks: gitleaks is not installed. The pre-commit hook is now" >&2
+	echo "setup-hooks: registered but will refuse every commit until you run:" >&2
+	echo "setup-hooks:   brew install gitleaks" >&2
+fi

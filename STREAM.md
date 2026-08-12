@@ -4,6 +4,38 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Task 1 fix round 1/5: hooksPath opt-in + Dependabot-trackable gitleaks
+
+**What:** Task review returned two Important findings against Task 1. (1) `core.hooksPath` is
+local git config, never transmitted by `git clone` — a fresh clone got zero local protection,
+leaving CI as the only real gate, not the defence-in-depth promised. Fixed with `bin/setup-hooks`
+(registers `core.hooksPath`, checks for `gitleaks`, warns clearly if missing — tested both paths)
+and a new "Development Setup" section in `CONTRIBUTING.md` telling contributors to run it before
+their first commit, stating plainly that the CI `gitleaks` job is the backstop, not a substitute.
+(2) `.github/workflows/gitleaks.yml` pinned gitleaks 8.30.1 via a raw curl URL Dependabot cannot
+track. Read `gitleaks/gitleaks-action`'s README: confirmed free for a public repo on a personal
+account (`sdenike` qualifies, quoted in the task report) — switched to `gitleaks/gitleaks-action@v3`.
+Before committing to it, read its actual source (`src/index.js`, `src/gitleaks.js`) and found its
+`push`/`pull_request` scans are incremental (new commits only), unlike the old full-history curl
+scan — added `workflow_dispatch` + a daily `schedule` cron to keep periodic full-history coverage.
+Also added `pull-requests: read` to `permissions:` (the action's PR path lists PR commits via the
+API) and set `GITLEAKS_ENABLE_COMMENTS: "false"` rather than granting `pull-requests: write` for a
+PR-comment feature we don't use.
+
+**Why:** Round 1 of up to 5 task-review fix rounds. Both findings were about the controls actually
+holding up under real conditions (fresh clones, CI ruleset staleness) rather than passing on paper.
+
+### If interrupted here
+
+Fix round 1 committed. Flagged but deliberately NOT fixed (outside the two findings' named scope,
+reported instead): this repo has no `.github/dependabot.yml`, so no ecosystem — including
+`github-actions` — is actually configured for Dependabot version updates; `dependabot_security_updates`
+(enabled in the original Task 1) only fires on CVE advisories, not routine releases, so
+`gitleaks-action@v3` is trackable in principle but nothing will bump it without that file. Needs a
+decision on scope/schedule/auto-merge policy before adding it. Next: await review of fix round 1.
+
+---
+
 ## 2026-08-12 — Task 1 (secret hygiene controls) complete
 
 **What:** Replaced `.gitignore` (previously 3 lines) with a full build-output, Xcode-user-state,
