@@ -4,6 +4,49 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Spec corrected: Phase 7 premise disproved, plan bugs fixed
+
+**What:** Two rounds of spec/plan corrections, covering commit `8ab88020` (which landed without
+a STREAM entry — that omission is what this entry settles) and the follow-up spec edits.
+
+Plan bugs, both found by implementers who stopped rather than improvised:
+- The Task 3 merge-base check used `git merge-base --is-ancestor HEAD textmatelives/main`, which
+  can never pass once our branch has local commits of its own. Corrected to the symmetric
+  `git merge-base HEAD <ref>` for all three forks.
+- Task 2's guard-placement wording was self-contradictory ("first key of the job block,
+  immediately after `runs-on`"). Corrected to "immediately before `runs-on`", matching
+  `.github/workflows/gitleaks.yml`.
+
+Measurement corrections:
+- True fork divergence is textmatelives **130**, gs1469 **74**, tectiv3 **231** — not the
+  ~130/77/100 from recon. The tectiv3 figure was wrong because it came from
+  `gh pr view --json commits`, and GitHub's API caps the commit list it returns for a PR.
+  **PR #1467 is the largest of the three forks, not the middle one.** Trust
+  `git rev-list --count` over PR metadata for anything sizing-related.
+- **Phase 7's headline premise was false.** The spec claimed dyld-loading 45 framework bundles
+  was a launch cost we would remove, and called it "the single largest expected startup win."
+  Phase 0's baseline measured `otool -L` on both shipped builds: zero rpath dylibs, and neither
+  `.app` contains a `Contents/Frameworks/` at all. The ~45 source-tree modules are already
+  statically linked. That win was banked years ago. The architecture section and Phase 7 are
+  both rewritten, and Phase 7's gate no longer uses dylib count as a metric.
+
+Also added: a "Local deployment" spec section. `bin/deploy-local` installs to `/Applications`
+replacing the prior build, but must read `CFBundleIdentifier` and refuse to delete a bundle that
+is not ours. This is load-bearing, not theoretical — `/Applications/TextMate.app` on this machine
+is `com.macromates.TextMate` v2.1.4-undead, a working install predating this session. A
+path-based overwrite would destroy it.
+
+**Why:** Phase 0 exists to disprove false premises before later phases are built on them. It
+earned its keep here: Phase 7 would have been scoped around a win that does not exist.
+
+### If interrupted here
+
+Spec and plan are current. Phase 0 Tasks 1-4 complete and committed. Next: Task 5 (attempt the
+2021-tree build on Xcode 26.6 and record which phase first provides a green test oracle), then
+Task 6 (GitHub milestones, labels, Phase 1 issue).
+
+---
+
 ## 2026-08-12 — Task 4 (benchmark harness and baseline) complete
 
 **What:** Added `bin/bench/measure.sh` (measures one `.app`: on-disk size, `lipo`

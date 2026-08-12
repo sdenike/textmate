@@ -114,9 +114,14 @@ TextMate Revived.app
                                    settings · bundles · document · io · text
 ```
 
-The 45 framework bundles collapse into a small number of **static** libraries linked into one
-binary. Each currently-separate framework is a bundle dyld must locate and load at launch;
-static linking removes that cost outright and is the single largest expected startup win.
+The 45 frameworks are build-time modules, **not** loadable bundles. Phase 0's baseline measured
+`otool -L` on both the official v2.0.23 and textmatelives v2.1.4 binaries: zero rpath dylibs,
+and neither `.app` contains a `Contents/Frameworks/` directory at all. Everything is already
+statically linked into a single Mach-O.
+
+This corrects an earlier assumption in this document that dyld-loading 45 framework bundles was
+a launch cost we could remove. It is not — that win was already banked by the existing build.
+Phase 7 must find its improvements elsewhere (see that phase for the re-scoped targets).
 
 Boundaries are preserved as static-library targets with public headers, so each subsystem
 remains independently buildable and testable. Merging them into one target would destroy the
@@ -235,9 +240,13 @@ replacing the deprecated generator. Then `NSGlassEffectView` on toolbar/sidebar/
 for Preferences, About, onboarding, update sheet, using #1467's `OakSwiftUI` bridge.
 *Gate:* visual parity pass, no regressions in the responder chain or key equivalents.
 
-**Phase 7 — Performance.** Static-link to eliminate dylib loads. Instruments profiling against
-Phase 0. Lazy bundle index, deferred subsystem init, dead-strip and LTO tuning.
-*Gate:* measured improvement over Phase 0 on launch, size, and large-file open.
+**Phase 7 — Performance.** Re-scoped after Phase 0's baseline disproved the original premise.
+Static linking is *already done* — both shipped builds have zero rpath dylibs — so "eliminate
+dylib loads" is not available and the rpath count cannot serve as a metric. Real targets:
+Instruments profiling of the ~660 ms launch against Phase 0, deferred subsystem init, lazy
+bundle index, dead-strip and LTO tuning, and reducing installed size below `undead`'s 27.9 MB.
+*Gate:* measured improvement over the `undead` baseline on launch time, installed size, and
+large-file open. Not on dylib count.
 
 **Phase 8 — Extract shared modules.** SwiftPM package repo with `RevivedUpdater`,
 `RevivedGlass`, `RevivedSettings`. Consumed by TextMate Revived; adopted by Hidden Bar /
