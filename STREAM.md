@@ -4,6 +4,39 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Spec: changelog and About window pipeline
+
+**What:** Added a "Changelog and About window" section to the design spec, per user request that
+every build update the changelog and that it surface in About TextMate → Changes.
+
+The pipeline already exists upstream and is reused, not rebuilt:
+`Applications/TextMate/about/Changes.md` is read as `TEXTMATE_CHANGES`
+(`Applications/TextMate/default.rave:7`), `APP_VERSION` is derived from it (`default.rave:20`),
+and it renders in the About window's Changes pane. `bin/extract_changes` and
+`bin/update_changes` are the existing helpers.
+
+Decision: `about/Changes.md` is the **single source of truth**, and the repo-root `CHANGELOG.md`
+is generated from it rather than hand-maintained in parallel. The build already derives
+`APP_VERSION` from that file, so it cannot silently rot — breaking it breaks the build. Two
+hand-maintained changelogs always diverge, and the one that rots would be the one users see in
+About. GitHub release notes generate from the same entry, so the About pane, `CHANGELOG.md`, and
+the Releases page cannot disagree.
+
+Naming: the About window currently reads "TextMate version 2.1.4-undead" because the installed
+build is textmatelives' fork. That string is `CFBundleName` plus the `Changes.md`-derived
+version; Phase 4 changes both. Phase 5 makes "changelog updated" a hard release gate.
+
+**Why:** The user will be testing builds and needs to see, in the app, what changed between them.
+
+### If interrupted here
+
+Phase 0 Tasks 1-6 are all complete, committed, and reviewed. Remaining: the final whole-branch
+review, then `superpowers:finishing-a-development-branch` to integrate
+`phase-0/baseline-and-hygiene` into `master`. After that, Phase 1 (merge `textmatelives/main`,
+130 commits) — tracked at `sdenike/textmate` issue #1.
+
+---
+
 ## 2026-08-12 — Task 6 (GitHub milestones, labels, Phase 1 issue) complete
 
 **What:** Created all 11 Phase 0–9 milestones and all 6 custom labels

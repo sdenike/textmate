@@ -328,6 +328,33 @@ Applies from **Phase 2** onward — the first phase that produces an Xcode build
 have nothing to install. Phase 2's gate gains: "`bin/deploy-local` installs to `/Applications`,
 replaces a prior build, and refuses to touch a bundle with a foreign identifier."
 
+## Changelog and About window
+
+The pipeline already exists upstream and is reused rather than rebuilt:
+`Applications/TextMate/about/Changes.md` is read as `TEXTMATE_CHANGES`
+(`Applications/TextMate/default.rave:7`), `APP_VERSION` is derived from it
+(`default.rave:20`), and it renders in the About window's **Changes** pane. `bin/extract_changes`
+and `bin/update_changes` are the existing helpers.
+
+**Rules:**
+
+- **Every build that produces a release updates the changelog.** No release ships without an
+  entry naming what changed.
+- **`about/Changes.md` is the single source of truth.** The build already derives the app version
+  from it, so it cannot drift without breaking the build — that makes it the right authority.
+  The repo-root `CHANGELOG.md` is *generated* from it, never hand-edited in parallel. Two
+  hand-maintained changelogs always diverge, and the one users see would be the one that rots.
+- The About window must show **TextMate Revived** and our version. Today it reads
+  "TextMate version 2.1.4-undead" because the installed build is textmatelives' fork; that
+  string comes from `CFBundleName` plus the `Changes.md`-derived version, both of which Phase 4
+  changes.
+- Release notes in GitHub Releases are generated from the same entry, so the in-app Changes pane,
+  `CHANGELOG.md`, and the Release page cannot disagree.
+
+**Ownership:** Phase 4 changes the naming. Phase 5 wires changelog generation into the release
+workflow and makes "changelog updated" a release gate. The discipline starts at Phase 2, the
+first phase that produces a build worth noting.
+
 ## Secrets and repository hygiene
 
 **Hard requirement. `sdenike/textmate` is a public repository — anything committed is
