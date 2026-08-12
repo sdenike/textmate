@@ -4,6 +4,35 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Visible identity: "TextMate Revived 3.0.0-revived.1" shipped to /Applications
+
+**What:** Pulled the *visible* half of Phase 4 forward so the installed build is identifiable
+as ours. `CFBundleName` and `CFBundleDisplayName` are now "TextMate Revived"
+(`Applications/TextMate/Info.plist:5-8`), and `CHANGELOG.md` gained a
+`## 2026-08-12 (v3.0.0-revived.1)` entry, which is what the build parses `APP_VERSION` from.
+Rebuilt and redeployed; About now reads TextMate Revived 3.0.0-revived.1.
+
+**Deliberately NOT changed: `CFBundleIdentifier` stays `com.macromates.TextMate`.** Changing it
+orphans existing preferences, bundles, and Application Support state. That needs the settings
+migration Phase 4 owns, so the rename was split: cosmetic identity now, identifier plus
+migration later. Splitting it this way is safe precisely because the identifier is what macOS
+keys state on, not the display name.
+
+**Spec correction:** the changelog pipeline is not what this repo documented before the merge.
+textmatelives moved the version source from `Applications/TextMate/about/Changes.md` to the
+repo-root `CHANGELOG.md` (`Applications/TextMate/default.rave:7-8`), parsed from the first
+`## <date> (vX.Y.Z)` heading. The spec's "Changelog and About window" section is updated; the
+rule is now one changelog, at the root, with a load-bearing heading format.
+
+**Why:** The user could not tell our build apart from the textmatelives build it replaced —
+both reported 2.1.4-undead.
+
+### If interrupted here
+
+`/Applications/TextMate.app` is TextMate Revived 3.0.0-revived.1, running, ad-hoc signed.
+Committed on `phase-1/rebase-textmatelives`; PR #3 is open. Next: Phase 2 (Xcode migration).
+
+
 ## 2026-08-12 — Phase 1: merged textmatelives/main; first working build deployed
 
 **What:** Merged `textmatelives/main` (130 commits) into a `phase-1/rebase-textmatelives`

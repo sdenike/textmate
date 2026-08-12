@@ -3,7 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>${TARGET_NAME}</string>
+	<string>TextMate Revived</string>
+	<key>CFBundleDisplayName</key>
+	<string>TextMate Revived</string>
 	<key>CFBundleShortVersionString</key>
 	<string>${APP_VERSION}</string>
 	<key>CFBundleVersion</key>

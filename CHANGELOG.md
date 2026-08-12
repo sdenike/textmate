@@ -2,6 +2,46 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-12 (v3.0.0-revived.1)
+
+First build of **TextMate Revived**, the `sdenike/textmate` fork. Apple Silicon only,
+macOS 26 or later.
+
+This is a development build. It is ad-hoc signed rather than Developer ID signed and
+notarized — proper signing arrives with the release pipeline. The bundle identifier is
+still `com.macromates.TextMate` so existing settings, bundles, and preferences continue
+to work; changing it requires a settings migration and is handled separately.
+
+### Foundation
+
+* **Merged 130 commits from [textmatelives/textmate](https://github.com/textmatelives/textmate).**
+  Apple Silicon only, macOS 26 target, Cap'n Proto removed, license framework removed,
+  dead `api.textmate.org` calls removed, notarized release CI, and a working
+  GitHub-Releases updater. GPLv3; original authorship retained in the merged history.
+* **Repository guards on every CI job.** The inherited workflows ran unguarded, which
+  would let any fork run Actions — including the release workflow.
+
+### Secret-leak controls
+
+* Comprehensive `.gitignore` for signing identities, App Store Connect keys, provisioning
+  profiles, and notarization credentials; a `gitleaks` pre-commit hook via `bin/setup-hooks`;
+  a `gitleaks` CI job as the repository-wide backstop; and one upstream false positive
+  suppressed by fingerprint rather than by path, so the rest of that file stays scanned.
+
+### Build and deploy
+
+* `bin/build` — unsets leaked `GEM_HOME`/`GEM_PATH` and clears a foreign-owned credits
+  cache, two environment problems whose errors point at the wrong culprit.
+* `bin/deploy-local` — installs to `/Applications` replacing the previous build, but reads
+  `CFBundleIdentifier` from the freshly built app and refuses to delete a bundle that does
+  not match.
+
+### Measured baseline
+
+Recorded in `docs/benchmarks/2026-08-12-baseline.md` so later performance claims can be
+checked rather than asserted. Notably, both shipped builds already have zero rpath dylibs —
+the framework static-linking win was banked years ago, not available to claim now.
+
 ## 2026-06-11 (v2.1.4-undead)
 
 Bugfix release: the GitHub Markdown preview no longer dies with a `LoadError` on installs that predate 2026-06-08 ([#29](https://github.com/textmatelives/textmate/issues/29)). See [all changes since v2.1.3-undead](https://github.com/textmatelives/textmate/compare/v2.1.3-undead...v2.1.4-undead).
