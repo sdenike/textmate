@@ -4,6 +4,36 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Phase 2 Task 1: `bin/rave2yaml --inventory` parses all 60 rave targets
+
+**What:** Added `bin/rave2yaml`, a Ruby parser that walks `Frameworks/*/default.rave` +
+`Applications/*/default.rave` (56 files) and `vendor/*/default.rave` (3 files, tagged
+`vendor-target` and reported separately), and prints every target's kind, `sources`/
+`tests` globs, `require` deps, frameworks, and libraries. Grammar was read out of
+`bin/rave`'s `Parser` class, not guessed from samples. Finds **57** targets in
+Frameworks/Applications (not 56 — `Frameworks/CommitWindow/default.rave` declares two:
+`CommitWindow` and `CommitWindowTool`) plus 3 vendor targets. Full directive-grammar
+table, per-target dependency list, and the `cxx_tests`-is-parsed-but-never-built finding
+are in `docs/benchmarks/2026-08-12-rave-inventory.md`. Added `tests/rave2yaml_test.sh`
+(passes: `PASS: 57 targets, all dependencies resolve`) — fixed its target-count heuristic
+from file-based `grep -l` (undercounts CommitWindow's second target) to counting `target`
+directive occurrences directly, and widened its dependency-resolution check to accept
+`vendor-target` names too (`TextMate` requires `kvdb`, a vendor target). Both fixes are
+justified in the doc, per task-1's decided point 4 (investigate before changing either).
+Unrecognised directives are fatal (file:line:name) by design — verified against a scratch
+`.rave` file, not the real tree. Task 1 report:
+`.superpowers/sdd/2026-08-12-phase-2-xcode-migration/task-1-report.md`.
+
+**Why:** Every later Phase 2 task consumes this inventory; a parser that silently drops a
+target or misreads a dependency makes the generated Xcode project quietly wrong in ways
+that surface later as link errors. `--inventory` only — `project.yml` emission is Task 4,
+deliberately not touched here.
+
+### If interrupted here
+
+Task 1 committed on `phase-2/xcode-migration`. Not yet merged. Next: Phase 2 Task 2 per
+`docs/superpowers/plans/2026-08-12-phase-2-xcode-migration.md`.
+
 ## 2026-08-12 — Phase 2 planned: Xcode migration via XcodeGen, not by porting PR #1469
 
 **What:** Wrote `docs/superpowers/plans/2026-08-12-phase-2-xcode-migration.md` (8 tasks).

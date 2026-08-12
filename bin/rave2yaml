@@ -1,0 +1,245 @@
+#!/System/Library/Frameworks/Ruby.framework/Versions/Current/usr/bin/ruby
+# encoding: utf-8
+#
+# rave2yaml -- Inventory pass over the .rave build (Phase 2 Xcode migration,
+# Task 1). Walks Frameworks/*/default.rave and Applications/*/default.rave
+# (plus vendor/*/default.rave, reported separately -- vendor code may need
+# different Xcode handling later) and prints a machine-readable list of
+# every target: its kind, sources/tests globs, `require` dependencies,
+# frameworks and libraries. Later tasks (project.yml generation, parity
+# checking) consume this. It does NOT itself emit project.yml -- that is
+# Task 4.
+#
+# Grammar reference: bin/rave's Parser class is the authority for what a
+# .rave file may contain (see Parser#load_recursive, #flatten,
+# #expand_globs and #create_targets there). Unlike bin/rave -- which on an
+# unhandled directive just warns to STDERR and carries on
+# (create_targets' `else` branch) -- this tool treats an unrecognised
+# directive as fatal. A silently-dropped directive is how a converted
+# build ends up subtly wrong, which matters more here than matching
+# bin/rave's own leniency.
+#
+# Usage: bin/rave2yaml --inventory
+
+require 'optparse'
+require 'shellwords'
+
+ROOT = File.expand_path('..', __dir__)
+Dir.chdir(ROOT)
+
+# Directives this tool understands, grouped by how they're handled below.
+# This is the full set found by grepping every directive keyword out of
+# Frameworks/*/default.rave, Applications/*/default.rave and
+# vendor/*/default.rave and checking each against bin/rave's grammar --
+# not the (smaller, and in two cases -- "resources"/"entitlements" --
+# inaccurate) directive list in the task brief's recon notes. See
+# docs/superpowers/sdd/2026-08-12-phase-2-xcode-migration/task-1-report.md.
+#
+# Directives bin/rave supports but that never appear in this tree --
+# load, extend, arch, notarize, define, and prelude outside the root
+# default.rave -- are deliberately NOT implemented; encountering one
+# falls through to the "unrecognised directive" error below rather than
+# being silently mishandled.
+GLOB_DIRECTIVES   = %w[headers sources tests cxx_tests].freeze   # dir-relative glob patterns
+LIST_DIRECTIVES   = %w[require require_headers frameworks libraries].freeze # space-separated names
+SCALAR_DIRECTIVES = %w[executable prefix].freeze                 # single value, ${var}-expanded
+INERT_DIRECTIVES  = %w[set add capture expand files copy].freeze # recognised; not surfaced below
+BLOCK_DIRECTIVES  = %w[target config].freeze                     # may open a `{ ... }` body
+
+class RaveError < StandardError; end
+
+# One `target "name" { ... }` block.
+Target = Struct.new(:name, :vendor, :file, :line, :lists, :scalars) do
+  def initialize(name, vendor, file, line)
+    super(name, vendor, file, line, Hash.new { |h, k| h[k] = [] }, {})
+  end
+end
+
+# ${name} / $name substitution, matching bin/rave's VARIABLE_MATCH. Only
+# the handful of variables actually used in this tree (dirname, dir,
+# target) are known; anything else is a hard error rather than being
+# left unresolved in the output -- bin/rave itself aborts on an unknown
+# variable (Parser#expand_variables), and silently emitting "${FOO}"
+# into a sources glob would be exactly the kind of quiet wrongness this
+# tool exists to avoid.
+def resolve(str, vars, file, line)
+  str.gsub(/\$\{(\w+)\}|\$(\w+)/) do
+    name = $1 || $2
+    vars.fetch(name) do
+      raise RaveError, "#{file}:#{line}: unresolved variable '#{name}' in '#{str}'"
+    end
+  end
+end
+
+# Matches bin/rave's own line grammar (Parser#load_recursive) exactly:
+# a line is a close brace, a comment, or `word args... {`? -- nothing else
+# is syntactically valid. Blank lines match none of these and are skipped
+# by the caller before this is applied, same as bin/rave.
+LINE_RE = /^\s*(?:(\})|(#.*)|([a-z_]+)\s*(.+?)\s*(\{)?)\s*$/.freeze
+
+def parse_file(path, vendor:)
+  dir     = File.dirname(path)
+  dirname = File.basename(dir)
+  vars    = { 'dir' => dir, 'dirname' => dirname }
+
+  targets = []
+  target  = nil # current Target, nil outside any `target` block
+  depth   = 0   # nesting depth of `config` blocks inside the current target
+
+  File.readlines(path).each_with_index do |raw, idx|
+    line   = raw.chomp
+    lineno = idx + 1
+    next if line.strip.empty?
+
+    m = LINE_RE.match(line)
+    raise RaveError, "#{path}:#{lineno}: cannot parse line: #{raw.inspect}" unless m
+
+    close_brace, comment, command, params, open_brace = m.captures
+    next if comment
+
+    if close_brace
+      if depth > 0
+        depth -= 1
+      elsif target
+        targets << target
+        target = nil
+      else
+        raise RaveError, "#{path}:#{lineno}: unmatched '}'"
+      end
+      next
+    end
+
+    args = Shellwords.split(params)
+
+    if open_brace
+      case command
+      when 'target'
+        raise RaveError, "#{path}:#{lineno}: nested 'target' block (already inside #{target.name})" if target
+        raw_name = args.fetch(0) { raise RaveError, "#{path}:#{lineno}: 'target' needs a name" }
+        target = Target.new(resolve(raw_name, vars, path, lineno), vendor, path, lineno)
+      when 'config'
+        raise RaveError, "#{path}:#{lineno}: 'config' outside a target block" unless target
+        depth += 1
+      else
+        raise RaveError, "#{path}:#{lineno}: unrecognised directive '#{command}' " \
+                          '(only target/config may open a { } block)'
+      end
+      next
+    end
+
+    raise RaveError, "#{path}:#{lineno}: directive '#{command}' outside a target block" unless target
+
+    tvars = vars.merge('target' => target.name)
+
+    if GLOB_DIRECTIVES.include?(command)
+      target.lists[command] += args.map { |a| File.join(dir, resolve(a, tvars, path, lineno)) }
+    elsif LIST_DIRECTIVES.include?(command)
+      target.lists[command] += args.map { |a| resolve(a, tvars, path, lineno) }
+    elsif SCALAR_DIRECTIVES.include?(command)
+      target.scalars[command] = resolve(args.join(' '), tvars, path, lineno)
+    elsif INERT_DIRECTIVES.include?(command)
+      # set/add/capture/expand are variable plumbing that never reaches
+      # sources/require/frameworks/libraries in this tree; files/copy are
+      # Resources bundling. Recognised so real content doesn't trip the
+      # "unrecognised directive" error; not part of the fields --inventory
+      # reports because none of it feeds kind/sources/require/tests/
+      # frameworks/libraries here (see the task-1 report for the grep that
+      # checked this).
+    else
+      raise RaveError, "#{path}:#{lineno}: unrecognised directive '#{command}'"
+    end
+  end
+
+  raise RaveError, "#{path}: unterminated block (missing '}')" if target || depth > 0
+
+  targets
+end
+
+def kind_of(target)
+  exe = target.scalars['executable']
+  return 'framework' unless exe
+
+  case target.scalars['prefix']
+  when nil               then 'tool'
+  when /\.app\//         then 'app'
+  when /\.xpc\//         then 'xpc'
+  when /\.qlgenerator\// then 'qlgenerator'
+  else 'bundle'
+  end
+end
+
+def print_glob_field(io, target, key)
+  globs = target.lists[key]
+  return if globs.empty?
+
+  count = globs.sum { |g| Dir.glob(g).length }
+  io.puts "  #{key} #{globs.join(' ')} (#{count} #{count == 1 ? 'file' : 'files'})"
+end
+
+def print_target(io, target, label)
+  io.puts "#{label} #{target.name}"
+  io.puts "  kind #{kind_of(target)}"
+  io.puts "  file #{target.file}:#{target.line}"
+  io.puts "  executable #{target.scalars['executable']}" if target.scalars['executable']
+  io.puts "  prefix #{target.scalars['prefix']}" if target.scalars['prefix']
+  io.puts "  requires #{target.lists['require'].join(' ')}" unless target.lists['require'].empty?
+  unless target.lists['require_headers'].empty?
+    io.puts "  requires-headers #{target.lists['require_headers'].join(' ')}"
+  end
+  io.puts "  headers #{target.lists['headers'].join(' ')}" unless target.lists['headers'].empty?
+  print_glob_field(io, target, 'sources')
+  print_glob_field(io, target, 'tests')
+  print_glob_field(io, target, 'cxx_tests')
+  io.puts "  frameworks #{target.lists['frameworks'].join(' ')}" unless target.lists['frameworks'].empty?
+  io.puts "  libraries #{target.lists['libraries'].join(' ')}" unless target.lists['libraries'].empty?
+  io.puts
+end
+
+def run_inventory(io)
+  main_files   = Dir.glob('{Frameworks,Applications}/*/default.rave').sort
+  vendor_files = Dir.glob('vendor/*/default.rave').sort
+
+  main_targets   = main_files.flat_map { |f| parse_file(f, vendor: false) }.sort_by(&:name)
+  vendor_targets = vendor_files.flat_map { |f| parse_file(f, vendor: true) }.sort_by(&:name)
+
+  io.puts "# rave2yaml inventory: #{main_targets.length} targets from " \
+          "#{main_files.length} Frameworks/Applications default.rave files, " \
+          "#{vendor_targets.length} vendor targets from #{vendor_files.length} vendor/ files"
+  io.puts '# generated by bin/rave2yaml --inventory; project.yml emission is Task 4, not this tool'
+  io.puts
+
+  main_targets.each { |t| print_target(io, t, 'target') }
+
+  unless vendor_targets.empty?
+    io.puts '# vendor targets (vendor/*/default.rave) -- noted separately: third-party code that' \
+            ' may need different Xcode handling than first-party Frameworks/Applications targets.' \
+            ' Still real `require` targets (e.g. Applications/TextMate requires "kvdb"), so their' \
+            ' names are valid dependency-resolution targets too.'
+    vendor_targets.each { |t| print_target(io, t, 'vendor-target') }
+  end
+end
+
+options = {}
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: #{File.basename(__FILE__)} --inventory"
+  opts.on('--inventory', 'Print a human-readable inventory of every .rave target.') do
+    options[:inventory] = true
+  end
+  opts.on('-h', '--help', 'Show this help.') do
+    puts opts
+    exit
+  end
+end
+parser.parse!
+
+unless options[:inventory]
+  warn parser.banner
+  exit 1
+end
+
+begin
+  run_inventory($stdout)
+rescue RaveError => e
+  warn "rave2yaml: #{e.message}"
+  exit 1
+end
