@@ -4,6 +4,55 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Task 1 fix round 2/5: dependabot.yml + verified comment accuracy
+
+**What:** Scoped re-review: Finding 1 (round 1) verdicted ADDRESSED. Finding 2 verdicted NOT
+ADDRESSED — `gitleaks/gitleaks-action@v3` made the pin *structurally* trackable, but no
+`.github/dependabot.yml` existed anywhere in the repo, so no ecosystem was configured for
+version updates and nothing would ever actually open a bump PR. Two more Important findings
+came with it. Fixed all three:
+
+**Item A:** Added `.github/dependabot.yml` — `github-actions` ecosystem only, `directory: "/"`,
+weekly. Deliberately scoped to github-actions alone (repo's other deps are leaving in Phase 3;
+configuring them now is churn). Confirmed the `package-ecosystem`/`directory`/`schedule.interval`
+keys and the `"weekly"` enum value against GitHub's own configuration-options doc before writing
+it, not from memory. This also now covers `actions/checkout@v4`, same problem, same fix.
+
+**Item B:** The `GITLEAKS_VERSION` comment in `gitleaks.yml` stated as settled fact that
+"Dependabot tracks the @v3 tag... that's the fix for the staleness," which was false until Item A
+landed — and contradicted this file's own round-1 entry, which correctly said nothing would bump
+it without a `dependabot.yml`. Rewrote the comment to name `.github/dependabot.yml` explicitly and
+to distinguish it from `dependabot_security_updates` (CVE advisories only, a separate mechanism).
+Landing both files in the same commit makes the comment true as written, and it now agrees with
+this log.
+
+**Item C:** The round-1 `schedule`/`workflow_dispatch` triggers were added on the unverified
+premise that they restore full-history coverage — the report only characterized `push`/
+`pull_request` behavior. Read `gitleaks-action`'s actual dispatch logic: for `schedule`/
+`workflow_dispatch`, `src/index.js` (lines 176-181) calls `gitleaks.Scan()` with a `scanInfo` that
+was never given a `baseRef`/`headRef`, and `src/gitleaks.js`'s `Scan()` only appends `--log-opts`
+inside its `push`/`pull_request` branches — neither matches, so no `--log-opts` flag is added at
+all. Rather than trust that by inference, built a scratch git repo with a secret in a non-HEAD
+commit (removed from a later commit, so absent from the working tree) and ran the exact resulting
+command (`gitleaks detect --redact -v --exit-code=2 --report-format=sarif
+--report-path=results.sarif --log-level=debug`, no `--log-opts`): gitleaks's own debug log showed
+it executing `git -C . log -p -U0 --full-history --all --diff-filter=tuxdb` internally, and it
+found the buried secret (exit 2). Confirmed branch (a): the triggers already provide genuine
+full-history coverage — no workflow-behavior change needed, only tightened the inline comment to
+cite the exact lines and the empirical proof instead of asserting it.
+
+**Why:** Round 2 of up to 5. All three items were about a claim in a comment or a commit message
+being true, not just plausible — the review is explicitly checking whether documentation and
+behavior actually match, which is the same failure mode as the original hooksPath finding.
+
+### If interrupted here
+
+Fix round 2 committed. Deferred (coordinator said do not fix this round, logged for the final
+review): whether `GITLEAKS_ENABLE_COMMENTS` is the correct input name, and whether
+`pull-requests: read` is strictly required. Next: await review of fix round 2.
+
+---
+
 ## 2026-08-12 — Task 1 fix round 1/5: hooksPath opt-in + Dependabot-trackable gitleaks
 
 **What:** Task review returned two Important findings against Task 1. (1) `core.hooksPath` is

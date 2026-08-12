@@ -6,11 +6,14 @@ on:
     branches: [master]
   workflow_dispatch:
   schedule:
-    # gitleaks/gitleaks-action only scans the commits introduced by a given
-    # push or pull request (see its src/index.js), not full history like
-    # the previous curl-based step did. This periodic full scan is the
-    # replacement for that coverage, catching anything a gitleaks ruleset
-    # update finds in history that already passed under older rules.
+    # gitleaks-action passes --log-opts=<baseRef>^..<headRef> for push and
+    # pull_request (src/gitleaks.js Scan()), scanning only the commits in
+    # that event. For "schedule"/"workflow_dispatch" it passes no
+    # --log-opts at all (src/index.js:176-181), and gitleaks then defaults
+    # to `git log -p -U0 --full-history --all` — verified by running that
+    # exact invocation against a repo with a secret buried in a non-HEAD
+    # commit; it was found. This cron is what restores the full-history
+    # coverage the old curl-based step had.
     - cron: "0 4 * * *" # once a day at 4 AM UTC
 
 permissions:
@@ -40,7 +43,8 @@ jobs:
           # account (sdenike) — only organizations need one. See "Do I need
           # a free license key?" in https://github.com/gitleaks/gitleaks-action.
           # GITLEAKS_VERSION intentionally left unset: the action bumps its
-          # bundled gitleaks version on its own releases, and Dependabot
-          # tracks the @v3 tag below — that's the fix for the staleness a
-          # hand-pinned curl URL had.
+          # bundled gitleaks version on its own releases. Dependabot bumps
+          # the @v3 tag itself via .github/dependabot.yml (github-actions
+          # ecosystem, weekly) — that, not dependabot_security_updates
+          # (CVE advisories only), is what fixes hand-pinned-curl staleness.
           GITLEAKS_ENABLE_COMMENTS: "false"

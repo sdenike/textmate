@@ -1,0 +1,17 @@
+# Version updates for GitHub Actions only. dependabot_security_updates
+# (enabled separately via the API) covers CVE advisories against pinned
+# versions; it does not open routine "bump to latest" PRs — this file is
+# what does, and it's what makes the gitleaks/gitleaks-action@v3 pin in
+# .github/workflows/gitleaks.yml (and actions/checkout@v4 in every
+# workflow) actually trackable instead of just structurally capable of
+# being tracked.
+#
+# github-actions only, deliberately: the repo's other dependencies (boost,
+# Cap'n Proto, sparsehash, ragel, multimarkdown, ninja) are being removed
+# in Phase 3, so configuring an ecosystem for them now would be churn.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
