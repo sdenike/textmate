@@ -4,6 +4,47 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Task 3 (upstream fork remotes verified) complete
+
+**What:** Added four remotes (`upstream` → textmate/textmate, `textmatelives`, `gs1469` →
+schriftgestalt/textmate, `tectiv3`) and ran `git fetch --all --prune`, pulling full
+histories for all three forks plus canonical upstream. Confirmed the branch names the
+plan assumes actually exist: `textmatelives/main` (not `master`, though that also
+exists), `gs1469/master`, `tectiv3/develop`. Verified shared history with all three forks
+using the symmetric form, `git merge-base HEAD <remote>/<branch> >/dev/null` — all three
+printed their `OK` line. The brief's original textmatelives check used the asymmetric
+`git merge-base --is-ancestor $(git rev-parse HEAD) textmatelives/main`, which asks
+whether our HEAD is contained in their history — true only while HEAD sat on pristine
+`346b52b1`, structurally unable to pass once our branch carries its own commits (it now
+has 6, from Tasks 1-2). Caught this, stopped rather than substitute a passing command,
+reported it; the plan's Step 2 was corrected to the symmetric form and re-run verbatim
+to confirm. Divergence, measured with `git rev-list --count`: textmatelives 130 ahead,
+gs1469 74 ahead, tectiv3 231 ahead.
+
+The tectiv3 number is the significant finding: the plan's ~100 recon estimate came from
+`gh pr view --json commits` on PR #1467, and GitHub's API caps how many commits it
+returns for a PR's commit list — 231 is the true, authoritative branch divergence.
+Two consequences: PR #1467 is actually the **largest** of the three forks by commit
+count, not the middle one as recon assumed; and PR metadata must not be trusted for
+magnitude going forward — `git rev-list --count` (or an equivalent local git measurement)
+is the authority, not the GitHub API's commit list.
+
+**Why:** Phases 1-3 merge and cherry-pick from these three forks; verifying they share
+real history with us is the assumption the entire plan rests on, so confirming it (not
+just adding the remotes) was the actual deliverable. Getting the divergence magnitude
+right matters directly for Phase 1-3 effort estimates, especially now that tectiv3 —
+previously assumed mid-sized — is known to be the largest port.
+
+### If interrupted here
+
+Task 3 committed, nothing left in progress. All four remotes stay fetched locally
+(no need to re-fetch large histories). No merge, rebase, cherry-pick, or checkout was
+performed against any of them — this task only added and verified remotes, per
+constraints. Next: Phase 0 Task 4 (benchmark harness and baseline) per
+`docs/superpowers/plans/2026-08-12-phase-0-baseline-and-hygiene.md`.
+
+---
+
 ## 2026-08-12 — Task 2 (CI repository guard on build.yml) complete
 
 **What:** Added `if: github.repository == 'sdenike/textmate'` as the first key of the `build` job
