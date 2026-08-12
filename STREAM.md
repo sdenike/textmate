@@ -4,6 +4,53 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Task 1 fix round 3/5: suppress the one pre-existing finding by fingerprint
+
+**What:** Round 2 verdicted all three items ADDRESSED. One item remained: the pre-existing
+finding disclosed at the end of round 2 (2012 upstream commit `3c79f275`,
+`Frameworks/OakTextView/src/OakDocumentView.mm:130`, rule `generic-api-key`, matching
+`kSettingsThemeKey`'s theme UUID constant — a confirmed false positive). With `schedule`/
+`workflow_dispatch` now the only full-history triggers (round 1), this was going to turn CI red
+on the first scheduled run and stay red, training everyone to ignore it — defeating the control.
+
+Verified the suppression mechanism before using it, against gitleaks 8.30.1 itself, not memory:
+`gitleaks --help` confirms `-i/--gitleaks-ignore-path` (default `.`); gitleaks' own README
+documents `.gitleaksignore` fingerprint suppression; read the actual Go source
+(`detect/detect.go`) and confirmed `AddGitleaksIgnore` skips `#`-comment and blank lines, and
+`AddFinding` builds a commit-scoped fingerprint as exactly `commit:file:rule-id:start-line` and
+checks it verbatim against the ignore set — i.e. scope is precisely commit+file+rule+line, not
+path- or rule-wide. Added `.gitleaksignore` at repo root with a `#`-comment block recording the
+finding, why it's a false positive, and the upstream date, followed by the one fingerprint line.
+
+**Proved it, twice.** (1) Re-ran the exact command the CI `schedule`/`workflow_dispatch` path
+runs (`gitleaks detect --redact -v --exit-code=2 --report-format=sarif
+--report-path=results.sarif --log-level=debug`, no `--log-opts`, so still full history — same
+5684/5685-commit scope as before): debug log shows `found .gitleaksignore file` and `skipping
+finding: fingerprint ...3c79f275...generic-api-key:130`, ending in `no leaks found`, exit **0**.
+(2) Confirmed the suppression isn't overbroad: planted a fresh throwaway ed25519 key
+(`ssh-keygen` → `canary.pem`) in a real throwaway commit (`--no-verify`, since this test targets
+the full-history *CI* scan, not the pre-commit hook, and needed the secret to actually exist in
+history — explained in the report), re-ran the identical command: caught it immediately, exit
+**2**, a completely different fingerprint (`...canary.pem:private-key:1`). Suppression is scoped
+exactly as intended — a new secret is still caught, the old false positive is not. Destroyed the
+test commit completely: `git reset --soft HEAD~1`, unstaged and removed `canary.pem`, removed the
+`/tmp` key files and the scratch `.sarif` reports, then `git reflog expire --expire=now
+--expire-unreachable=now --all && git gc --prune=now` so the throwaway commit object no longer
+exists anywhere locally (verified via `git cat-file -t <sha>` failing, and `git fsck --full`
+clean) — this never touched a remote, nothing was ever pushed.
+
+**Why:** A leak scanner that's red on a clean tree gets ignored, which is worse than not having
+one — round 3 makes the control's steady state actually green, without weakening what it catches.
+
+### If interrupted here
+
+Fix round 3 committed. Deferred per instruction, logged for the final review only: the
+`--diff-filter=tuxdb` omission in the round-2 comment's backticked quote, the dependabot.yml
+comment's "every workflow"/Phase 3 claims, `GITLEAKS_ENABLE_COMMENTS` input-name verification,
+and whether `pull-requests: read` is strictly required. Next: await review of fix round 3.
+
+---
+
 ## 2026-08-12 — Task 1 fix round 2/5: dependabot.yml + verified comment accuracy
 
 **What:** Scoped re-review: Finding 1 (round 1) verdicted ADDRESSED. Finding 2 verdicted NOT
