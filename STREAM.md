@@ -4,6 +4,35 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Plan-number corrections and CLAUDE.md drift fix
+
+**What:** Settles the STREAM entry owed by `d89cc1d6`, plus a real doc-vs-code drift the check surfaced.
+
+Plan corrections (`d89cc1d6`):
+- The plan claimed **54 test binaries**. Wrong — 54 is the `RunTest` *edge* count in `build.ninja`
+  (27 targets x 2 configurations). Task 2 measured **26 discovered test targets**. Task 7's parity
+  gate now names 26, so it is not judged against a fabricated number.
+- Tech stack line said C++23; the tree compiles `-std=c++2a`. Aligned to C++20 per Task 3.
+- Recorded that `scm/test` needs `hg` and `svn`, absent on this machine but installed by CI.
+
+`CLAUDE.md` drift (this commit): it still listed **`capnp`** as a `./configure` dependency. Cap'n
+Proto was removed by the Phase 1 textmatelives merge, so that line had been wrong since `ef1db3f2`.
+This file is loaded into every agent session, so a wrong dependency list actively wastes time.
+Also documented `bin/setup-hooks`, `bin/build`, and `bin/deploy-local`, including *why* `bin/build`
+is preferred over bare `ninja` — the leaked `GEM_HOME` and root-owned credits-cache failures both
+produce errors that point at the wrong culprit, and rediscovering them costs an hour each time.
+
+**Why:** `README.md` and `CHANGELOG.md` were checked and genuinely need nothing: README still
+describes the rave build, which remains accurate until Phase 2 Task 8 deletes it, and no
+user-facing change has shipped since v3.0.0-revived.1.
+
+### If interrupted here
+
+Phase 2 Tasks 1, 2, 3 complete and reviewed on `phase-2/xcode-migration`. Task 4 (pilot framework
+under XcodeGen) is next and is the first task that generates an actual `.xcodeproj`. Nothing is
+pushed; Phase 2 has no PR open yet.
+
+
 ## 2026-08-12 — Phase 2 Task 2: ninja build parity baseline recorded
 
 **What:** `./bin/build TextMate` succeeds (confirmed via zero `FAILED:` lines plus a clean
