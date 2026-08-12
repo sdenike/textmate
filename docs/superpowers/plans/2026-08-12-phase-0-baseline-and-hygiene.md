@@ -176,12 +176,14 @@ fi
 exit $status
 ```
 
-Make it executable and register the hooks directory. `core.hooksPath` is used rather than `.git/hooks/` so the hook is version-controlled and every clone gets it:
+Make it executable and register the hooks directory:
 
 ```bash
 chmod +x .githooks/pre-commit
 git config core.hooksPath .githooks
 ```
+
+`core.hooksPath` is used rather than `.git/hooks/` so the hook *file* lives in version control and is reviewable. **It does not make the hook automatic for other clones** — `core.hooksPath` is local git config and is never transmitted by `git clone`. A fresh clone has no local protection until someone runs the setup step, so this task also adds `bin/setup-hooks` and a CONTRIBUTING note directing a new contributor to run it. The CI gitleaks job is the repo-wide backstop; the local hook is the fast feedback loop, not the guarantee.
 
 - [ ] **Step 5: Install gitleaks and run the test again**
 
@@ -287,7 +289,7 @@ Expected: a push-triggered job on `macOS-latest` that brew-installs boost/capnp/
 
 - [ ] **Step 2: Add the guard to every job**
 
-Insert as the first key of each `jobs.<name>` block, immediately after `runs-on`:
+Insert as the first key of each `jobs.<name>` block, immediately *before* `runs-on`, matching the convention established by `.github/workflows/gitleaks.yml` in Task 1:
 
 ```yaml
     if: github.repository == 'sdenike/textmate'
@@ -336,12 +338,14 @@ git fetch --all --prune
 This is the assumption the entire plan rests on. If any of these fail, stop and report — a fork without shared history cannot be merged, only ported by hand.
 
 ```bash
-git merge-base --is-ancestor $(git rev-parse HEAD) textmatelives/main && echo "textmatelives: OK"
-git merge-base HEAD gs1469/master   >/dev/null && echo "gs1469: shared base OK"
-git merge-base HEAD tectiv3/develop >/dev/null && echo "tectiv3: shared base OK"
+git merge-base HEAD textmatelives/main >/dev/null && echo "textmatelives: shared base OK"
+git merge-base HEAD gs1469/master      >/dev/null && echo "gs1469: shared base OK"
+git merge-base HEAD tectiv3/develop    >/dev/null && echo "tectiv3: shared base OK"
 ```
 
 Expected: three `OK` lines.
+
+Do **not** use `git merge-base --is-ancestor HEAD <ref>` here. That asks whether our HEAD is an ancestor of theirs, which stops being true the moment our branch has any local commits of its own — it would report a false blocker. The symmetric `git merge-base` form asks the question we actually care about: does a common ancestor exist at all.
 
 - [ ] **Step 3: Record the divergence numbers**
 
@@ -351,7 +355,9 @@ echo "gs1469:        $(git rev-list --count HEAD..gs1469/master) ahead"
 echo "tectiv3:       $(git rev-list --count HEAD..tectiv3/develop) ahead"
 ```
 
-Expected, approximately: 130 / 77 / 100. Materially different numbers mean a fork moved since 2026-08-12 — record the new values in `STREAM.md`.
+Measured 2026-08-12: **textmatelives 130, gs1469 74, tectiv3 231**.
+
+The recon estimates were 130 / 77 / 100. The tectiv3 figure was wrong because it came from `gh pr view --json commits`, and GitHub's API caps a pull request's returned commit list — PR #1467's true branch divergence is 231, not the 100 the API reported. Trust `git rev-list --count` over PR metadata for anything that matters. This makes #1467 the largest of the three forks by commit count, not the middle one.
 
 - [ ] **Step 4: Commit the STREAM entry**
 

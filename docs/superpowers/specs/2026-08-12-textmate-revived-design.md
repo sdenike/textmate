@@ -52,7 +52,7 @@ Three forks exist. They are complementary, not competing.
 
 | | textmatelives/main | #1469 (schriftgestalt) | #1467 (tectiv3) |
 |---|---|---|---|
-| Divergence | 130 ahead / 0 behind, 300 files | 77 commits, 550 files, +19412/−5842 | 100 commits, 599 files, +93590/−12276 |
+| Divergence | 130 ahead, 300 files | 74 ahead, 550 files, +19412/−5842 | **231 ahead**, 599 files, +93590/−12276 |
 | Updated | 2026-06-11 | 2026-08-10 | 2026-07-19 |
 | Mergeable | true fork, same base | `MERGEABLE` / `CLEAN` | `CLEAN`, head `develop` |
 | Min macOS | **26+, Apple Silicon only** | 12+ | 14+, arm64 |
@@ -294,6 +294,30 @@ throwaway install before relying on it.
 **Token collision.** `homebrew/cask` already ships a `textmate` cask (pinned to v2.0.23). Our
 token is `textmate-revived`, so there is no collision; if one ever arises, the fully-qualified
 `sdenike/tap/textmate-revived` resolves it.
+
+## Local deployment
+
+Any build meant to be exercised installs to `/Applications`, **replacing the previous build in
+place**, so exactly one copy ever exists on the machine. No versioned filenames, no
+`TextMate Revived 2.app`, no stale bundles accumulating in Downloads.
+
+`bin/deploy-local` performs: build → remove the previous bundle at the target path → copy the
+new bundle → report the installed version.
+
+**Safety constraint — the script must verify bundle identity before deleting anything.**
+TextMate Revived is designed to coexist with the official TextMate, which means both live in
+`/Applications` at similar paths. A script that deletes by path alone is one typo or one
+product-name change away from destroying the user's real TextMate install, which is not
+recoverable from our side.
+
+The rule: read `CFBundleIdentifier` from the bundle at the target path and refuse to delete it
+unless it matches `com.shelbydenike.TextMate`. If the path exists but the identifier does not
+match, abort with an error rather than overwriting. A missing bundle is a clean install and
+proceeds normally.
+
+Applies from **Phase 2** onward — the first phase that produces an Xcode build. Phases 0 and 1
+have nothing to install. Phase 2's gate gains: "`bin/deploy-local` installs to `/Applications`,
+replaces a prior build, and refuses to touch a bundle with a foreign identifier."
 
 ## Secrets and repository hygiene
 
