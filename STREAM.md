@@ -4,6 +4,71 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Task 4 (benchmark harness and baseline) complete
+
+**What:** Added `bin/bench/measure.sh` (measures one `.app`: on-disk size, `lipo`
+archs, rpath/loader_path dylib count on the main executable, and — only if
+Gatekeeper accepts the bundle — launch-to-responsive time and RSS via a
+bounded `osascript` Apple Event poll) and `bin/bench/baseline.sh` (downloads
+`v2.0.23` from `textmate/textmate` and `v2.1.4-undead` from
+`textmatelives/textmate`, extracts whichever of `.tbz`/`.zip`/`.dmg` was
+published, measures both). Ran it and recorded the result in
+`docs/benchmarks/2026-08-12-baseline.md`: official 38496 KB / x86_64+arm64 /
+0 rpath dylibs / 699ms / 130MB RSS; undead 27928 KB / arm64 / 0 rpath dylibs
+/ 661ms / 141MB RSS. Both releases turned out to be Developer ID-signed and
+notarized, so both were actually launched (per `spctl --assess`) rather than
+static-only — full assessment output is in the task-4 report under
+`.superpowers/sdd/2026-08-12-phase-0-baseline-and-hygiene/`.
+
+Corrected several bugs found by actually running the draft scripts, not just
+reading them: (1) `osascript` blocks indefinitely rather than failing fast
+when Automation/TCC permission is unavailable non-interactively — added a
+per-call watchdog (kill the actual `osascript` pid after a few seconds),
+written to stay `set -e`-safe (`wait $pid || rc=$?`, not a bare `wait`
+that would abort the script before its exit code is captured); (2) `ps -o
+rss= -p ''` on an empty pid prints uninitialized memory as its error text,
+which isn't valid UTF-8 and crashed Python's `text=True` decode — guarded
+so an unfound process reports `n/a` instead of crashing; (3) macOS's own
+default `$TMPDIR` ends in a trailing slash, so `baseline.sh`'s original
+`"${TMPDIR:-/tmp}/tmr-baseline"` produced a doubled slash that `pgrep -f`
+(matching that path as a literal substring) could never match against the
+kernel-normalized single-slash path in a real process's command line —
+every default-environment run would have silently lost RSS; fixed by
+stripping the trailing slash before joining; (4) a single timed launch
+right after fresh extraction measures Gatekeeper's first-run verification
+plus a cold page cache, not steady state — added a discarded warm-up
+launch+quit before the timed one so the required "second launch onward"
+methodology is actually true of the recorded numbers, not just asserted in
+prose. Also found and documented, without silently fixing or hiding it: the
+rpath-dylib-count metric reads 0 for both builds because neither shipped
+bundle contains any `.framework`/`.dylib` at all — this repo's ~45
+`Frameworks/` modules are already fully statically linked into each
+executable, so Phase 7's "measurable improvement on rpath dylib count"
+claim doesn't have a nonzero baseline to move against as currently scoped.
+
+**Why:** the project's entire "faster and smaller" claim is unverifiable
+without an honest, reproducible baseline that Phase 3 and Phase 7 get
+judged against — a script that silently degrades (crashes, hangs, or
+measures the wrong thing without saying so) would make later phases compare
+against noise instead of fact. Fixing bugs found by execution rather than
+inspection, and reporting the ones that reshape what a later phase can
+claim (the rpath-dylib finding) rather than smoothing them over, is the
+actual point of this task.
+
+### If interrupted here
+
+Task 4 committed, nothing left in progress. Both downloaded `.app` bundles
+and all extraction happened under the session scratch directory only —
+nothing was installed to `/Applications`, no Gatekeeper bypass was used, and
+both launched apps were quit and confirmed not running before the commit.
+Next: Task 5 (2021-tree compile check) per
+`docs/superpowers/plans/2026-08-12-phase-0-baseline-and-hygiene.md` — note
+this baseline was taken against *released* binaries specifically because
+Task 5 had not yet determined whether the 2021 source tree still compiles
+under current clang.
+
+---
+
 ## 2026-08-12 — Task 3 (upstream fork remotes verified) complete
 
 **What:** Added four remotes (`upstream` → textmate/textmate, `textmatelives`, `gs1469` →
