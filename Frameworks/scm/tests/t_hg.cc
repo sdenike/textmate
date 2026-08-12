@@ -19,7 +19,7 @@ void test_basic_status ()
 
 	if(auto info = scm::info(jail.path()))
 	{
-		wait_for_status(info);
+		OAK_MASSERT("timed out waiting for hg scm callback", scm::wait_for_status(info));
 
 		auto vars = info->scm_variables();
 		OAK_ASSERT_EQ(vars["TM_SCM_NAME"],   "hg");

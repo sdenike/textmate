@@ -3,7 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>${TARGET_NAME}</string>
+	<string>TextMate Revived</string>
+	<key>CFBundleDisplayName</key>
+	<string>TextMate Revived</string>
 	<key>CFBundleShortVersionString</key>
 	<string>${APP_VERSION}</string>
 	<key>CFBundleVersion</key>
@@ -18,14 +20,18 @@
 	<string>${TARGET_NAME} Help</string>
 	<key>CFBundleHelpBookName</key>
 	<string>${TARGET_NAME} 2 Help</string>
-	<key>CFBundleIconFile</key>
-	<string>TextMate</string>
+	<key>CFBundleIconName</key>
+	<string>textmate_lives</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleSignature</key>
 	<string>avin</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>MacOSX</string>
+	</array>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>

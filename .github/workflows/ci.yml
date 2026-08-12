@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Delegates to the reusable workflow, which runs `build` and `test` as two
+  # independent jobs. Both must pass for a PR to be viable. The check contexts
+  # GitHub reports are `build-and-test / build` and `build-and-test / test`
+  # (i.e. <this-job-id> / <reusable-job-id>) — required-status-check names on
+  # `main` must be updated to match (the old single `build-test` context is no
+  # longer produced).
+  build-and-test:
+    if: github.repository == 'sdenike/textmate'
+    uses: ./.github/workflows/build-and-test.yml

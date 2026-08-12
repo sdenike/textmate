@@ -32,6 +32,8 @@
 #import <layout/layout.h>
 #import <ns/ns.h>
 #import <ns/spellcheck.h>
+#import <scm/scm.h>
+#import <scm/gutter_diff.h>
 #import <text/case.h>
 #import <text/classification.h>
 #import <text/format.h>
@@ -998,8 +1000,50 @@ static std::string shell_quote (std::vector<std::string> paths)
 
 - (void)runDidChangeSCMStatusCallbacks:(id)sender
 {
+	[self updateScmDiffGutter];
+
 	for(auto const& item : bundles::query(bundles::kFieldSemanticClass, "callback.document.did-change-scm-status", [self scopeContext], bundles::kItemTypeMost, oak::uuid_t(), false))
 		[self performBundleItem:item];
+}
+
+- (void)updateScmDiffGutter
+{
+	NSString* path = self.document.path;
+	if(!path.length)
+		return;
+
+	std::string const repoRoot = scm::root_for_path(to_s(path));
+	if(repoRoot == NULL_STR)
+		return;
+
+	std::string const relPath = path::relative_to(to_s(path), repoRoot);
+	if(relPath.empty())
+		return;
+
+	std::string buffer = to_s(self.document.content);
+
+	// Capture the document explicitly. Self-reference would keep the
+	// view alive past close; OakDocument is fine to keep around for
+	// the duration of one async diff.
+	OakDocument* doc = self.document;
+
+	scm::gutter_diff::compute(repoRoot, relPath, std::move(buffer), ^(scm::gutter_diff::result_t result){
+		[doc removeAllMarksOfType:@"diff.added"];
+		[doc removeAllMarksOfType:@"diff.modified"];
+
+		for(auto const& [line, c] : result)
+		{
+			NSString* type = nil;
+			switch(c)
+			{
+				case scm::gutter_diff::change::added:    type = @"diff.added";    break;
+				case scm::gutter_diff::change::modified: type = @"diff.modified"; break;
+				case scm::gutter_diff::change::deleted:  break; // no template asset yet
+			}
+			if(type)
+				[doc setMarkOfType:type atPosition:text::pos_t(line - 1, 0) content:nil];
+		}
+	});
 }
 
 - (void)setNilValueForKey:(NSString*)key
@@ -1026,6 +1070,8 @@ static std::string shell_quote (std::vector<std::string> paths)
 
 - (void)documentDidSave:(NSNotification*)aNotification
 {
+	[self updateScmDiffGutter];
+
 	for(auto const& item : bundles::query(bundles::kFieldSemanticClass, "callback.document.did-save", [self scopeContext], bundles::kItemTypeMost, oak::uuid_t(), false))
 		[self performBundleItem:item];
 }

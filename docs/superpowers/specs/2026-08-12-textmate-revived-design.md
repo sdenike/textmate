@@ -330,20 +330,25 @@ replaces a prior build, and refuses to touch a bundle with a foreign identifier.
 
 ## Changelog and About window
 
-The pipeline already exists upstream and is reused rather than rebuilt:
-`Applications/TextMate/about/Changes.md` is read as `TEXTMATE_CHANGES`
-(`Applications/TextMate/default.rave:7`), `APP_VERSION` is derived from it
-(`default.rave:20`), and it renders in the About window's **Changes** pane. `bin/extract_changes`
-and `bin/update_changes` are the existing helpers.
+The pipeline already exists and is reused rather than rebuilt. **Corrected after the Phase 1
+merge:** textmatelives moved the source file, so this no longer reads
+`Applications/TextMate/about/Changes.md` as originally written here. The build now reads the
+repo-root **`CHANGELOG.md`** as `TEXTMATE_CHANGES` (`Applications/TextMate/default.rave:7`),
+parses `APP_VERSION` out of its first `## <date> (vX.Y.Z)` heading (`default.rave:8`), and
+renders it in the About window's **Changes** pane.
 
 **Rules:**
 
 - **Every build that produces a release updates the changelog.** No release ships without an
   entry naming what changed.
-- **`about/Changes.md` is the single source of truth.** The build already derives the app version
-  from it, so it cannot drift without breaking the build — that makes it the right authority.
-  The repo-root `CHANGELOG.md` is *generated* from it, never hand-edited in parallel. Two
-  hand-maintained changelogs always diverge, and the one users see would be the one that rots.
+- **Root `CHANGELOG.md` is the single source of truth**, and there is only one changelog. The
+  build derives the app version from its first `## … (v…)` heading, so it cannot drift without
+  breaking the build — that is what makes it authoritative rather than decorative. Do not
+  reintroduce a second changelog under `Applications/`; two hand-maintained copies always
+  diverge, and the one that rots would be the one users see in About.
+- **The version heading format is load-bearing**: `## YYYY-MM-DD (vX.Y.Z)`. `grep -om1` takes
+  the *first* match, so the newest entry goes at the top. A malformed heading yields an empty
+  version rather than a build error.
 - The About window must show **TextMate Revived** and our version. Today it reads
   "TextMate version 2.1.4-undead" because the installed build is textmatelives' fork; that
   string comes from `CFBundleName` plus the `Changes.md`-derived version, both of which Phase 4

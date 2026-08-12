@@ -1,0 +1,99 @@
+#!/bin/bash
+# Install the locally built TextMate into /Applications, replacing the previous
+# build in place so exactly one copy ever exists on the machine.
+#
+# SAFETY: this script refuses to delete a bundle whose CFBundleIdentifier does
+# not match the one we just built. TextMate Revived is designed to coexist with
+# other TextMate installs, so a delete-by-path would be one product-name change
+# away from destroying a working install the user did not ask us to touch. The
+# identifier is read from the freshly built app rather than hardcoded, so this
+# check keeps working across the Phase 4 rename without editing this file.
+set -euo pipefail
+
+DEST_DIR="/Applications"
+
+usage() {
+	cat >&2 <<'EOF'
+usage: bin/deploy-local [path/to/TextMate.app]
+
+With no argument, searches the configured build directory for the newest
+TextMate.app. Set $builddir to override where that search happens.
+EOF
+	exit 2
+}
+
+[ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ] && usage
+
+bundle_id() {
+	/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist" 2>/dev/null
+}
+
+bundle_version() {
+	/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$1/Contents/Info.plist" 2>/dev/null \
+		|| echo "unknown"
+}
+
+# ---- locate the built app -------------------------------------------------
+if [ $# -ge 1 ]; then
+	SRC="$1"
+else
+	SEARCH="${builddir:-$HOME/build}"
+	SRC=$(find "$SEARCH" -maxdepth 6 -name 'TextMate.app' -type d -print0 2>/dev/null \
+		| xargs -0 -r ls -dt 2>/dev/null | head -1 || true)
+fi
+
+if [ -z "${SRC:-}" ] || [ ! -d "$SRC" ]; then
+	echo "deploy-local: no built TextMate.app found. Build first, or pass the path." >&2
+	exit 1
+fi
+
+SRC_ID=$(bundle_id "$SRC")
+if [ -z "$SRC_ID" ]; then
+	echo "deploy-local: $SRC has no CFBundleIdentifier -- refusing to deploy an unidentifiable bundle." >&2
+	exit 1
+fi
+
+DEST="$DEST_DIR/$(basename "$SRC")"
+
+echo "deploy-local: source $SRC"
+echo "deploy-local:   id $SRC_ID  version $(bundle_version "$SRC")"
+
+# ---- guard the destination ------------------------------------------------
+if [ -d "$DEST" ]; then
+	DEST_ID=$(bundle_id "$DEST")
+	echo "deploy-local: target $DEST"
+	echo "deploy-local:   id ${DEST_ID:-<none>}  version $(bundle_version "$DEST")"
+
+	if [ "$DEST_ID" != "$SRC_ID" ]; then
+		cat >&2 <<EOF
+
+deploy-local: REFUSING TO REPLACE.
+
+  $DEST
+  has CFBundleIdentifier '${DEST_ID:-<none>}', but the build we are installing
+  is '$SRC_ID'. That is a different application, not a previous build of this
+  one. Deleting it would destroy an install this script has no business
+  touching.
+
+  If replacing it really is what you want, move it aside yourself first.
+EOF
+		exit 1
+	fi
+
+	# Quitting only the app we are about to replace, addressed by the id we
+	# just verified matches.
+	osascript -e "tell application id \"$DEST_ID\" to quit" >/dev/null 2>&1 || true
+	for _ in $(seq 1 50); do
+		pgrep -f "$DEST/Contents/MacOS/" >/dev/null 2>&1 || break
+		sleep 0.1
+	done
+
+	echo "deploy-local: removing previous build"
+	rm -rf "$DEST"
+fi
+
+# ---- install --------------------------------------------------------------
+echo "deploy-local: installing to $DEST"
+cp -R "$SRC" "$DEST"
+
+echo "deploy-local: installed $(bundle_id "$DEST") $(bundle_version "$DEST") at $DEST"

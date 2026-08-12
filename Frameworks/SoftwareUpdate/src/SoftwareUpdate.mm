@@ -5,6 +5,7 @@
 #import <OakAppKit/OakSound.h>
 #import <OakAppKit/OakTransitionViewController.h>
 #import <OakAppKit/OakUIConstructionFunctions.h>
+#import <Security/Security.h>
 
 NSString* const kUserDefaultsLastSoftwareUpdateCheckKey                        = @"SoftwareUpdateLastPoll";
 NSString* const kUserDefaultsSoftwareUpdateSuspendUntilKey                     = @"SoftwareUpdateSuspendUntil";
@@ -16,6 +17,232 @@ NSString* const kUserDefaultsSoftwareUpdateDisableReadOnlyFileSystemWarningKey =
 NSString* const kSoftwareUpdateChannelRelease                                  = @"release";
 NSString* const kSoftwareUpdateChannelPrerelease                               = @"beta";
 NSString* const kSoftwareUpdateChannelCanary                                   = @"nightly";
+
+static BOOL is_hex (char ch)
+{
+	return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
+}
+
+// Parses a git-upload-pack ref advertisement into a refname → SHA map.
+// Returns nil when the data is not valid pkt-line format.
+static NSDictionary<NSString*, NSString*>* OakRefsInUploadPackAdvertisement (NSData* data)
+{
+	if(!data.length)
+		return nil;
+
+	NSMutableDictionary<NSString*, NSString*>* shaForName = [NSMutableDictionary dictionary];
+
+	char const* bytes = (char const*)data.bytes;
+	NSUInteger size = data.length;
+	for(NSUInteger offset = 0; offset + 4 <= size; )
+	{
+		NSUInteger pktLength = 0;
+		for(NSUInteger i = 0; i < 4; ++i)
+		{
+			char ch = bytes[offset + i];
+			if(!is_hex(ch))
+				return nil;
+			pktLength = (pktLength << 4) | (NSUInteger)(ch <= '9' ? ch - '0' : (ch | 0x20) - 'a' + 10);
+		}
+
+		if(pktLength == 0) // flush packet
+		{
+			offset += 4;
+			continue;
+		}
+
+		if(pktLength < 4 || offset + pktLength > size)
+			return nil;
+
+		// Payload is “<40-hex-sha> <refname>[\0capabilities]\n”; the leading
+		// “# service=…” pkt and anything else non-conforming is skipped.
+		char const* payload = bytes + offset + 4;
+		NSUInteger payloadLength = pktLength - 4;
+		offset += pktLength;
+
+		if(payloadLength < 42 || payload[40] != ' ')
+			continue;
+
+		BOOL shaValid = YES;
+		for(NSUInteger i = 0; i < 40 && shaValid; ++i)
+			shaValid = is_hex(payload[i]);
+		if(!shaValid)
+			continue;
+
+		NSUInteger nameEnd = 41;
+		while(nameEnd < payloadLength && payload[nameEnd] != '\0' && payload[nameEnd] != '\n')
+			++nameEnd;
+		if(nameEnd == 41)
+			continue;
+
+		NSString* sha  = [[NSString alloc] initWithBytes:payload length:40 encoding:NSASCIIStringEncoding];
+		NSString* name = [[NSString alloc] initWithBytes:payload + 41 length:nameEnd - 41 encoding:NSUTF8StringEncoding];
+		if(name)
+			shaForName[name] = sha;
+	}
+
+	return shaForName;
+}
+
+NSString* OakSHAForRefInUploadPackAdvertisement (NSData* data, NSString* ref)
+{
+	if(!ref.length)
+		return nil;
+
+	NSDictionary<NSString*, NSString*>* shaForName = OakRefsInUploadPackAdvertisement(data);
+
+	NSArray<NSString*>* candidates;
+	if([ref isEqualToString:@"HEAD"])
+		candidates = @[ @"HEAD" ];
+	else if([ref hasPrefix:@"refs/"])
+		candidates = @[ [ref stringByAppendingString:@"^{}"], ref ];
+	else
+		candidates = @[ [@"refs/heads/" stringByAppendingString:ref], [NSString stringWithFormat:@"refs/tags/%@^{}", ref], [@"refs/tags/" stringByAppendingString:ref] ];
+
+	for(NSString* candidate in candidates)
+	{
+		if(NSString* sha = shaForName[candidate])
+			return sha;
+	}
+	return nil;
+}
+
+NSString* OakLatestVersionInUploadPackAdvertisement (NSData* data, BOOL includePrereleases)
+{
+	NSString* best = nil;
+	for(NSString* name in OakRefsInUploadPackAdvertisement(data))
+	{
+		if(![name hasPrefix:@"refs/tags/v"])
+			continue;
+
+		NSString* tag = [name substringFromIndex:[@"refs/tags/v" length]];
+		if([tag hasSuffix:@"^{}"]) // peeled duplicate of an annotated tag
+			tag = [tag substringToIndex:tag.length - 3];
+
+		if(!tag.length || !isdigit([tag characterAtIndex:0])) // v2.1.0 yes, vendor-drop no
+			continue;
+		if(!includePrereleases && [tag containsString:@"-beta"]) // release.yml’s prerelease marker
+			continue;
+
+		if(!best || OakCompareVersionStrings(best, tag) == NSOrderedAscending)
+			best = tag;
+	}
+	return best;
+}
+
+NSURL* OakUpdateAssetURLForVersion (NSString* version, NSURL* advertisementURL)
+{
+	if(!version.length)
+		return nil;
+
+	// Expect /{owner}/{repo}.git/info/refs
+	NSArray<NSString*>* parts = advertisementURL.path.pathComponents;
+	if(parts.count != 5 || ![parts[1] length] || ![parts[2] hasSuffix:@".git"] || [parts[2] length] < 5 || ![parts[3] isEqualToString:@"info"] || ![parts[4] isEqualToString:@"refs"])
+		return nil;
+
+	NSString* repo = [parts[2] substringToIndex:[parts[2] length] - 4];
+	return [NSURL URLWithString:[NSString stringWithFormat:@"https://%@/%@/%@/releases/download/v%@/TextMate-%@.tbz", advertisementURL.host, parts[1], repo, version, version]];
+}
+
+// Case-insensitive header lookup (HTTP/2 lowercases header names; the
+// 10.15-only -valueForHTTPHeaderField: is below this framework's floor).
+static NSString* OakHTTPHeaderValue (NSHTTPURLResponse* response, NSString* field)
+{
+	for(NSString* key in response.allHeaderFields)
+	{
+		if([key caseInsensitiveCompare:field] == NSOrderedSame)
+		{
+			NSString* value = response.allHeaderFields[key];
+			return [value isKindOfClass:NSString.class] ? value : nil;
+		}
+	}
+	return nil;
+}
+
+NSError* OakGitHubResponseError (NSURLResponse* response, id body)
+{
+	if(![response isKindOfClass:NSHTTPURLResponse.class])
+		return nil;
+
+	NSHTTPURLResponse* http = (NSHTTPURLResponse*)response;
+	if(http.statusCode / 100 == 2)
+		return nil;
+
+	NSString* message;
+	if([OakHTTPHeaderValue(http, @"x-ratelimit-remaining") isEqualToString:@"0"])
+	{
+		// The unauthenticated api.github.com quota (60 requests/hour per IP,
+		// shared with everything else on the network) is exhausted — the
+		// common cause of failed checks (issue #26). GitHub's own body
+		// message is poor dialog copy, so say what happened and when the
+		// quota resets.
+		message = @"GitHub API rate limit reached for this network.";
+		if(NSTimeInterval reset = OakHTTPHeaderValue(http, @"x-ratelimit-reset").doubleValue)
+		{
+			NSDateFormatter* formatter = [NSDateFormatter new];
+			formatter.dateStyle = NSDateFormatterNoStyle;
+			formatter.timeStyle = NSDateFormatterShortStyle;
+			message = [message stringByAppendingFormat:@" Try again after %@.", [formatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:reset]]];
+		}
+	}
+	else if([body isKindOfClass:NSDictionary.class] && [body[@"message"] isKindOfClass:NSString.class] && [body[@"message"] length])
+	{
+		message = body[@"message"]; // GitHub error bodies carry a human-readable “message”
+	}
+	else
+	{
+		message = [NSString stringWithFormat:@"HTTP %ld from update server.", (long)http.statusCode];
+	}
+
+	return [NSError errorWithDomain:@"SoftwareUpdate" code:http.statusCode userInfo:@{ NSLocalizedDescriptionKey: message }];
+}
+
+// Team Identifier of the currently running application, or nil if unsigned /
+// ad-hoc signed (e.g. a local development build).
+static NSString* OakRunningApplicationTeamIdentifier ()
+{
+	SecCodeRef selfCode = NULL;
+	if(SecCodeCopySelf(kSecCSDefaultFlags, &selfCode) != errSecSuccess)
+		return nil;
+
+	NSString* teamID = nil;
+	CFDictionaryRef info = NULL;
+	if(SecCodeCopySigningInformation((SecStaticCodeRef)selfCode, kSecCSSigningInformation, &info) == errSecSuccess && info)
+		teamID = [(__bridge NSString*)CFDictionaryGetValue(info, kSecCodeInfoTeamIdentifier) copy];
+
+	if(info)     CFRelease(info);
+	if(selfCode) CFRelease(selfCode);
+	return teamID;
+}
+
+// YES iff the bundle at appURL carries a valid Developer ID Application
+// signature whose Team Identifier equals expectedTeamID. Fails closed when
+// expectedTeamID is empty. Requirement string + flags validated by the
+// 2026-05-26 Option B spike (see PLAN-eliminate-api-textmate-org.md).
+static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
+{
+	if(!expectedTeamID.length)
+		return NO;
+
+	SecStaticCodeRef code = NULL;
+	if(SecStaticCodeCreateWithPath((__bridge CFURLRef)appURL, kSecCSDefaultFlags, &code) != errSecSuccess)
+		return NO;
+
+	NSString* requirement = [NSString stringWithFormat:
+		@"anchor apple generic and "
+		 "certificate 1[field.1.2.840.113635.100.6.2.6] exists and "      // Developer ID intermediate
+		 "certificate leaf[field.1.2.840.113635.100.6.1.13] exists and "  // Developer ID Application leaf
+		 "certificate leaf[subject.OU] = \"%@\"", expectedTeamID];
+
+	SecRequirementRef req = NULL;
+	OSStatus status = SecRequirementCreateWithString((__bridge CFStringRef)requirement, kSecCSDefaultFlags, &req);
+	if(status == errSecSuccess)
+		status = SecStaticCodeCheckValidityWithErrors(code, kSecCSCheckAllArchitectures | kSecCSCheckNestedCode | kSecCSStrictValidate, req, NULL);
+
+	if(req)  CFRelease(req);
+	if(code) CFRelease(code);
+	return status == errSecSuccess;
+}
 
 // ============================
 // = SUDownloadViewController =
@@ -60,8 +287,10 @@ NSString* const kSoftwareUpdateChannelCanary                                   =
 	{
 		_updateCheckInterval = 60*60;
 
-		[NSNotificationCenter.defaultCenter addObserverForName:NSUserDefaultsDidChangeNotification object:NSUserDefaults.standardUserDefaults queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification* notification){
-			self.automaticUpdateCheckEnabled = ![NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsDisableSoftwareUpdateKey];
+		[NSNotificationCenter.defaultCenter addObserverForName:NSUserDefaultsDidChangeNotification object:NSUserDefaults.standardUserDefaults queue:nil usingBlock:^(NSNotification* notification){
+			dispatch_async(dispatch_get_main_queue(), ^{
+				self.automaticUpdateCheckEnabled = ![NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsDisableSoftwareUpdateKey];
+			});
 		}];
 		self.automaticUpdateCheckEnabled = ![NSUserDefaults.standardUserDefaults boolForKey:kUserDefaultsDisableSoftwareUpdateKey];
 	}
@@ -147,28 +376,34 @@ NSString* const kSoftwareUpdateChannelCanary                                   =
 
 			if(!error)
 			{
-				if(NSString* contentType = ((NSHTTPURLResponse*)response).allHeaderFields[@"Content-Type"])
-				{
-					NSDictionary* plist;
-					if([contentType isEqualToString:@"application/json"])
-							plist = [NSJSONSerialization JSONObjectWithData:data options:0 error:nullptr];
-					else	plist = [NSPropertyListSerialization propertyListWithData:data options:NSPropertyListImmutable format:nil error:nil];
+				NSString* contentType = ((NSHTTPURLResponse*)response).allHeaderFields[@"Content-Type"];
 
-					if(plist)
-					{
-						remoteURL     = plist[@"url"] ? [NSURL URLWithString:plist[@"url"]] : nil;
-						remoteVersion = plist[@"version"];
-						if(!remoteURL || !remoteVersion)
-							error = [NSError errorWithDomain:@"SoftwareUpdate" code:0 userInfo:@{ NSLocalizedDescriptionKey: @"Incomplete server response." }];
-					}
-					else
-					{
-						error = [NSError errorWithDomain:@"SoftwareUpdate" code:0 userInfo:@{ NSLocalizedDescriptionKey: @"Malformed server response." }];
-					}
+				// Error bodies (e.g. from a proxy or a metered endpoint) are
+				// JSON; the feed itself is a ref advertisement.
+				id body = nil;
+				if([contentType hasPrefix:@"application/json"])
+					body = [NSJSONSerialization JSONObjectWithData:data options:0 error:nullptr];
+
+				if(NSError* httpError = OakGitHubResponseError(response, body))
+				{
+					error = httpError;
+				}
+				else if([contentType hasPrefix:@"application/x-git-upload-pack-advertisement"])
+				{
+					BOOL includePrereleases = [updateChannel isEqualToString:kSoftwareUpdateChannelPrerelease];
+					remoteVersion = OakLatestVersionInUploadPackAdvertisement(data, includePrereleases);
+					remoteURL     = OakUpdateAssetURLForVersion(remoteVersion, url);
+					if(!remoteURL || !remoteVersion)
+						error = [NSError errorWithDomain:@"SoftwareUpdate" code:0 userInfo:@{ NSLocalizedDescriptionKey: @"No release tags in server response." }];
 				}
 				else
 				{
-					error = [NSError errorWithDomain:@"SoftwareUpdate" code:0 userInfo:@{ NSLocalizedDescriptionKey: @"Missing Content-Type in server response." }];
+					// 200 with the wrong content type — e.g. a captive portal’s
+					// HTML — names itself instead of “Incomplete server response.”
+					// (Message built outside the dictionary literal: a comma there
+					// breaks the enclosing os_activity_initiate macro expansion.)
+					NSString* message = [@"Unexpected response type from update server: " stringByAppendingString:contentType ?: @"none"];
+					error = [NSError errorWithDomain:@"SoftwareUpdate" code:0 userInfo:@{ NSLocalizedDescriptionKey: message }];
 				}
 			}
 
@@ -538,6 +773,20 @@ NSString* const kSoftwareUpdateChannelCanary                                   =
 
 	if([self isInstallableApplicationAtURL:applicationURL])
 	{
+		// Trust gate: the update must carry a valid Developer ID Application
+		// signature whose Team Identifier matches the running app. Distinct from
+		// the integrity (incomplete-download) failure below — a trust failure is
+		// not fixed by redownloading, so we do not offer that here.
+		NSString* expectedTeamID = OakRunningApplicationTeamIdentifier();
+		if(!OakBundleIsSignedByTeam(applicationURL, expectedTeamID))
+		{
+			os_log_error(OS_LOG_DEFAULT, "Software update rejected: %{public}@ is not signed by the expected Developer ID team (%{public}@)", applicationURL.path, expectedTeamID ?: @"<none>");
+			[self presentAlertWithMessage:@"Update Could Not Be Verified" informativeText:@"The downloaded update is not signed by the expected developer, so it will not be installed.\n\nDownload the latest version manually from the project’s Releases page." buttonTitles:@[ @"OK" ] completionHandler:^BOOL(NSModalResponse returnCode){
+				return YES; // close the update window
+			}];
+			return;
+		}
+
 		self.progressViewController.messageTextField.stringValue     = [NSString stringWithFormat:@"Installing %@…", [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleName"]];
 		self.progressViewController.informativeTextField.stringValue = @"";
 		self.progressViewController.progressIndicator.indeterminate  = YES;
