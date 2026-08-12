@@ -1,3 +1,51 @@
+# ---- Build output ----
+build/
 build.ninja
+.ninja_deps
+.ninja_log
+DerivedData/
+*.o
+*.dSYM/
+
+# ---- Machine-local build config ----
 local.rave
+
+# ---- Legacy upstream artifact ----
 Frameworks/license/src/revoked_serials.cc
+
+# ---- Xcode user state ----
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+.swiftpm/
+
+# ---- macOS ----
+.DS_Store
+
+# =====================================================================
+# SIGNING IDENTITIES AND KEYS — NEVER COMMIT
+# This repository is PUBLIC. Anything committed here is world-readable
+# and scraped by automated harvesters within minutes of the push.
+# =====================================================================
+*.p12
+*.pfx
+*.cer
+*.crt
+*.pem
+*.key
+*.keychain
+*.keychain-db
+*.p8
+AuthKey_*.p8
+*.mobileprovision
+*.provisionprofile
+
+# ---- Credentials and environment ----
+.env
+.env.*
+.envrc
+secrets/
+*.secret
+notarize.json
+notarization-credentials.plist

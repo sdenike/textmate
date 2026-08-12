@@ -1,0 +1,27 @@
+#!/bin/sh
+# Blocks commits containing secrets. This repository is PUBLIC.
+# Bypassing this hook with --no-verify is never correct for a real commit.
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "pre-commit: gitleaks not installed. Run: brew install gitleaks" >&2
+    exit 1
+fi
+
+# gitleaks 8.19+ subcommand form. The older 'gitleaks protect --staged'
+# is deprecated. Exit code 1 means leaks were found.
+gitleaks git --pre-commit --staged --redact --verbose .
+status=$?
+
+if [ $status -eq 1 ]; then
+    cat >&2 <<'EOF'
+
+COMMIT BLOCKED: gitleaks detected a secret in your staged changes.
+
+This repository is public. Do not bypass this check.
+If the finding is a false positive, add a narrowly-scoped allowlist
+entry to .gitleaks.toml rather than disabling the hook.
+EOF
+    exit 1
+fi
+
+exit $status

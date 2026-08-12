@@ -4,6 +4,31 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-12 — Task 1 (secret hygiene controls) complete
+
+**What:** Replaced `.gitignore` (previously 3 lines) with a full build-output, Xcode-user-state,
+signing-identity, and credential ignore list. Added `.githooks/pre-commit` (gitleaks-backed,
+blocks any commit with a staged secret) and registered it via `git config core.hooksPath
+.githooks`. Installed gitleaks 8.30.1 via Homebrew. Added `.github/workflows/gitleaks.yml`,
+a CI gate guarded with `if: github.repository == 'sdenike/textmate'` that scans full history on
+PRs and pushes to `master`. Enabled `dependabot_security_updates` on the GitHub repo via `gh api`
+(`secret_scanning` and `secret_scanning_push_protection` were already enabled). Proved the control
+works with a real, throwaway ed25519 key (`ssh-keygen` → `canary.pem`): staged cleanly with no
+hook in place, then blocked with exit status 1 ("COMMIT BLOCKED: gitleaks detected a secret")
+once the hook and gitleaks were installed. Canary destroyed immediately after — no `canary.pem`,
+no `/tmp/canary_key*`, no "test: canary" commit anywhere.
+
+**Why:** This repo is public; anything committed is world-readable within minutes. Phase 5 will
+introduce signing certificates and provisioning profiles — the leak controls must exist and be
+proven working before that code ever lands, not after.
+
+### If interrupted here
+
+Task 1 is fully committed, nothing left in progress. Next: Phase 0 Task 2 (CI repository guard)
+per `docs/superpowers/plans/2026-08-12-phase-0-baseline-and-hygiene.md`.
+
+---
+
 ## 2026-08-12 — Recon complete, plan not yet approved
 
 **What:** Surveyed the forked codebase, enumerated upstream PRs, analyzed two existing
