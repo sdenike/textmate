@@ -4,6 +4,38 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Xcode/scripts/gen_test.sh now collects .mm test sources (CRITICAL, pre-Task-5)
+
+**What:** `gen_test.sh`'s test-source glob only matched `t_*.cc`, silently dropping every `.mm`
+test file. Seven frameworks (`buffer`, `document`, `BundlesManager`, `FileBrowser`, `ns`,
+`encoding`, `SoftwareUpdate`) have `.mm` tests -- their Xcode-generated runners would have compiled
+and reported success while running zero of those tests. The `text` pilot didn't catch this because
+`text` has no `.mm` tests. Fixed to glob both `t_*.cc` and `t_*.mm` under `nullglob` (so a
+framework with only one extension doesn't leave a literal unmatched pattern in the list), then
+merge-sort the combined array under `LC_ALL=C sort`. The plain `t_*.{cc,mm}` brace-expansion form
+globs and sorts each extension separately before concatenating -- that disagrees with
+`build.ninja`'s `GenTest` input order whenever a `.cc` and `.mm` file interleave alphabetically
+(`buffer`'s own `t_buffer.mm` sorts before `t_indexed_map.cc`), so it was rejected in favor of an
+explicit sort matching `bin/rave`'s `test_sources.sort.uniq`, which sorts the combined list by full
+filename regardless of extension. Comment on line 7-8 corrected to name both extensions.
+
+Verified by diffing the exact argv the script now passes to `bin/gen_test` against each framework's
+`GenTest` edge input list extracted straight from `build.ninja`, for both `buffer` and `document`
+(the latter has one `.cc` and one `.mm` test) -- byte-identical, same order, for both. `bash
+tests/rave2yaml_test.sh` still `PASS: 56 targets, all dependencies resolve` (untouched, `.rave`
+files not modified). `xcodebuild -target text ...` still `BUILD SUCCEEDED`; `text_test` still `34
+tests passed`.
+
+**Why:** Task 5 scales `gen_test.sh` to 46 frameworks; shipping this bug would have given seven of
+them a silently-incomplete (but green) test runner -- the dangerous kind of failure, since nothing
+in the build output flags it.
+
+### If interrupted here
+
+Committed (fix + this entry, one `fix:` commit). Nothing else outstanding for this gap. Task 5's
+scale-up can proceed; no other `Xcode/scripts/*.sh` files were audited for the same class of bug --
+worth a quick check if any other wrapper scripts glob framework sources by extension.
+
 ## 2026-08-13 — Phase 2: rave2yaml --emit-yaml now raises on vendor targets
 
 **What:** `bin/rave2yaml --emit-yaml`'s `checked_target` now raises immediately when the
