@@ -478,7 +478,6 @@
 		68C3B187A4CCBEE643C8AC85 /* OakCompareVersionStrings.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5E5C7E544A8FE44788C7984C /* OakCompareVersionStrings.mm */; };
 		6910151F614299B8F3B981DD /* help.mm in Sources */ = {isa = PBXBuildFile; fileRef = 6831EE46183679952D4014F7 /* help.mm */; };
 		69456ED45E10AA368823B352 /* libauthorization.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 4E4B6FE5BB67662C96FC7625 /* libauthorization.a */; };
-		69733F2BF91A4738382166F3 /* _Rplist_ascii.cc in Sources */ = {isa = PBXBuildFile; fileRef = 3970CCB16C355612F77BAFB3 /* _Rplist_ascii.cc */; settings = {COMPILER_FLAGS = "-iquote $(SRCROOT)/Frameworks/plist/src -include $(SRCROOT)/Shared/PCH/prelude.cc"; }; };
 		697AAE230B8F74F484EC4C23 /* AddressBook.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BA7A8BF2335BE20A4C1AA24C /* AddressBook.framework */; };
 		698416DA6F533A49D07D5135 /* OakView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 71782FC01D0ADF53C944CD93 /* OakView.mm */; };
 		698AFEC1F1FBF109C5950FDD /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3624DA120E80CCCD37A5B1A2 /* Cocoa.framework */; };
@@ -654,6 +653,7 @@
 		92F981739A7525B63DC2CE65 /* libOakAppKit.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E61F0D8E2453C9E1C7B3F8C0 /* libOakAppKit.a */; };
 		9310D6E7D73CC3D66F2BBCB0 /* libtext.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A7346ADC7019D50D93E42B15 /* libtext.a */; };
 		9325D43CDC2E7EFA7E5A0DB4 /* _Tauthorization.cc in Sources */ = {isa = PBXBuildFile; fileRef = AA15F862624B3B7A1A7C8CE2 /* _Tauthorization.cc */; };
+		9326C56008C4662B7CEAED8B /* ascii.cc in Sources */ = {isa = PBXBuildFile; fileRef = F9112CB93AEC4E4E3DD722D7 /* ascii.cc */; settings = {COMPILER_FLAGS = "-include $(SRCROOT)/Shared/PCH/prelude.cc"; }; };
 		9337965FA39305B325229602 /* libselection.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 12E2FD75966246A93CC5CC36 /* libselection.a */; };
 		933CC926FE412CA8AC4D896D /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E19F8AC3F6DFA3EF9E573C7B /* Security.framework */; };
 		93534607C3F302D2844118DF /* libOakSystem.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C471B5AD93E7C5234A4F5A43 /* libOakSystem.a */; };
@@ -4923,9 +4923,10 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 7;
+			dstSubfolderSpec = 13;
 			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -4934,10 +4935,9 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstSubfolderSpec = 7;
 			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5052,7 +5052,6 @@
 		38611EF6D6C5A961B61DF175 /* HOWebViewDelegateHelper.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = HOWebViewDelegateHelper.mm; sourceTree = "<group>"; };
 		389542EABA577E91DD513A0F /* OakScopeBarView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OakScopeBarView.mm; sourceTree = "<group>"; };
 		392E5CDD97EE74B5D3DD8EEB /* events.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = events.cc; sourceTree = "<group>"; };
-		3970CCB16C355612F77BAFB3 /* _Rplist_ascii.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _Rplist_ascii.cc; sourceTree = "<group>"; };
 		3A18F80F97663E9B1B8E5B9C /* prototype.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = prototype.mm; sourceTree = "<group>"; };
 		3BA4761036D95891B2F06815 /* SymbolChooser.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SymbolChooser.mm; sourceTree = "<group>"; };
 		3BCB3CCDC68654F5D929D1FF /* OakDocumentView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OakDocumentView.mm; sourceTree = "<group>"; };
@@ -5414,6 +5413,7 @@
 		F77DF7DE67E035700651051E /* TextMate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TextMate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F81B4B589B102F75B74D1BE2 /* libTMFileReference.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libTMFileReference.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		F8FA8B4FA640FBDC54358CE3 /* _Tdocument.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = _Tdocument.mm; sourceTree = "<group>"; };
+		F9112CB93AEC4E4E3DD722D7 /* ascii.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ascii.cc; sourceTree = "<group>"; };
 		F914C0E01E8DFF737EF583E0 /* render.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = render.cc; sourceTree = "<group>"; };
 		F92AEF987A5958212D969D8E /* CommitWindow.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CommitWindow.mm; sourceTree = "<group>"; };
 		FB62D9EC6A26A709AFD1F36A /* libregexp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libregexp.a; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -7503,7 +7503,6 @@
 		BFB5120026D1C51CC5A10858 /* $(DERIVED_FILE_DIR) */ = {
 			isa = PBXGroup;
 			children = (
-				3970CCB16C355612F77BAFB3 /* _Rplist_ascii.cc */,
 				AA15F862624B3B7A1A7C8CE2 /* _Tauthorization.cc */,
 				311ADED93CF4A033D1621C27 /* _Tbuffer.mm */,
 				A9ED392DD74738E5A8F47F5D /* _Tbundles.cc */,
@@ -7779,6 +7778,7 @@
 		E25559E7EE575A732A5085A8 /* src */ = {
 			isa = PBXGroup;
 			children = (
+				F9112CB93AEC4E4E3DD722D7 /* ascii.cc */,
 				C6F3E319310D88CBC42F2DF4 /* date.cc */,
 				E5A39B03E6FA8CAFD6AA6086 /* delta.cc */,
 				E28B0D1D6D8887B45960BC6A /* fs_cache.mm */,
@@ -9020,7 +9020,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 42A3AD6B1A78C6703BDFCA3C /* Build configuration list for PBXNativeTarget "plist" */;
 			buildPhases = (
-				930676759A47B83A5BF78F19 /* Run ragel (plist) */,
 				0BF2BB74E12A9C0F5CEFBB80 /* Sources */,
 			);
 			buildRules = (
@@ -10745,25 +10744,6 @@
 			shellPath = /bin/sh;
 			shellScript = "\"$SRCROOT/Xcode/scripts/gen_test.sh\" Onigmo";
 		};
-		930676759A47B83A5BF78F19 /* Run ragel (plist) */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Run ragel (plist)";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(DERIVED_FILE_DIR)/_Rplist_ascii.cc",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"$SRCROOT/Xcode/scripts/gen_ragel.sh\" plist";
-		};
 		9ABFE6D8CEACBF99C8F4E037 /* Generate CxxTest runner (selection) */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -11079,7 +11059,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				69733F2BF91A4738382166F3 /* _Rplist_ascii.cc in Sources */,
+				9326C56008C4662B7CEAED8B /* ascii.cc in Sources */,
 				AAF821698A74DD063BE54FBE /* date.cc in Sources */,
 				7FD48C58531BE6B4A42A6110 /* delta.cc in Sources */,
 				D2AAAE5FD1B6B9B7E57F1669 /* fs_cache.mm in Sources */,

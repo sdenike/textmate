@@ -266,15 +266,8 @@ targets:
         compilerFlags: "-include $(SRCROOT)/Shared/PCH/prelude.cc"
       - path: "Frameworks/plist/src/fs_cache.mm"
         compilerFlags: "-include $(SRCROOT)/Shared/PCH/prelude.mm"
-      - path: "$(DERIVED_FILE_DIR)/_Rplist_ascii.cc"
-        optional: true
-        buildPhase: sources
-        compilerFlags: "-iquote $(SRCROOT)/Frameworks/plist/src -include $(SRCROOT)/Shared/PCH/prelude.cc"
-    preBuildScripts:
-      - script: "\"$SRCROOT/Xcode/scripts/gen_ragel.sh\" plist"
-        name: "Run ragel (plist)"
-        outputFiles:
-          - "$(DERIVED_FILE_DIR)/_Rplist_ascii.cc"
+      - path: "Frameworks/plist/src/ascii.cc"
+        compilerFlags: "-include $(SRCROOT)/Shared/PCH/prelude.cc"
     settings:
       base:
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash"

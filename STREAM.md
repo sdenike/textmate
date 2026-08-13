@@ -4,6 +4,68 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 3 Task 2: ragel removed, ASCII plist parser hand-written
+
+**What:** `Frameworks/plist/src/ascii.rl` (191 lines) → `ascii.cc`. Chose option (b), porting
+tectiv3's hand-written parser (`34e166b9`), not (a) committing generated output. Reasoning: the
+actual ragel usage was two small sub-machines — a string tokenizer and a comment/whitespace
+skipper — not a large grammar; the array/dict/int/bool/date logic around them was already
+hand-written C++, untouched by ragel. A hand-written replacement stays reviewable; a committed
+`.cc` from `ragel -o` is an opaque state table forever. Ported by hand rather than copying
+tectiv3's file wholesale: their `ascii.cc` predates this fork's Task 1 (`boost::get` →
+`plist::get`/`plist::convert`), so a literal copy would have reintroduced `boost::get` in
+`parse_key`. Only `parse_ws` and `parse_string` changed; everything else in the file is
+untouched.
+
+`project.yml`'s `plist` target loses the `preBuildScripts` ragel phase and the
+`$(DERIVED_FILE_DIR)/_Rplist_ascii.cc` optional source, gaining a plain `ascii.cc` entry.
+`Xcode/scripts/gen_ragel.sh` deleted (only caller was that phase). `TextMate.xcodeproj`
+regenerated via `xcodegen generate --spec project.yml`.
+
+**Verification, in order of rigor:**
+1. Generated the *actual* ragel output from the current `ascii.rl` (ragel still installed,
+   pre-removal) and diffed a standalone extraction of its `parse_ws`/`parse_string` state
+   machine against the hand-written port across 19 cases: quoting, `\\`/`\"` escapes, escapes
+   TextMate relies on staying literal (`\d`, `\s\t` — regex fragments in grammars/themes must
+   not be unescaped), unterminated strings/comments, bare words, comments. One real divergence
+   found and fixed before porting: an unterminated `/* comment` at EOF left one trailing byte
+   unconsumed in tectiv3's version; ragel consumes to EOF. Fixed with `p = pe` in the fallback
+   branch; re-verified byte-for-byte identical on every case afterward.
+2. `plist/test` (33 tests, the exact count `docs/benchmarks/2026-08-12-ninja-parity.md` and
+   Task 1 both record) passes unchanged — this suite already covers exactly the escape/comment
+   edge cases from step 1.
+3. Real-world round-trip: built a standalone driver linking the actual `libplist.a`/`libtext.a`/
+   etc., loading real XML bundle files via the unmodified `plist::load`, serializing to
+   TextMate's ASCII plist text via the unmodified `to_s()`, then parsing that text back via
+   `parse_ascii` and re-serializing. Ran across 10 real files — 3 themes (Twilight, macOS
+   System Theme, Undead), 5 bundles' `info.plist`, the `Plain text.plist` grammar, and a
+   `.tmPreferences` file with regex scope selectors — against both a build linking the new
+   hand-written `parse_ascii` and one linking the actual ragel-generated object file recompiled
+   from git HEAD's `ascii.rl`. Every file's re-parsed output was byte-identical between old and
+   new parser.
+4. All 26 test targets run individually and compared against
+   `docs/benchmarks/2026-08-12-ninja-parity.md`: 21 pass with exact test counts matching Task
+   1's own more recent tally (authorization 1, bundles 5, BundlesManager 10, document 9,
+   encoding 6, FileBrowser 1, HTMLOutput 1, io 24, network 1, ns 6, parse 4, plist 33, regexp
+   41, scope 13, selection 24, settings 9, SoftwareUpdate 20, text 34, theme 1, layout 9,
+   command 4, editor 9); `scm` fails 2/84 (hg/svn not on this machine, documented), `buffer`
+   fails 3/26 (headless `NSSpellChecker`, documented), `cf` crashes SIGBUS/exit 138
+   (documented), `file` fails 1/11 (iconv TRANSLIT, documented). **26/26 match, zero deltas.**
+   `./bin/build TextMate` succeeds; `CFBundleIdentifier`/`CFBundleName` unchanged.
+
+**Why:** Phase 3 targets zero Homebrew dependencies to build. Three of four are now gone
+(boost, sparsehash, ragel); only `multimarkdown`'s removal was already done pre-Phase-3.
+
+### If interrupted here
+
+Core parser change committed. Still pending for Task 2: `git ls-files '*.rl'` confirmed empty;
+CI's three `brew install` lines still need `ragel` trimmed (`build-and-test.yml` ×2,
+`release.yml` ×1 — the latter installed only ragel, so that whole step should be deleted, not
+edited to install nothing); CLAUDE.md/README.md still describe ragel as a dependency; version
+needs bumping to v3.0.0-revived.7 in `CHANGELOG.md`; then rebuild, `bin/deploy-local`, verify,
+final `release:` commit. After that: Task 3 (replace `network` with `URLSession`, KEEPING the
+updater) and Task 4 (`crash`/`CrashReporter`).
+
 ## 2026-08-13 — Phase 3 Task 1: boost and sparsehash removed
 
 **What:** `boost::variant` → `std::variant` (153 call sites), `boost::crc_32_type` → zlib
