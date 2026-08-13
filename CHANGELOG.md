@@ -2,6 +2,29 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.5)
+
+**The Xcode migration is complete.** TextMate now builds with Xcode and nothing
+else — the 2012-era `configure` + `ninja` build has been removed.
+
+### Build
+
+* Open `TextMate.xcodeproj` and press ⌘B, or run
+  `xcodebuild -scheme TextMate -configuration Release build`.
+* `configure`, `bin/rave`, and all 60 `.rave` build files are gone.
+* Continuous integration builds and tests with `xcodebuild`.
+* Apple Silicon only — verified no Intel slices remain outside vendored code.
+
+This was gated on proving the new build produces the same 41 artifacts and
+passes the same 26 test suites as the old one, so nothing was lost in the move.
+
+### Fixed
+
+* A missing entitlements file meant a fresh clone could not build.
+* Test parallelism now matches the old build exactly: the seven suites that
+  call Cocoa APIs run serially, the rest run in parallel. Forcing serial
+  execution everywhere broke a timing-sensitive settings test.
+
 ## 2026-08-13 (v3.0.0-revived.4)
 
 Build parity proven. The Xcode build now produces the same artifacts and passes
