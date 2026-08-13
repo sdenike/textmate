@@ -4,6 +4,110 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 2 Task 5 (2/2): build-recipe fixes found by actually building all 46+3, full project.yml
+
+**What:** With `bin/rave2yaml` translating every gap (previous entry), generated
+`project.yml` for all 46 frameworks + 3 vendor targets (`--emit-yaml <all 46 names> kvdb Onigmo
+xdiff`) and ran `xcodebuild -alltargets -configuration Release build CODE_SIGNING_ALLOWED=NO` to
+completion. First attempt failed immediately (vendor gap not yet closed at that point); after the
+gaps landed, four more real, distinct build failures surfaced, fixed one at a time as instructed,
+each traced to its actual cause rather than guessed at:
+
+1. **`CLANG_ENABLE_MODULES` defaults YES** (XcodeGen's own `base.yml` preset) but rave never passes
+   `-fmodules` anywhere. With modules on, `vendor/xdiff/src/xpatience.c` pulled in the `Darwin`
+   module (via the prelude header's system includes), whose own `search.h` declares an unrelated
+   `struct entry` (POSIX hsearch) colliding with xpatience.c's same-named local struct --
+   "incompatible definitions in different translation units". Fixed with `CLANG_ENABLE_MODULES = NO`
+   in Base.xcconfig, project-wide (any target could hit the same class of collision).
+2. **Xcode's automatic public-header install collided with a real Apple framework.** A
+   `library.static` target's directory `sources: path:` entry defaults every `.h` it contains to
+   Headers-phase PUBLIC visibility, copied to `build/Release/include/<TargetName>/`. APFS is
+   case-insensitive, so `Frameworks/network`'s copy at `.../include/network/` IS
+   `.../include/Network/` too -- exactly where WebKit.h's own `#import <Network/Network.h>`
+   resolves once that directory is on the search path, shadowing Apple's real Network.framework
+   with our own `network/constants.h` (compiled with no PCH context: "no type named 'string' in
+   namespace 'std'"). Chased this into a bigger, better fix (next item) rather than patching around
+   it with `headerVisibility:`.
+3. **Directory `sources: path:` over-includes vs. rave's exact glob -- the real fix for #2 too.**
+   `Frameworks/FileBrowser/src/drivers` is a pre-existing symlink to `Frameworks/scm/src/drivers`
+   (predates this migration). rave's own `sources src/*.mm src/OFB/*.mm` glob never traverses into
+   it, so rave never compiles it, but XcodeGen's directory `path:` entries recurse through symlinked
+   subdirectories too, silently duplicating scm's driver sources into FileBrowser (surfaced as a
+   spurious PCH request for `drivers/api.cc`, a `.cc` file inside an all-`.mm` target). Fixed by
+   switching EVERY framework's (and vendor target's) `sources:` from a directory reference to an
+   explicit, resolved file list built from the exact same glob rave itself resolves -- whatever rave
+   compiles is exactly and only what Xcode compiles now. This also fixes #2 for free: an explicit
+   list of `.cc`/`.mm`/`.c`/`.m` files never includes a `.h`, so Xcode's Headers-phase copy has
+   nothing to act on -- no `headerVisibility:` workaround needed at all (added then removed within
+   this same task once the better fix was found).
+4. **Mixed `.cc`+`.mm` targets (7: BundleEditor, OakDebug, command, document, io, plist, theme) need
+   a PER-FILE prelude, which Xcode's one-per-target `GCC_PREFIX_HEADER` can't give directly.**
+   Verified by direct clang invocation that neither prelude works for both languages at once (see
+   header-strategy.md addendum). First fix attempt (automatic `GCC_PREFIX_HEADER=prelude.cc` +
+   forced second `-include prelude.mm` via `compilerFlags:` on the `.mm` files) failed a real build
+   (`theme`): clang only honours the precompiled form of the FIRST `-include`; Xcode's own automatic
+   one lands second and falls back to a textual include of an internal cache path that isn't a real
+   file. Fixed by leaving `GCC_PREFIX_HEADER` unset for mixed targets entirely and forcing BOTH
+   `.cc` and `.mm` groups onto their own prelude via `compilerFlags:` -- verified end to end in a
+   scratch XcodeGen project before reapplying. The Ragel-generated `.cc` (plist only) needed the
+   same forced `-include`, PLUS `-iquote <dirname of the original .rl file>` (rave's own
+   `CompileRagel` adds exactly this, bin/rave:643, because the generated file textually carries
+   `ascii.rl`'s own `#include "ascii.h"` unchanged, which only resolves against the original
+   directory, not $(DERIVED_FILE_DIR)) -- without it: "fatal error: 'ascii.h' file not found".
+
+Two more, smaller: `Xcode/scripts/gen_test.sh` assumed every target's tests live under
+`Frameworks/<name>/tests/`, wrong for the one vendor target with tests (Onigmo, at
+`vendor/Onigmo/tests/`) -- fixed by checking which directory actually exists. Fixing that then
+exposed a real `/bin/bash` 3.2.57 quirk (Apple's frozen, GPLv2-licensed-ceiling shipped bash):
+expanding a zero-element array under `set -u` is an unbound-variable error there (fixed in bash
+4.4+), reproduced directly; fixed with the standard `"${arr[@]+"${arr[@]}"}"` guard everywhere the
+script touches the (now sometimes genuinely empty) test-file array. Added `Xcode/scripts/gen_ragel.sh`
+(new file, mirrors `gen_test.sh`'s pattern) to invoke `ragel` as a preBuildScript.
+
+**Also found and fixed in `bin/rave2yaml` itself:** a real cycle in the `.rave` require graph
+(`plist` requires `io`, `io` requires `ns`, `ns` requires `plist`) fed the starting target back into
+its own dependency closure, since the closure walk never special-cased "don't re-add the root".
+Manifested as `plist` listing itself in its own `HEADER_SEARCH_PATHS` and `plist_test` linking
+`- target: plist` twice. Fixed by threading a `root:` (defaults to the outer call's own name) through
+`transitive_requires`/`transitive_header_deps`'s recursion, excluded unconditionally regardless of
+how many cycles route back to it. Added `check_dupes`/`check_self_ref`-style invariant checks during
+development (not committed as test files -- ad hoc verification, superseded by the full green build).
+
+**Full verification:** `xcodebuild -alltargets -configuration Release build
+CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES` -- **BUILD SUCCEEDED**, exit 0. 49
+`library.static` targets (46 frameworks + kvdb/Onigmo/xdiff) + 27 `_test` tool targets, all
+produced (49 `.a` + 27 executables, zero missing). `text_test: 34 tests passed` (pilot, unchanged).
+Ran all 27 test binaries directly (`--no-parallel` for the 7 with `.mm` tests, per CLAUDE.md): 22
+clean passes; `buffer_test`/`file_test`/`cf_test` fail/crash exactly matching
+`docs/benchmarks/2026-08-12-ninja-parity.md`'s already-recorded pre-existing baseline (not a Task 5
+regression); `scm_test` fails needing `hg`/`svn`, also already documented as absent on this machine.
+`regexp_test` (1 of 41: a `capitalize()` Unicode-casing assertion on "æblegrød") is a genuinely NEW
+finding -- confirmed real and deterministic (3 reruns, identical), confirmed NOT caused by: source
+file set (byte-identical object list vs. a scratch ninja build), compile flags for the relevant file
+(diffed line-by-line, identical), `-flto=thin` (disabling it for this one target didn't change the
+result), or locale env (`LANG`/`LC_ALL` identical, explicit override didn't change it). Root cause
+sits somewhere inside Onigmo's Unicode property-matching at runtime, not isolated further --
+flagged for Task 7's parity work rather than chased past a reasonable budget here, since Task 5's
+gate is building, not full test-behaviour parity (`tests/rave2yaml_test.sh` still `PASS: 56 targets,
+all dependencies resolve`).
+
+**Why:** Task 5 exists to prove the pattern scales past one framework; every fix here would have
+either silently miscompiled or hard-failed 7-46 more times if found later instead of once, here.
+
+### If interrupted here
+
+Phase 2 Task 5 is functionally complete: all 46 frameworks + 3 vendor targets build clean under
+Xcode. `TextMate.xcodeproj` and `build/` are gitignored and regenerable (`xcodegen generate --spec
+project.yml`, then `xcodebuild -alltargets ...`), not committed. Not yet done: updating
+`docs/superpowers/plans/2026-08-12-phase-2-xcode-migration.md`'s Task 5 checkbox/status (left for
+the coordinating agent), and the `regexp_test` Unicode finding needs a line in whatever tracks
+Task 7's parity checklist. Task 6 (the TextMate app target itself) is next and explicitly out of
+scope here -- deliberately not touched, per the task brief. One thing Task 6 should know going in:
+`Applications/TextMate/default.rave` requires `kvdb` directly (confirmed already translatable, same
+VENDOR_EXTRA mechanism) and the app target will be the first consumer of `frameworks`/`libraries`
+declared on the framework/vendor targets themselves, which today only get surfaced for `_test`
+tool targets (`linked_sdks`) -- the app target's own link step needs the same aggregation.
+
 ## 2026-08-13 — Phase 2 Task 5 (1/2): rave2yaml closes all 3 known gaps, decides header-farm fidelity
 
 **What:** Scaled `bin/rave2yaml --emit-yaml` from the Task 4 pilot (`text` alone) to translating

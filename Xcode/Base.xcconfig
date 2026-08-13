@@ -28,6 +28,22 @@ CLANG_CXX_LANGUAGE_STANDARD = c++20
 GCC_C_LANGUAGE_STANDARD = c99
 CLANG_ENABLE_OBJC_ARC = YES
 
+// ---- Clang modules — REQUIRED off, do not remove --------------------------
+// CHANGED from Xcode's default. XcodeGen's own base.yml preset sets
+// CLANG_ENABLE_MODULES = YES for every target unless overridden; rave never
+// passes -fmodules anywhere (grepped default.rave/bin/rave -- absent). Found
+// by an actual Task 5 build failure, not guessed: with modules on, compiling
+// vendor/xdiff/src/xpatience.c pulls in the `Darwin` module (for the prelude
+// header's system includes), and that module's own `search.h` declares an
+// unrelated `struct entry` (for POSIX hsearch) that collides with xpatience.c's
+// own same-named local struct -- "type 'struct entry' has incompatible
+// definitions in different translation units". Without modules (matching
+// rave), search.h is never implicitly pulled in and xpatience.c's local
+// struct is simply the only one that exists. This is a project-wide setting,
+// not an xdiff-only workaround: any other target could hit the same class of
+// collision against a different system module, silently or not.
+CLANG_ENABLE_MODULES = NO
+
 // Swift is not used yet. Phase 6's SwiftUI islands are the first consumer, and
 // unblocking them is a large part of why this migration exists.
 SWIFT_VERSION = 6.0
@@ -100,6 +116,27 @@ WARNING_CFLAGS = -Wall -Wwrite-strings -Wformat -Winit-self -Wmissing-include-di
 
 // ---- Objective-C ---------------------------------------------------------
 OTHER_CFLAGS = $(inherited) -fobjc-call-cxx-cdtors
+
+// ---- Linking ---------------------------------------------------------
+// rave's root LN_FLAGS (default.rave:16) is
+// "-mmacosx-version-min=${APP_MIN_OS} -fobjc-link-runtime", applied to
+// EVERY link step unconditionally. -mmacosx-version-min's Xcode equivalent
+// is MACOSX_DEPLOYMENT_TARGET, already set above (deliberately 26.0, not
+// rave's 10.12 -- see that setting's own comment); -fobjc-link-runtime has
+// no dedicated Xcode build setting and was missing here entirely until a
+// real Task 5 build failure surfaced it: clang's -fobjc-link-runtime
+// implicitly links CoreFoundation.framework (needed by every generated
+// CxxTest runner's main(), which unconditionally calls
+// CFRunLoopRun/CFRunLoopStop/CFRunLoopGetMain -- bin/gen_test:281-285 --
+// regardless of which framework it's testing). Most _test targets never
+// showed a symptom because something else in their closure happens to
+// `require` text, which separately declares `frameworks CoreFoundation`
+// (Frameworks/text/default.rave) -- Onigmo_test is the one target with no
+// requires at all, so it was the one where the missing flag produced an
+// actual link error ("Undefined symbols ... _CFRunLoopRun") instead of
+// silently working by accident. library.static targets never link, so
+// this is inert for them regardless of scope.
+OTHER_LDFLAGS = $(inherited) -fobjc-link-runtime
 
 // ---- Optimisation, release config ----------------------------------------
 // rave release: -Os -flto=thin -DNDEBUG plus dead stripping. (NDEBUG itself
