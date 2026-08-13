@@ -52,10 +52,47 @@ SWIFT_VERSION = 6.0
 HEADER_SEARCH_PATHS = $(SRCROOT)/Shared/include /opt/homebrew/include
 
 // ---- Prefix header -------------------------------------------------------
-// rave precompiles Shared/PCH/prelude.{c,cc,m,mm} per language. Xcode carries
-// one prefix header per target; the per-language split is handled by the
-// generated project rather than here.
+// rave precompiles Shared/PCH/prelude.{c,cc,m,mm} per language and passes it
+// with -include. Verified: `-include Shared/PCH/prelude.cc` compiles the tree
+// clean, despite the file not being a .h — clang does not care about the
+// extension. The per-language split is applied per target by the generated
+// project, since Xcode carries one prefix header per target.
+//
+// Symptom if this is missing: "use of undeclared identifier 'std'". That means
+// the prefix header did not arrive, NOT that the code is broken.
 GCC_PRECOMPILE_PREFIX_HEADER = YES
+
+// ---- Char signedness — REQUIRED, do not remove ---------------------------
+// rave passes -funsigned-char. Without it, Frameworks/text/src/utf8.h fails to
+// compile at all:
+//   error: constant expression evaluates to 128 which cannot be narrowed to
+//   type 'char' [-Wc++11-narrowing]
+// because its UTF-8 lead-byte constants (128, 192, 224, 240) do not fit in a
+// signed char. This is not a warning preference; it is load-bearing, and every
+// framework that includes utf8.h inherits the failure.
+GCC_CHAR_IS_UNSIGNED_CHAR = YES
+
+// ---- Preprocessor --------------------------------------------------------
+// rave passes -D'NULL_STR="￿"' (default.rave:12). Verified byte-for-byte
+// that the literal form below produces the identical macro: 3 bytes EF BF BF,
+// i.e. U+FFFF in UTF-8. Do not "simplify" this to a different escape without
+// re-checking the emitted bytes.
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) NULL_STR="￿"
+
+// ---- Warning set, mirrored from build.ninja ------------------------------
+// Copied from rave's actual flags rather than chosen. The -Wno- entries are
+// deliberate suppressions the tree relies on; dropping one turns this into a
+// wall of pre-existing noise that hides real migration errors.
+WARNING_CFLAGS = -Wall -Wwrite-strings -Wformat -Winit-self -Wmissing-include-dirs -Wno-parentheses -Wno-sign-compare -Wno-switch -Wno-c99-designator
+
+// ---- Objective-C ---------------------------------------------------------
+OTHER_CFLAGS = $(inherited) -fobjc-call-cxx-cdtors
+
+// ---- Optimisation, release config ----------------------------------------
+// rave release: -Os -flto=thin -DNDEBUG plus dead stripping.
+GCC_OPTIMIZATION_LEVEL = s
+LLVM_LTO = YES_THIN
+DEAD_CODE_STRIPPING = YES
 
 // ---- Warnings ------------------------------------------------------------
 // The inherited tree is from 2021 and compiles clean-ish under clang 2100 with

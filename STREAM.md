@@ -4,6 +4,43 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 2 Task 4 blockers solved in main loop after agent cutoff
+
+**What:** The Task 4 implementer was cut off by a session limit after ~178k tokens having written
+nothing durable (no `project.yml`, no `.xcodeproj`, `rave2yaml` still `--inventory`-only, clean
+tree, no report). Rather than pay for another exploration round, settled its two blockers directly
+and recorded them in `Xcode/Base.xcconfig` so they cannot be lost again.
+
+**1. PCH.** `-include Shared/PCH/prelude.cc` works. clang does not care that the prefix file is a
+`.cc` rather than a `.h`. Symptom when missing is `use of undeclared identifier 'std'`, which reads
+like broken code and is not.
+
+**2. `-funsigned-char` is load-bearing, and was nearly missed.** Extracted rave's real flag line
+from `build.ninja` rather than assuming. Without it, `Frameworks/text/src/utf8.h` does not compile
+at all: `constant expression evaluates to 128 which cannot be narrowed to type 'char'`, because its
+UTF-8 lead-byte constants (128, 192, 224, 240) do not fit a signed char. Every framework including
+`utf8.h` inherits that failure, so this single missing flag would have broken Task 5 across all 46
+frameworks with an error pointing at the source rather than the build settings. Now
+`GCC_CHAR_IS_UNSIGNED_CHAR = YES`.
+
+**3. `NULL_STR` verified byte-for-byte.** rave passes `-D'NULL_STR="\uFFFF"'`. Compiled a probe
+that prints the macro's bytes: 3 bytes `EF BF BF`, U+FFFF in UTF-8. The literal form now in the
+xcconfig produces the identical macro.
+
+Also mirrored rave's actual warning set and release optimisation (`-Os`, `-flto=thin`,
+dead-strip) into the xcconfig, copied from `build.ninja` rather than chosen.
+
+**Why:** These are the settings all 46 frameworks inherit. Each was found by reading what the build
+actually does, and each would have failed later in a way that pointed at the wrong culprit.
+
+### If interrupted here
+
+Phase 2 Tasks 1, 2, 3 complete and reviewed. Task 4 (pilot framework under XcodeGen) still
+outstanding — its compile recipe is now fully solved and recorded, so what remains is the
+mechanical work: `rave2yaml` project.yml emission, the committed relative-symlink header farm at
+`Xcode/include/<n>/<n>`, and the CxxTest script phase. Nothing pushed; Phase 2 has no PR yet.
+
+
 ## 2026-08-12 — Plan-number corrections and CLAUDE.md drift fix
 
 **What:** Settles the STREAM entry owed by `d89cc1d6`, plus a real doc-vs-code drift the check surfaced.
