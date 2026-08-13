@@ -13,27 +13,46 @@ Hard constraints declared by the maintainer:
 
 ## Build system
 
-`./configure` checks dependencies (`ninja ragel multimarkdown pgrep pkill`, plus the `boost` and `sparsehash` headers) and bootstraps `build.ninja` by invoking `bin/rave -crelease -tTextMate`. It resolves the dependency prefix via `brew --prefix`, so it works on Apple Silicon (`/opt/homebrew`) as well as Intel. `capnp` is **no longer** a dependency — Cap'n Proto was removed by the textmatelives merge. `bin/rave` is a Ruby DSL parser that walks `Applications/*/`, `Frameworks/*/`, `PlugIns/*/`, `vendor/*/` for `default.rave` files (see `default.rave:46`) and emits ninja rules. After `./configure`, all builds go through `ninja`.
+`TextMate.xcodeproj` is the build (Phase 2 replaced `./configure` + `bin/rave` + `ninja`
+entirely — there is no other build path). It is generated, committed, and normally does not
+need regenerating: `xcodegen generate --spec project.yml` only if `project.yml` itself changes.
+`project.yml` is now hand-maintained directly; the `.rave`-reading generator that used to emit
+it, `bin/rave2yaml`, was deleted along with the `.rave` files it read.
 
-The compiler config is C++20 (`-std=c++2a`), ObjC ARC, deployment target 10.12 (`default.rave:1-7`). Precompiled headers live in `Shared/PCH/prelude.{c,cc,m,mm}`. `NULL_STR` is passed via `-D` (`default.rave:12`). The legacy `REST_API` macro (formerly `https://api.textmate.org`) was removed in PR #9; the fork makes no `api.textmate.org` calls (see "Bundle delivery" below).
+`xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build` produces
+the app; ⌘B works from inside Xcode too. Dependencies (`boost`, `google-sparsehash`,
+`multimarkdown`, `ragel`) are installed via Homebrew and are not checked automatically the way
+`./configure` used to check them — `Xcode/Base.xcconfig`'s `HEADER_SEARCH_PATHS` hardcodes
+`/opt/homebrew/include`, so a MacPorts prefix does not currently work. `capnp` is **not** a
+dependency — Cap'n Proto was removed by the textmatelives merge.
+
+The compiler config is C++20 (`CLANG_CXX_LANGUAGE_STANDARD = c++20`), ObjC ARC, deployment target
+macOS 26.0, all set in `Xcode/Base.xcconfig`. Precompiled headers live in
+`Shared/PCH/prelude.{c,cc,m,mm}`. `NULL_STR` is passed via `GCC_PREPROCESSOR_DEFINITIONS`. The
+legacy `REST_API` macro (formerly `https://api.textmate.org`) was removed in PR #9; the fork
+makes no `api.textmate.org` calls (see "Bundle delivery" below).
+
+Header resolution: each framework's public headers are symlinked into `Xcode/include/<name>/`,
+and a target's `HEADER_SEARCH_PATHS` lists only the `Xcode/include/<dep>` roots for frameworks it
+actually depends on — this reproduces the old rave build's compiler-enforced dependency isolation
+(a target cannot `#include` a framework's headers without declaring a dependency on it). See
+`docs/benchmarks/2026-08-12-header-strategy.md` for why this shape was chosen over a flat `-I`.
 
 Common commands:
 
 ```sh
 bin/setup-hooks                    # ONCE per clone: installs the gitleaks pre-commit hook
-bin/build                          # PREFERRED: configures if needed, then builds TextMate
-bin/build <Framework>/test         # Run a framework's test suite (e.g. scm/test)
+bin/build                          # PREFERRED: builds TextMate via xcodebuild
+bin/build <Framework>/test         # Build and run a framework's test suite (e.g. scm/test)
+bin/build <target>                 # Build any other Xcode target (e.g. mate)
 bin/deploy-local                   # Install the built app to /Applications, replacing the prior build
 
-./configure                        # First-time / regen build.ninja
-ninja                              # Default target (TextMate, per ./configure -tTextMate)
-ninja TextMate/run                 # Build, sign, gracefully relaunch TextMate.app
-ninja -t clean                     # Or delete the build dir
-ninja <App>/run                    # Run any other app (e.g. mate/run)
+xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build
 ```
 
-**Prefer `bin/build` over bare `ninja`.** Two environment problems break this build with errors
-that point at the wrong culprit, and `bin/build` handles both:
+**Prefer `bin/build` over bare `xcodebuild`.** Two environment problems break Xcode's Ruby-based
+script phases (`bin/gen_test`, `bin/gen_html`, `bin/gen_credits.rb` all still shell out to system
+Ruby) with errors that point at the wrong culprit, and `bin/build` handles both:
 
 1. Ruby version managers (chruby, rbenv, rvm) export `GEM_HOME`/`GEM_PATH`. The build's helper
    scripts run under system Ruby 2.6 via `#!/usr/bin/env ruby` and then try to dlopen native gems
@@ -44,13 +63,10 @@ that point at the wrong culprit, and `bin/build` handles both:
    though the directory is yours. Removing it needs write permission on the directory, not the file,
    so no `sudo` is required to clear it.
 
-**Xcode build (Phase 2, in progress).** `TextMate.xcodeproj` is generated by XcodeGen from
-`project.yml`, which `bin/rave2yaml` emits from the `.rave` files. `xcodebuild -scheme TextMate
--configuration Release build` produces the app; Cmd-B works in Xcode. Regenerate the project with
-`xcodegen generate --spec project.yml` after any `.rave` change. Build output goes to
-`~/build/textmate-revived/xcode` — `SYMROOT` is overridden in `Xcode/Base.xcconfig` because
-xcodebuild otherwise writes a launchable `TextMate.app` into `<project>/build` inside the working
-copy, where Spotlight indexes it as a duplicate. ninja remains authoritative until parity is proven.
+Build output goes to `~/build/textmate-revived/xcode` — `SYMROOT`/`OBJROOT`/`SHARED_PRECOMPS_DIR`
+are overridden in `Xcode/Base.xcconfig` because xcodebuild otherwise writes a launchable
+`TextMate.app` into `<project>/build` inside the working copy, where Spotlight indexes it as a
+duplicate.
 
 `bin/deploy-local` **moves** rather than copies: it verifies the installed bundle's
 `CFBundleIdentifier` matches what was built, then deletes the build copy, so no launchable
@@ -58,9 +74,9 @@ duplicate is left in the build tree. That costs a relink on the next build, not 
 It reads `CFBundleIdentifier` from the freshly built app and refuses to replace a
 bundle in `/Applications` whose identifier differs — it will not clobber an unrelated TextMate install.
 
-`$builddir` defaults to `~/build/TextMate`. `bin/rave -b<dir>` overrides it.
-
-`.tm_properties` sets `TM_NINJA_TARGET` rules so ⌘B inside TextMate auto-picks the right target: editing `tests/t_*.{cc,mm}` builds `<framework>/test`; editing under `Applications/<X>/` builds `<X>/run`; otherwise `TextMate/run`.
+Self-hosted building (pressing ⌘B inside a running TextMate.app to rebuild TextMate itself, via
+the optional Ninja bundle and `.tm_properties`' old `TM_NINJA_TARGET` mapping) no longer works —
+neither ninja nor that mapping exist anymore. Build from Xcode or the command line instead.
 
 ## Architecture
 
@@ -75,16 +91,16 @@ The two largest layers worth knowing:
 
 ## Tests
 
-CxxTest-style, but home-grown: `bin/gen_test` reads each `tests/t_*.{cc,mm}` file, finds top-level `void test_*()` functions, and emits a single runner with `main()` (`bin/rave:1372-1480`). Assertions are `OAK_ASSERT`, `OAK_ASSERT_EQ`, `OAK_ASSERT_NE`. Filesystem fixtures use `test::jail_t` from `Frameworks/test`.
+CxxTest-style, but home-grown: `bin/gen_test` reads each `tests/t_*.{cc,mm}` file, finds top-level `void test_*()` functions, and emits a single runner with `main()`. Assertions are `OAK_ASSERT`, `OAK_ASSERT_EQ`, `OAK_ASSERT_NE`. Filesystem fixtures use `test::jail_t` from `Frameworks/test`.
 
-Test files are declared in a framework's `default.rave` with `tests tests/t_*.{cc,mm}` (e.g. `Frameworks/scm/default.rave:7`, `Frameworks/FileBrowser/default.rave:7`). Run via `ninja <framework>/test`.
+Each framework's `<name>_test` Xcode target generates its runner via an `Xcode/scripts/gen_test.sh <name>` build-phase script, which itself globs `Frameworks/<name>/tests/t_*.{cc,mm}` (or `vendor/<name>/tests/` for vendor targets like Onigmo) — there is no more `default.rave` `tests` directive declaring that glob per framework. Run via `bin/build <framework>/test`, or `xcodebuild -project TextMate.xcodeproj -target <framework>_test -configuration Release build CODE_SIGNING_ALLOWED=NO` followed by running the produced binary directly.
 
 Runner flags (parsed by the generated runner via `getopt_long`, `bin/gen_test:155-189`):
-- `-v` verbose, `-m` measure, `-r N` repeat, `-b` benchmarks, `-p`/`-P` (`--parallel` / `--no-parallel`)
+- `-v` verbose, `-m` measure, `-r N` repeat, `-b` benchmarks, `-p`/`--parallel`, `--no-parallel` (`-P` is not actually wired despite the runner's own usage text — its getopt string is `"bmpr:vhV"`)
 
-`.mm` test runners are passed `--no-parallel` automatically (`bin/rave:1454`) and `bin/gen_test` runs the serial path on the main thread when `--no-parallel` is set — required by Cocoa APIs that assert `NSThread.isMainThread` (e.g. `TMFileReference`). Pure C++ (`.cc`) runners stay parallel.
+Some `.mm` test runners call Cocoa APIs that assert `NSThread.isMainThread` (e.g. `TMFileReference`) and need `--no-parallel`; `bin/build` and CI now pass it for every runner, not just `.mm` ones (always safe — `.cc` runners have no such requirement — and avoids re-deriving `gen_test.sh`'s own per-framework `.cc`/`.mm` classification a third place).
 
-There is no name-based test filter. To run a subset, either run the test binary directly (`~/build/TextMate/release/_Test/<id>/<name> -v`) or temporarily edit the test source.
+There is no name-based test filter. To run a subset, either run the test binary directly (`~/build/textmate-revived/xcode/Release/<name>_test -v`) or temporarily edit the test source.
 
 Tests that shell out to git must call `git init -b master` (not bare `git init`) — modern git's `init.defaultBranch` defaults to `main` and breaks tests that assume `master`.
 

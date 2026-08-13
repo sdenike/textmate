@@ -1,8 +1,7 @@
 # Releasing TextMate Lives
 
 This document describes how releases of the `textmatelives/textmate` fork are
-cut today. It reflects `.github/workflows/release.yml` and the version capture
-in `Applications/TextMate/default.rave`.
+cut today. It reflects `.github/workflows/release.yml`.
 
 ## TL;DR
 
@@ -14,18 +13,12 @@ signs, notarizes, tags, and publishes the GitHub Release automatically.
 ## The version is defined in `CHANGELOG.md`
 
 The first `## DATE (vX.Y.Z-undead)` heading at the top of `CHANGELOG.md` is the
-single source of truth for the version. It is read in two independent places
-with the same `grep`/`sed`:
+single source of truth for the version the release workflow tags, titles, and
+writes release notes from (`release.yml:41-52`).
 
-- The build, to stamp the app's `CFBundleShortVersionString`:
-  `Applications/TextMate/default.rave:8` captures `TEXTMATE_VERSION`, then
-  `:20` passes it as `APP_VERSION` into `Info.plist` (`Info.plist:8` is
-  `<string>${APP_VERSION}</string>`).
-- The release workflow, for the git tag, the release title, and the release
-  notes (`release.yml:39-50`).
-
-Because both read the same heading, the shipped app reports exactly the version
-in the tag — important so the updater does not offer a release to itself.
+Because the release workflow reads that heading directly, the git tag and
+GitHub Release title always match what's at the top of `CHANGELOG.md` at merge
+time.
 
 Heading format (matched by `^## .* (v.*)$`):
 
@@ -68,36 +61,43 @@ only happens if build **and** test pass.
    `needs: verify`, so nothing is signed or released unless both pass.
 
 The `release` job runs on `macos-26`, 60-minute timeout, `contents: write`. It
-performs its **own fresh** `./configure` + `ninja TextMate` (it does not reuse
-the `verify` job's build artifact — the signed/notarized build must be built
-fresh in this job):
+builds its **own fresh** `xcodebuild ... TextMate` (it does not reuse the
+`verify` job's build artifact — the signed/notarized build must be built fresh
+in this job):
 
-1. **Extract version** from `CHANGELOG.md` (`:39-50`).
-2. **Guard — must be `-undead`** (`:52-66`). If the top version does not contain
+1. **Extract version** from `CHANGELOG.md` (`:41-52`).
+2. **Guard — must be `-undead`** (`:54-68`). If the top version does not contain
    `-undead`, the run skips (no release).
-3. **Skip if the tag already exists** on `origin` (`:68-81`). Re-running for an
+3. **Skip if the tag already exists** on `origin` (`:70-83`). Re-running for an
    already-released version is a no-op.
-4. **Install deps** via Homebrew (`:83-85`).
+4. **Install deps** via Homebrew (`:85-87`).
 5. **Import the Developer ID certificate** from secrets into an ephemeral
-   keychain and resolve the signing identity (`:87-116`).
-6. **Pre-seed `local.rave`** with the Homebrew prefix, the signing identity, and
-   hardened-runtime codesign flags, then `./configure` and `ninja TextMate`
-   (`:118-134`). (This pre-seed is intentional and distinct from the local
-   developer flow, where `configure` derives the prefix itself.)
-7. **Sign inside-out**: re-sign every embedded Mach-O, re-seal nested bundles,
+   keychain and resolve the signing identity (`:89-118`).
+6. **Build the signed app**: a single `xcodebuild -scheme TextMate -configuration
+   Release CODE_SIGN_IDENTITY="$CS_IDENTITY" OTHER_CODE_SIGN_FLAGS="--timestamp"
+   build` (`:120-124`) — hardened runtime comes from `Xcode/Base.xcconfig`'s
+   `ENABLE_HARDENED_RUNTIME = YES`, applied unconditionally, not just here.
+7. **Locate the built app** at the fixed, xcconfig-pinned
+   `~/build/textmate-revived/xcode/Release/TextMate.app` (`:126-140`).
+8. **Sign inside-out**: re-sign every embedded Mach-O, re-seal nested bundles,
    then re-sign the outer `.app` with release entitlements
-   (`CS_GET_TASK_ALLOW=false`) (`:150-201`), and verify codesign + hardened
-   runtime (`:203-209`).
-8. **Notarize** via `notarytool submit --wait`, parsing the JSON status
+   (`CS_GET_TASK_ALLOW=false`) (`:142-193`), and verify codesign + hardened
+   runtime (`:195-201`). Xcode signs the app and its natively-embedded targets
+   as part of the build already (verified: `codesign --verify --deep --strict`
+   passes on an ad-hoc build straight off `xcodebuild`); this step still
+   matters because `Xcode/scripts/assemble_resources.sh` copies some embedded
+   binaries with a plain `cp`, which Xcode's own embed-and-sign machinery
+   never touches.
+9. **Notarize** via `notarytool submit --wait`, parsing the JSON status
    (`--wait` can exit 0 on `Invalid`, so the status is checked explicitly)
-   (`:211-240`).
-9. **Staple** the ticket (retried until CloudKit propagates) and **verify
-   Gatekeeper** with `spctl --assess` (`:242-262`).
-10. **Build the `.tbz`** `TextMate-${VERSION}.tbz` (`:264-275`).
-11. **Extract release notes** with `bin/extract_changes` (`:277-289`).
-12. **Create the GitHub Release** with `gh release create "v${VERSION}"` — no
-    `--prerelease`/`--draft`, so it becomes `releases/latest` (`:291-302`).
-13. **Delete the ephemeral keychain** (always) (`:304-306`).
+   (`:203-232`).
+10. **Staple** the ticket (retried until CloudKit propagates) and **verify
+    Gatekeeper** with `spctl --assess` (`:234-254`).
+11. **Build the `.tbz`** `TextMate-${VERSION}.tbz` (`:256-267`).
+12. **Extract release notes** with `bin/extract_changes` (`:269-281`).
+13. **Create the GitHub Release** with `gh release create "v${VERSION}"` — no
+    `--prerelease`/`--draft`, so it becomes `releases/latest` (`:283-303`).
+14. **Delete the ephemeral keychain** (always) (`:305-307`).
 
 ## Required GitHub secrets
 

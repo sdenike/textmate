@@ -1,8 +1,5 @@
 # ---- Build output ----
 build/
-build.ninja
-.ninja_deps
-.ninja_log
 DerivedData/
 *.o
 *.dSYM/
@@ -18,9 +15,6 @@ DerivedData/
 # every `xcodegen generate`, same lifecycle as the .xcodeproj itself -- not
 # the app's real, committed Applications/TextMate/Entitlements.plist source).
 Xcode/generated/
-
-# ---- Machine-local build config ----
-local.rave
 
 # ---- Legacy upstream artifact ----
 Frameworks/license/src/revoked_serials.cc

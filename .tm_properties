@@ -16,9 +16,6 @@ TM_FRAMEWORK_INCLUDE = '${TM_FRAMEWORKS/\w+/-I"${TM_BUILD_DIR}\/release\/_Includ
 TM_CXX_FLAGS         = '$TM_CXX_FLAGS    -I"$CWD/Shared/include" ${TM_FRAMEWORK_INCLUDE}'
 TM_OBJCXX_FLAGS      = '$TM_OBJCXX_FLAGS -I"$CWD/Shared/include" ${TM_FRAMEWORK_INCLUDE}'
 
-TM_NINJA_FILE        = '${CWD}/build.ninja'
-TM_NINJA_TARGET      = 'TextMate/run'
-
 TM_ISSUE_URL         = 'https://github.com/textmate/textmate/issues/%s'
 
 [ 'source.c++, source.objc++' ]
@@ -32,13 +29,8 @@ fileType         = 'source.objc++'
 [ attr.untitled ]
 fileType         = 'source.objc++'
 
-[ Applications/**~mate/** ]
-TM_NINJA_TARGET = '${TM_DIRECTORY/^.*\/Applications\/([^\/]+)(\/.*)?$/$1\/run/}'
-
 [ tests/t_*.{cc,mm} ]
 scopeAttributes  = 'attr.test.cxxtest'
-TM_NINJA_TARGET  = '${TM_FILEPATH/^.*?([^\/]*)\/tests\/.*$/$1\/test/}'
 
 [ tests/gui_*.mm ]
 GUI_TESTS        = '${TM_FILENAME/^gui_(.*)\.mm$/$1/}'
-TM_NINJA_TARGET  = '${TM_FILEPATH/^.*?([^\/]*)\/tests\/.*$/$1\/cxx_test/}'
