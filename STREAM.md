@@ -4,6 +4,56 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Task 7: root-caused and fixed the regexp/Onigmo Xcode-vs-ninja discrepancy
+
+**What:** `bin/rave2yaml` now emits `OTHER_LDFLAGS: "$(inherited) -force_load
+$(BUILT_PRODUCTS_DIR)/libOnigmo.a"` on every tool/bundle/app/test target whose
+dependency closure links Onigmo (`emit_onigmo_force_load`, called from
+`emit_tool_target`, `emit_bundle_target`, `emit_app_target`, `emit_test_target`).
+`project.yml` regenerated (28 additive lines, nothing else changed) and
+`TextMate.xcodeproj` regenerated from it. `regexp_test` now passes 41/41 under
+Xcode; re-ran ninja's `regexp/test` afterward and it still passes 41/41 too — the
+fix touches only the Xcode project generator, no `.rave` file or vendor source.
+
+**Root cause, found by measurement, not guesswork:** `vendor/Onigmo/src/setup.c`
+is a bare `__attribute__((constructor))` that calls `onig_set_default_syntax()`
+to turn Unicode-range `\w`/`\p{Upper}`/`\p{Lower}` matching ON (Onigmo's built-in
+default has `ONIG_OPTION_ASCII_RANGE` on, i.e. ASCII-only). It exports zero
+symbols — libtool's own build log says so: `warning: 'setup.o' has no symbols`.
+bin/rave links every object file directly onto each final link command, so
+setup.o always rides along. XcodeGen packages Onigmo as a real `libOnigmo.a` via
+`libtool -static`, and Xcode's final link consults that archive with ordinary
+lazy, reference-driven member selection — since nothing ever references
+setup.o, the linker never pulls it from the archive, the constructor never
+runs, and `\w` silently falls back to ASCII-only. That is exactly the observed
+bug: `capitalize()` on "æblegrød" produced "æBlegrød" (capitalizing the second
+letter, not the first) because `\w` no longer matched "æ" at all.
+
+Isolated empirically with a minimal `onig_new`/`onig_search` probe linked
+against real compiled objects from both builds, ruling out every flag-level
+candidate the task named before finding this: source-file set (identical, 24
+files), `-funsigned-char`/`-std=c99`/`-Os`/`-flto=thin`/`-DNDEBUG` (byte-identical
+in the real captured command lines, confirmed via `-showBuildSettings` and the
+build log's response file), `-fno-common` (tested in isolation, doesn't
+reproduce it), LTO (tested with `LLVM_LTO=NO`, bug persisted — ruling LTO out
+entirely), PCH content and a fully-cleared `SharedPrecompiledHeaders` cache (bug
+persisted). What finally isolated it: linking Xcode's own freshly, doubly-clean
+rebuilt object files directly (no archive) passed; linking the exact same
+objects via `libtool -static`'s `libOnigmo.a` failed. That is the whole
+difference — archive-mediated (lazy) linking vs. direct object linking.
+
+**Why:** Task 7 requires either a resolved discrepancy or an honest unresolved
+one with evidence — this is resolved, with the fix verified on both builds.
+
+### If interrupted here
+
+Fix is committed. Still open for Task 7: artifact-count comparison (41 ninja
+artifacts vs. Xcode), the full 26-target test-parity table under Xcode, then
+committing `TextMate.xcodeproj` itself (currently gitignored by `*.xcodeproj/`
+in `.gitignore` — that pattern needs a `TextMate.xcodeproj` exception before it
+can be added) and the final `docs/benchmarks/2026-08-12-ninja-parity.md` update
+stating whether parity is proven.
+
 ## 2026-08-13 — Task 6 complete: TextMate.app builds from Xcode; duplicate binaries eliminated
 
 **What:** `TextMate.app` now builds from `TextMate.xcodeproj` (`fb8c3e61`..`9346f20b`, five

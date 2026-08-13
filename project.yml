@@ -37,6 +37,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/OakSystem"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: authorization
       - target: io
@@ -97,6 +98,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: io
       - target: text
@@ -214,6 +216,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: ns
       - target: text
@@ -287,6 +290,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: plist
       - target: text
@@ -338,6 +342,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: regexp
       - target: Onigmo
@@ -395,6 +400,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/Onigmo"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: Onigmo
   crash:
@@ -446,6 +452,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/parse"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: buffer
       - target: bundles
@@ -497,6 +504,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: bundles
       - target: OakSystem
@@ -576,6 +584,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: parse
       - target: text
@@ -642,6 +651,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: BundlesManager
       - target: OakAppKit
@@ -749,6 +759,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: file
       - target: authorization
@@ -811,6 +822,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/selection"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: command
       - target: OakAppKit
@@ -872,6 +884,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/parse"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: selection
       - target: text
@@ -922,6 +935,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: settings
       - target: cf
@@ -1002,6 +1016,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/xdiff"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: scm
       - target: text
@@ -1066,6 +1081,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: theme
       - target: bundles
@@ -1114,6 +1130,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: SoftwareUpdate
       - target: OakAppKit
@@ -1257,6 +1274,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/OakFilterList $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/HTMLOutputWindow $(SRCROOT)/Xcode/include/undo"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: document
       - target: BundlesManager
@@ -1355,6 +1373,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/undo $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/OakFilterList $(SRCROOT)/Xcode/include/HTMLOutputWindow"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: FileBrowser
       - target: MenuBuilder
@@ -1457,6 +1476,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/OakFilterList $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/HTMLOutputWindow $(SRCROOT)/Xcode/include/undo"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: HTMLOutput
       - target: OakAppKit
@@ -1565,6 +1585,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/selection"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: editor
       - target: buffer
@@ -1631,6 +1652,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/theme"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: layout
       - target: OakFoundation
@@ -1766,6 +1788,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/network $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/OakSystem"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: network
       - target: text
@@ -1820,6 +1843,7 @@ targets:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
         INFOPLIST_FILE: "Applications/TextMate/Info.plist"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/HTMLOutputWindow $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/undo $(SRCROOT)/Xcode/include/OakFilterList $(SRCROOT)/Xcode/include/CommitWindow $(SRCROOT)/Xcode/include/CrashReporter $(SRCROOT)/Xcode/include/DocumentWindow $(SRCROOT)/Xcode/include/kvdb"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     entitlements:
       path: "Xcode/generated/TextMate.entitlements"
       properties:
@@ -1994,6 +2018,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/OakSystem"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: authorization
       - target: io
@@ -2022,6 +2047,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/OakSystem"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: authorization
       - target: io
@@ -2050,6 +2076,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: settings
       - target: cf
@@ -2169,6 +2196,7 @@ targets:
         WRAPPER_EXTENSION: qlgenerator
         INFOPLIST_FILE: "Applications/QuickLookGenerator/Info.plist"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     postBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/assemble_resources.sh\" TextMateQL"
         name: "Assemble resources (TextMateQL)"
