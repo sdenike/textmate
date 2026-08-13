@@ -2,6 +2,27 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.8)
+
+The app no longer needs anything installed to build it.
+
+### Removed
+
+* The `ragel` build tool. The one parser that needed it — for the classic
+  ASCII property-list format used by bundles, themes, and settings — is now
+  plain, readable C++. It was checked against the old parser byte-for-byte on
+  ten real files, including three themes, five bundle manifests, a grammar, and
+  a preferences file with regular-expression scope selectors.
+* A dead networking layer, 1236 lines of it, left over from before software
+  updates moved to the system's own networking. Nothing used it. Removing it
+  also drops libcurl from the app.
+
+### Build
+
+Building TextMate now requires only Xcode. No Homebrew packages, no build
+tools, no external headers. Mercurial and Subversion are still installed in
+continuous integration, but only as fixtures for the version-control tests.
+
 ## 2026-08-13 (v3.0.0-revived.7)
 
 `ragel` is no longer needed to build. Three of the four remaining build
