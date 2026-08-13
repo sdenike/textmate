@@ -59,10 +59,18 @@ jobs:
             echo "::group::$t"
             xcodebuild -project TextMate.xcodeproj -target "$t" -configuration Release build CODE_SIGNING_ALLOWED=NO
             BIN="$(xcodebuild -project TextMate.xcodeproj -target "$t" -configuration Release -showBuildSettings | awk -F' = ' '/ BUILT_PRODUCTS_DIR/{print $2; exit}')/$t"
-            # --no-parallel: some .mm runners call Cocoa APIs that assert NSThread.isMainThread;
-            # ninja's RunTest rule forced this for every .mm runner. Forcing it for every
-            # runner, not just .mm ones, is always safe and matches bin/build's own test path.
-            "$BIN" --no-parallel || { echo "FAILED: $t"; FAIL=1; }
+            # --no-parallel only for the frameworks whose tests are .mm and call Cocoa APIs
+            # that assert NSThread.isMainThread; ninja's RunTest rule forced this only for
+            # these (gen_test.sh's own comment names them). Forcing it for every runner is NOT
+            # safe: it reliably breaks settings_test's t_track_paths.cc, which needs real
+            # wall-clock time to pass between filesystem operations across concurrently
+            # running tests (found by testing: passes bare/parallel, fails 1/9 forced serial).
+            FLAGS=""
+            case " ${t%_test} " in
+              " buffer "|" document "|" BundlesManager "|" FileBrowser "|" ns "|" encoding "|" SoftwareUpdate ")
+                FLAGS="--no-parallel" ;;
+            esac
+            "$BIN" $FLAGS || { echo "FAILED: $t"; FAIL=1; }
             echo "::endgroup::"
           done
           exit "$FAIL"

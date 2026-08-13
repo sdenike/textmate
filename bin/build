@@ -43,20 +43,27 @@ CONFIGURATION="Release"
 TARGET="${1:-TextMate}"
 
 if [[ "$TARGET" == */test ]]; then
-	NAME="${TARGET%/test}_test"
+	FRAMEWORK="${TARGET%/test}"
+	NAME="${FRAMEWORK}_test"
 	xcodebuild -project "$PROJECT" -target "$NAME" -configuration "$CONFIGURATION" \
 		build CODE_SIGNING_ALLOWED=NO
 	BIN="$(xcodebuild -project "$PROJECT" -target "$NAME" -configuration "$CONFIGURATION" \
 		-showBuildSettings | awk -F' = ' '/ BUILT_PRODUCTS_DIR/{print $2; exit}')/$NAME"
 	# --no-parallel (long form only -- bin/gen_test's getopt string is
-	# "bmpr:vhV", so -P is not actually wired despite its usage text):
-	# some .mm runners call Cocoa APIs that assert NSThread.isMainThread
-	# (e.g. TMFileReference); ninja's RunTest rule forced this for every
-	# .mm runner. Forcing it here for every runner, not just .mm ones, is
-	# always safe (.cc runners have no such requirement) and avoids
-	# duplicating gen_test.sh's own per-framework .cc/.mm classification a
-	# third place.
-	exec "$BIN" --no-parallel
+	# "bmpr:vhV", so -P is not actually wired despite its usage text), but
+	# ONLY for the frameworks whose tests are .mm and call Cocoa APIs that
+	# assert NSThread.isMainThread (e.g. TMFileReference); ninja's RunTest
+	# rule forced this only for these (gen_test.sh's own comment names
+	# them). Forcing it for every runner is NOT safe: it reliably breaks
+	# settings_test's t_track_paths.cc, which needs real wall-clock time to
+	# pass between filesystem operations across concurrently running tests
+	# (found by testing: passes bare/parallel, fails 1/9 under forced
+	# --no-parallel).
+	case " $FRAMEWORK " in
+		" buffer "|" document "|" BundlesManager "|" FileBrowser "|" ns "|" encoding "|" SoftwareUpdate ")
+			exec "$BIN" --no-parallel ;;
+	esac
+	exec "$BIN"
 elif [ "$TARGET" = "TextMate" ]; then
 	exec xcodebuild -project "$PROJECT" -scheme TextMate -configuration "$CONFIGURATION" build
 else

@@ -4,6 +4,57 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Task 8 verification: fixed a real regression from the previous commit's --no-parallel fix
+
+**What:** Running all 26 test targets end to end (the actual parity-document
+verification, not just spot checks) turned up a genuine regression from the
+"force --no-parallel for every runner" fix two commits ago: `settings_test`
+went from PASS (9 tests, matching the parity doc) to **1 of 9 failing**
+under forced serial execution, consistently reproducible. Root cause:
+`Frameworks/settings/tests/t_track_paths.cc`'s `test_track_file` depends on
+real wall-clock time passing between filesystem operations
+(`usleep(100000)` between writes and its change-tracker assertions) --
+under serial execution with nothing else contending for the CPU, that
+still wasn't enough elapsed time; under parallel (default), it reliably
+was. Confirmed directly: bare invocation (parallel, default) → silent
+pass; `--no-parallel` → same 1/9 failure every time, 3 runs. `settings` is
+a `.cc`-only framework -- ninja never forced `--no-parallel` for it either,
+only for the seven frameworks with `.mm` test sources (`gen_test.sh`'s own
+comment names them: buffer, document, BundlesManager, FileBrowser, ns,
+encoding, SoftwareUpdate). "Forcing it universally is always safe" was
+wrong -- reverted to matching ninja exactly: `bin/build` and
+`build-and-test.yml` now pass `--no-parallel` only for those seven,
+everything else runs bare. Re-ran all 26 targets after the fix: **26/26
+now match `docs/benchmarks/2026-08-12-ninja-parity.md`'s Xcode section
+exactly** -- 19 PASS + `scm` FAIL (hg/svn) among the 20 CI-included, and
+buffer FAIL/cf CRASH/layout+command+editor PASS/file FAIL among the six
+CI-excluded, byte-identical failure messages where applicable (spot-checked
+scm, buffer, cf, file logs against the parity doc's exact text).
+
+Also ran a genuine clean-state verification, not just a same-checkout
+rebuild: `git clone --recursive` this branch into `/tmp`, moved
+`~/build/textmate-revived/xcode` aside so the shared, xcconfig-pinned
+output directory couldn't mask staleness, and built from there --
+`BUILD SUCCEEDED`, `lipo -archs` reports `arm64` only, `codesign --verify
+--deep --strict` passes. The 22 `grep`-matched "error:"/"FAILED" hits in
+that build's full log are all pre-existing `-Wdeprecated-declarations`
+warnings whose message text happens to contain an Objective-C selector
+fragment like `...error:` -- not real failures.
+
+**Why:** A parity claim is only real once actually measured against all 26
+targets, not assumed from 25 matching and one "probably fine." The two
+prior commits' `--no-parallel` reasoning was plausible but untested against
+the specific test it was about to break; running it surfaced that
+immediately.
+
+### If interrupted here
+
+All of Task 8's required work and this verification fix are committed.
+Remaining before reporting done: confirm `git ls-files '*.rave'` is empty
+and `configure`/`bin/rave` are gone (already true, just needs a final
+one-line check), confirm the Intel grep is still clean, and write the
+final summary. Nothing pushed.
+
 ## 2026-08-13 — Task 8 verification: fixed a clean-clone build failure (pre-existing, Task 6/7)
 
 **What:** Verifying item 1 of Task 8's own bar ("`xcodebuild` succeeds from a
