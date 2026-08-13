@@ -24,6 +24,7 @@
 require 'optparse'
 require 'shellwords'
 require 'fileutils'
+require 'pathname'
 # Deliberately NOT `require 'yaml'`: psych is a C extension, and under a
 # leaked rbenv/chruby GEM_HOME/GEM_PATH (see CLAUDE.md's bin/build note)
 # system Ruby 2.6 dlopens a psych built for a different Ruby and dies with
@@ -250,33 +251,67 @@ end
 
 # ---------------------------------------------------------------------------
 # --emit-header-farm: a committed symlink farm so any Xcode target can see a
-# framework's headers as <name>/<header>.h without a copy step.
+# framework's (or vendor target's) headers as <name>/<header>.h without a
+# copy step.
 #
 # rave's ExportHeader rule (docs/benchmarks/2026-08-12-header-strategy.md)
 # does this with a real build rule -- cp Frameworks/<n>/src/x.h to
-# _Include/<n>/<n>/x.h -- so the header exists before anything compiles
-# against it. The farm needs no such step: Xcode/include/<n>/<n> is a
-# *relative* symlink straight at the tracked Frameworks/<n>/src, so it's
-# valid the moment it's checked out. Walking Frameworks/*/ (the same set
-# --inventory walks) means the farm can't drift as frameworks are added or
-# removed -- rerun this instead of hand-editing symlinks.
+# _Include/<n>/<n>/x.h, ONE FILE AT A TIME, from the target's `headers` glob
+# (docs/benchmarks/2026-08-12-header-strategy.md's ExportHeader section, and
+# bin/rave:820 `if headers = target[:headers]`). That glob is often a
+# NARROWER list than "every .h in src/" -- e.g. `Frameworks/settings/src/`
+# has 4 headers but `settings`' `headers` directive names only 2
+# (settings.h, keys.h; parser.h and track_paths.h are private). The original
+# Task 4 farm symlinked the whole `src` DIRECTORY per framework, which is
+# MORE permissive than rave: every framework's private headers become
+# reachable by any consumer, silently destroying the same kind of
+# compiler-enforced isolation the per-target HEADER_SEARCH_PATHS design
+# (Base.xcconfig) exists to preserve. See
+# docs/benchmarks/2026-08-12-header-strategy.md's "Fidelity: declared
+# headers vs. whole src/" section for the decision. Fixed here: one relative
+# symlink per DECLARED header (via each target's own `headers` glob,
+# resolved through the same parser --inventory/--emit-yaml use), landing at
+# Xcode/include/<name>/<name>/<basename>.h -- matching ExportHeader's output
+# path and its file-at-a-time granularity, just via symlinks instead of a
+# build rule (valid the moment the tree is checked out, no build step
+# needed). Covers both Frameworks/*/ and vendor/*/ (kvdb/Onigmo/xdiff also
+# export headers, e.g. `<Onigmo/oniguruma.h>` from regexp's sources) -- the
+# same universe --emit-yaml can target. Rerun this instead of hand-editing
+# symlinks; a target's stale/removed headers are pruned automatically.
 def run_header_farm(io)
-  root  = 'Xcode/include'
-  names = Dir.glob('Frameworks/*/').map { |d| File.basename(d) }
-              .select { |n| Dir.exist?("Frameworks/#{n}/src") }.sort
+  root    = 'Xcode/include'
+  by_name = all_targets_by_name
+  targets = by_name.values.select { |t| t.file.start_with?('Frameworks/', 'vendor/') }
+                    .sort_by(&:name)
 
-  names.each do |name|
-    dir    = File.join(root, name)
-    link   = File.join(dir, name)
-    target = File.join('..', '..', '..', 'Frameworks', name, 'src')
+  total = 0
+  targets.each do |target|
+    dir = File.join(root, target.name, target.name)
 
+    # Migration guard: Task 4's farm made `dir` itself a symlink straight at
+    # Frameworks/<name>/src. If left in place, `mkdir_p` treats an existing
+    # symlink-to-a-directory as "already exists" and skips creating a real
+    # directory there, so the pruning loop below would resolve THROUGH the
+    # old symlink and start deleting real files under Frameworks/<name>/src.
+    # Unlink it first so `dir` becomes a real, empty directory this run owns.
+    FileUtils.rm_f(dir) if File.symlink?(dir)
     FileUtils.mkdir_p(dir)
-    next if File.symlink?(link) && File.readlink(link) == target
-    FileUtils.rm_f(link)
-    File.symlink(target, link)
+
+    files = target.lists['headers'].flat_map { |g| Dir.glob(g) }.sort.uniq
+    keep  = files.map { |f| File.basename(f) }
+    Dir.children(dir).each { |entry| FileUtils.rm_f(File.join(dir, entry)) unless keep.include?(entry) }
+
+    files.each do |f|
+      link        = File.join(dir, File.basename(f))
+      relative_to = Pathname.new(f).relative_path_from(Pathname.new(dir)).to_s
+      next if File.symlink?(link) && File.readlink(link) == relative_to
+      FileUtils.rm_f(link)
+      File.symlink(relative_to, link)
+      total += 1
+    end
   end
 
-  io.puts "rave2yaml: wrote #{names.length} symlinks under #{root}/"
+  io.puts "rave2yaml: wrote #{total} header symlinks across #{targets.length} targets under #{root}/"
 end
 
 # ---------------------------------------------------------------------------
@@ -295,12 +330,54 @@ end
 #
 # Deliberately narrow, same fail-loud stance as --inventory (see file
 # header): any target in the closure that isn't `framework` kind, that
-# lives under vendor/ (see the vendor check in checked_target), or that
-# uses a directive this tool doesn't translate yet (require_headers,
-# cxx_tests), raises rather than being silently dropped or guessed at. Task
-# 5/6 extend this when they actually need those cases; this tool won't
-# pretend to already handle them.
-UNTRANSLATED_DIRECTIVES = %w[require_headers cxx_tests].freeze
+# lives under vendor/ without a VENDOR_EXTRA entry (see checked_target), or
+# that uses a directive this tool doesn't translate, raises rather than
+# being silently dropped or guessed at. Empty now -- require_headers
+# (transitive_header_deps) and cxx_tests (the skip-comment in
+# emit_library_target) are both handled as of Task 5 -- but kept as a named,
+# checked constant rather than deleted so a future directive this tree
+# starts using lands here first, not silently.
+UNTRANSLATED_DIRECTIVES = %w[].freeze
+
+# vendor/*/default.rave (kvdb, Onigmo, xdiff) diverges from the
+# Frameworks/<name>/src/ convention this tool otherwise assumes: explicit,
+# non-src/ source and header paths, and a per-target `add FLAGS`/`add
+# C_FLAGS` whose CONTENT this parser's INERT_DIRECTIVES set recognises the
+# line but doesn't record (see INERT_DIRECTIVES above -- `add` is variable
+# plumbing, never needed until now). Read by hand, once, straight out of
+# each vendor target's own default.rave rather than taught to the parser
+# generically, since there are exactly three and each is a one-off shape:
+#
+#   vendor/kvdb/default.rave    -- no `add` lines at all.
+#   vendor/Onigmo/default.rave  -- add FLAGS   "-I${dir} -I${dir}/vendor"
+#                                   add C_FLAGS "-Wno-incompatible-pointer-types -Wno-char-subscripts"
+#   vendor/xdiff/default.rave   -- add FLAGS   "-I${dir}/src"
+#                                   add C_FLAGS "-Wno-sign-compare -Wno-shorten-64-to-32 -Wno-implicit-int-conversion"
+#
+# `add FLAGS "-I..."` is target-scoped in rave (`add` sets a variable on
+# that target only; bin/rave:283-287), so these paths apply ONLY to the
+# vendor target's own compile, never propagated to consumers (regexp,
+# scm) -- consumers instead reach the vendor target's exported headers via
+# the ordinary HEADER_SEARCH_PATHS/farm mechanism like any other `require`.
+# `add C_FLAGS` maps to Xcode's OTHER_CFLAGS: both Onigmo and xdiff compile
+# only `.c` (bin/rave:573-576 keys C-only flags off `.c`'s own C_FLAGS
+# variable, never `.m`'s OBJC_FLAGS), so a target-scoped OTHER_CFLAGS can't
+# leak into any other language's compile within that same target.
+#
+# A vendor target missing here raises in checked_target instead of being
+# guessed at -- preserves the fail-loud guard's spirit (04ac5128) for any
+# future vendor addition this table hasn't been taught about yet.
+VENDOR_EXTRA = {
+  'kvdb'   => { search_paths: [], other_cflags: nil },
+  'Onigmo' => {
+    search_paths: %w[$(SRCROOT)/vendor/Onigmo $(SRCROOT)/vendor/Onigmo/vendor],
+    other_cflags: '-Wno-incompatible-pointer-types -Wno-char-subscripts',
+  },
+  'xdiff' => {
+    search_paths: %w[$(SRCROOT)/vendor/xdiff/src],
+    other_cflags: '-Wno-sign-compare -Wno-shorten-64-to-32 -Wno-implicit-int-conversion',
+  },
+}.freeze
 
 def all_targets_by_name
   main_files   = Dir.glob('{Frameworks,Applications}/*/default.rave').sort
@@ -321,18 +398,17 @@ def checked_target(name, by_name)
   target = by_name.fetch(name) { raise RaveError, "--emit-yaml: unknown target '#{name}'" }
   # vendor/*/default.rave targets (kvdb, Onigmo, xdiff) declare no
   # `executable`, so kind_of returns 'framework' and they'd otherwise sail
-  # past the kind check below -- the exact silent-gap the task-4 report
-  # flagged: kvdb would emit a library.static target whose
-  # `sources: Frameworks/kvdb/src` doesn't exist, quietly wrong rather than
-  # an error. Caught here, before that check runs, so the reason reported
-  # is about vendor divergence, not a bogus 'kind' mismatch.
-  if target.vendor
-    raise RaveError, "--emit-yaml: #{name}: vendor target (#{target.file}:#{target.line}) is " \
-                      "not yet translated -- vendor/*/default.rave diverges from the " \
-                      "Frameworks/<name>/src/ convention this tool assumes: explicit 'headers' " \
-                      "paths instead of an implicit src/*.h export, per-target 'add FLAGS' " \
-                      "include flags frameworks never use, brace-expansion source globs, and no " \
-                      "src/ convention for source paths"
+  # past the kind check below without the divergent bits (explicit
+  # sources/headers paths, add-FLAGS) ever being accounted for -- the exact
+  # silent-gap the task-4 report flagged. Caught here: any vendor target
+  # without a VENDOR_EXTRA entry raises before the kind check runs, so the
+  # reason reported is about vendor divergence, not a bogus kind mismatch.
+  if target.vendor && !VENDOR_EXTRA.key?(name)
+    raise RaveError, "--emit-yaml: #{name}: vendor target (#{target.file}:#{target.line}) has no " \
+                      "VENDOR_EXTRA entry -- vendor/*/default.rave targets carry per-target 'add " \
+                      "FLAGS'/'add C_FLAGS' content this parser doesn't record generically (see " \
+                      "the comment above VENDOR_EXTRA), so each one is translated by hand. Add " \
+                      "#{name} to VENDOR_EXTRA once its .rave file's exact shape has been read."
   end
   unless kind_of(target) == 'framework'
     raise RaveError, "--emit-yaml: #{name}: kind '#{kind_of(target)}' is not yet " \
@@ -346,14 +422,62 @@ def checked_target(name, by_name)
 end
 
 # Every name transitively reachable from `name` via `require`, NOT
-# including `name` itself. Validates every target it walks through (via
+# including `name` itself. This is the LINK closure: matches bin/rave's
+# executable()/test-link steps (bin/rave:901, :1418), which call
+# required_targets WITHOUT include_weak, so a `require_headers` edge never
+# appears here. Validates every target it walks through (via
 # checked_target), so a bad target fails loudly instead of being silently
 # skipped.
-def transitive_requires(name, by_name, seen = {})
+#
+# `root:` guards against a real cycle in this tree's require graph (plist
+# require io, io require ns, ns require plist) feeding the STARTING name
+# back into its own closure: without it, `transitive_requires('plist', ...)`
+# would put 'plist' in its own `seen` (the `next if seen.key?(dep)` guard
+# only de-duplicates repeats, it doesn't know 'plist' was the root), and a
+# caller doing `deps.each { |d| puts "- target: #{d}" }` right after an
+# unconditional `- target: #{name}` line would then emit `plist` as its own
+# dependency twice. `root:` defaults to `name` on the outer call and is
+# threaded unchanged through every recursive call, so the one name that
+# must never appear in the result is fixed for the whole walk regardless of
+# how many cycles route back to it.
+def transitive_requires(name, by_name, seen = {}, root: name)
   checked_target(name, by_name).lists['require'].each do |dep|
-    next if seen.key?(dep)
+    next if dep == root || seen.key?(dep)
     seen[dep] = true
-    transitive_requires(dep, by_name, seen)
+    transitive_requires(dep, by_name, seen, root: root)
+  end
+  seen
+end
+
+# Every name transitively reachable from `name` via `require` OR
+# `require_headers`, NOT including `name` itself. This is the COMPILE
+# closure: matches bin/rave's required_targets(..., include_weak: true)
+# (bin/rave:786-806), used to build a target's own HEADER_SEARCH_PATHS
+# (objects(), bin/rave:853) and a test runner's (bin/rave:1409).
+# require_headers is a WEAK, header-only edge -- add the dependency's farm
+# directory to HEADER_SEARCH_PATHS, never a `dependencies:` link entry --
+# but bin/rave keeps following BOTH require and require_headers at every
+# node the walk discovers, not just at the start (`required_target[:require]`
+# and `required_target[:require_headers]` are both re-queued unconditionally
+# once include_weak is true), so this closure is always a superset of
+# transitive_requires's. The three real users: OakDebug require_headers
+# text, Preferences require_headers OakTabBarView, TMFileReference
+# require_headers scm (which itself pulls in scm's own `require text cf io
+# settings regexp xdiff`, and regexp's `require Onigmo text cf`, all
+# transitively, header-only). CommitWindowTool's `require_headers
+# CommitWindow` is NOT this kind of case: CommitWindowTool is a `tool`
+# (declares `executable`), not a `framework`, so checked_target rejects it
+# and it never appears as a `name` or `dep` here -- nothing `require`s a
+# tool. It is a real no-op for --emit-yaml's framework-only graph.
+# `root:` guards the same require-graph cycle transitive_requires does (see
+# its comment) -- it reaches transitive_header_deps too, since every
+# require edge is also a header edge.
+def transitive_header_deps(name, by_name, seen = {}, root: name)
+  target = checked_target(name, by_name)
+  (target.lists['require'] + target.lists['require_headers']).each do |dep|
+    next if dep == root || seen.key?(dep)
+    seen[dep] = true
+    transitive_header_deps(dep, by_name, seen, root: root)
   end
   seen
 end
@@ -367,19 +491,243 @@ def yq(value)
   "\"#{escaped}\""
 end
 
-def emit_library_target(io, name, deps)
+PRELUDE_FOR_EXT = { '.c' => 'prelude.c', '.m' => 'prelude.m', '.cc' => 'prelude.cc', '.mm' => 'prelude.mm' }.freeze
+
+# Resolves a target's raw (dir-joined) glob patterns to a sorted, deduped
+# file list -- the same `Dir.glob` bin/rave itself uses (Parser#expand_globs),
+# so this agrees with what rave would actually compile/export.
+def resolved(globs)
+  globs.flat_map { |g| Dir.glob(g) }.sort.uniq
+end
+
+# Prints one target's `sources:` block from an explicit, already-resolved,
+# non-.rl file list, and returns the GCC_PREFIX_HEADER value its `settings:`
+# should use -- or nil, meaning the caller must NOT emit a GCC_PREFIX_HEADER
+# key at all (see the mixed case below).
+#
+# ALWAYS an explicit per-file list, never a directory `path:` reference --
+# found by a real Task 5 build failure, not a style preference.
+# Frameworks/FileBrowser/src/drivers is a pre-existing symlink to
+# Frameworks/scm/src/drivers (predates this migration); rave's own
+# `sources src/*.mm src/OFB/*.mm` glob never traverses into it, so rave
+# never compiles anything through it, but XcodeGen's directory `path:`
+# entries recurse through the whole tree INCLUDING symlinked
+# subdirectories, silently pulling scm's own driver sources into
+# FileBrowser too (manifested first as a spurious "prelude.mm required by
+# .../drivers/api.cc" PCH request, since api.cc is plain C++ inside an
+# otherwise all-.mm target). An explicit file list built from the same
+# resolved `sources` glob rave itself uses can't over-include this way --
+# whatever rave would compile is exactly and only what Xcode compiles.
+# This also makes the separate headerVisibility workaround this comment
+# used to describe unnecessary: with only .cc/.m/.mm/.c files ever listed
+# (never a directory that could also contain .h files), Xcode's
+# Headers-phase public-copy step -- the one that shadowed Apple's
+# Network.framework with Frameworks/network's own headers, see the
+# 04ac5128-era finding -- has nothing to act on in the first place.
+#
+# Homogeneous (.cc-only, .mm-only, .m-only, or .c-only -- the only shapes
+# 39 of the 46 frameworks and all 3 vendor targets have): one prelude via
+# the ordinary GCC_PREFIX_HEADER + GCC_PRECOMPILE_PREFIX_HEADER=YES
+# (Base.xcconfig) mechanism, matching rave's own Compiler.transform choice
+# (bin/rave:596) since every compiled file shares the same language.
+#
+# Mixed .cc + .mm (BundleEditor, OakDebug, command, document, io, plist,
+# theme -- confirmed the only mixed combination in this tree): rave compiles
+# each file with ITS OWN matching prelude (bin/rave:596,
+# `prelude.find { |file| File.extname(file) == @canonical_ext }`), but
+# Xcode's GCC_PREFIX_HEADER is one value per TARGET, not per file, and a
+# single prelude never works for both at once -- verified by direct clang
+# invocation (see docs/benchmarks/2026-08-12-header-strategy.md): prelude.mm
+# (has Cocoa) fails `-x c++` outright with real Objective-C parse errors
+# from inside Foundation's own headers, since plain C++ mode can't parse
+# `@interface` etc; prelude.cc (no Cocoa) compiles under `-x objective-c++`
+# but supplies nothing Cocoa, so .mm files relying on the prefix header for
+# their Cocoa types (e.g. Frameworks/OakDebug/src/OakAssert.mm's
+# `@interface ... : NSObject` with no Cocoa import of its own) fail on
+# "undeclared identifier 'NSObject'".
+#
+# First fix attempt -- keep GCC_PREFIX_HEADER=prelude.cc at the target level
+# (automatic PCH) and layer a second, forced `-include prelude.mm` onto just
+# the .mm files via `compilerFlags:` -- looked right in isolation but FAILED
+# a real build (Frameworks/theme): clang only honours the PRECOMPILED (.gch)
+# form of the FIRST `-include` on a command line. Xcode still appends its
+# own automatic `-include` for GCC_PREFIX_HEADER after the compilerFlags one,
+# so it lands SECOND and clang falls back to a literal textual include of
+# that path -- but the path Xcode generates there is its internal
+# SharedPrecompiledHeaders cache location, not the real source file, so it
+# doesn't exist as plain text: "clang: warning: precompiled header
+# '.../prelude.cc.gch' was ignored because '-include .../prelude.cc' is not
+# first '-include'" immediately followed by "fatal error: '.../prelude.cc'
+# file not found". No ordering of two `-include`s where one is automatic
+# avoids this.
+#
+# Actual fix: for a mixed target, GCC_PREFIX_HEADER is left UNSET (this
+# method returns nil) so Xcode never generates its own automatic -include at
+# all, and BOTH sources: entries force their own prelude explicitly via
+# `compilerFlags:` instead -- one `-include` per file, always textual (no
+# precompilation, so a little slower, but correct), always the right
+# language. Verified end to end in a scratch XcodeGen project before
+# reapplying here: two source groups, each with its own forced `-include`
+# and no target-level GCC_PREFIX_HEADER at all, both compiled with the
+# correct macro visible and neither warning/erroring.
+def choose_prefix_header(exts, context)
+  case exts
+  when [], ['.cc'], ['.mm'], ['.m'], ['.c']
+    "$(SRCROOT)/Shared/PCH/#{PRELUDE_FOR_EXT.fetch(exts.first, 'prelude.cc')}"
+  when ['.cc', '.mm']
+    nil # mixed: no target-level prefix header; both sources: groups force their own via compilerFlags
+  else
+    raise RaveError, "--emit-yaml: #{context}: source extensions #{exts.inspect} have no prelude " \
+                      'mapping (only .c/.m/.cc/.mm, or mixed .cc+.mm, are handled)'
+  end
+end
+
+# One `- path:` entry per file, in `files` order (caller sorts). Mixed
+# .cc+.mm splits into two groups purely by partitioning the already-resolved
+# file list (no XcodeGen includes:/excludes: glob needed, since there's no
+# directory entry for a glob to filter in the first place), each forced onto
+# its own prelude via `compilerFlags:` -- see choose_prefix_header's comment
+# for why this must be a plain forced -include rather than the automatic
+# GCC_PREFIX_HEADER mechanism.
+def emit_source_file_group(io, files, compiler_flags: nil)
+  files.each do |f|
+    io.puts "      - path: #{yq(f)}"
+    io.puts "        compilerFlags: #{yq(compiler_flags)}" if compiler_flags
+  end
+end
+
+def emit_sources(io, files)
+  exts          = files.map { |f| File.extname(f) }.uniq.sort
+  prefix_header = choose_prefix_header(exts, files.first)
+  io.puts '    sources:'
+  if exts == ['.cc', '.mm']
+    mm_files, cc_files = files.partition { |f| f.end_with?('.mm') }
+    emit_source_file_group(io, cc_files, compiler_flags: '-include $(SRCROOT)/Shared/PCH/prelude.cc')
+    emit_source_file_group(io, mm_files, compiler_flags: '-include $(SRCROOT)/Shared/PCH/prelude.mm')
+  else
+    emit_source_file_group(io, files)
+  end
+  prefix_header
+end
+
+def header_search_paths_line(header_deps, extra_paths: [])
+  paths = ['$(inherited)'] + extra_paths + header_deps.map { |d| "$(SRCROOT)/Xcode/include/#{d}" }
+  "        HEADER_SEARCH_PATHS: #{yq(paths.join(' '))}"
+end
+
+# cxx_tests is glob-expanded by bin/rave (bin/rave:137) exactly like
+# sources/tests/headers, but Task 1 confirmed it has NO consumer anywhere
+# else in bin/rave -- the ninja build never compiles or runs whatever it
+# names. Translating it would ADD tests the current build never ran, a
+# behaviour change, not parity (this task's own brief is explicit on that
+# point). Neither failing loud nor staying silent is right for dead-but-real
+# metadata, so it's a deliberate, visible skip: a comment in the emitted
+# YAML naming the count, plus this same explanation surfaced in the task
+# report. Users in this tree: ns, layout, OakAppKit (all tests/gui_*.mm).
+def emit_cxx_tests_skip_comment(io, target)
+  return if target.lists['cxx_tests'].empty?
+  count = resolved(target.lists['cxx_tests']).length
+  io.puts "  # #{target.name}: cxx_tests declares #{count} file#{count == 1 ? '' : 's'} but bin/rave " \
+          "has no consumer for target[:cxx_tests] outside its own glob-expand step (bin/rave:137) " \
+          "-- the ninja build never compiles or runs them. Deliberately NOT translated: doing so " \
+          "would add tests the current build never ran, a behaviour change, not parity."
+end
+
+def emit_library_target(io, target, header_deps)
+  name = target.name
+
+  emit_cxx_tests_skip_comment(io, target)
+
+  all_sources = resolved(target.lists['sources'])
+  ragel       = all_sources.select { |f| f.end_with?('.rl') }
+  sources     = all_sources - ragel
+
   io.puts "  #{name}:"
   io.puts '    type: library.static'
   io.puts '    platform: macOS'
-  io.puts '    sources:'
-  io.puts "      - path: #{yq("Frameworks/#{name}/src")}"
+  prefix_header = emit_sources(io, sources)
+  # ragel output is always .cc (bin/rave:635-636, `transforms '.rl' =>
+  # '.cc'`), and its sources: entry is its own separate group -- if the
+  # target has no automatic target-level PCH (prefix_header nil: the mixed
+  # .cc+.mm case), this group needs the same explicit forced -include the
+  # other two groups get, or it compiles with no prelude content at all
+  # ("unknown type name 'va_list'" etc -- a real Task 5 build failure, not
+  # a hypothetical). If the target DOES have a target-level PCH (the
+  # homogeneous case -- not exercised by anything in this tree today, since
+  # plist is the only Ragel user and it's mixed), that PCH already covers
+  # this .cc file automatically and adding a second forced -include here
+  # would reproduce the exact "not first -include" break documented above
+  # choose_prefix_header -- so only add it when prefix_header is nil.
+  emit_ragel_generated_sources(io, name, ragel, force_include: prefix_header.nil?)
+  emit_ragel_prebuild_script(io, name, ragel) unless ragel.empty?
+
   io.puts '    settings:'
   io.puts '      base:'
-  io.puts "        GCC_PREFIX_HEADER: #{yq('$(SRCROOT)/Shared/PCH/prelude.cc')}"
-  return if deps.empty?
+  io.puts "        GCC_PREFIX_HEADER: #{yq(prefix_header)}" if prefix_header
+  io.puts header_search_paths_line(header_deps) unless header_deps.empty?
+end
 
-  paths = (['$(inherited)'] + deps.map { |d| "$(SRCROOT)/Xcode/include/#{d}" }).join(' ')
-  io.puts "        HEADER_SEARCH_PATHS: #{yq(paths)}"
+# ascii.rl (Frameworks/plist/src/ascii.rl) is the only Ragel source in the
+# Frameworks/vendor graph (bin/rave's CompileRagel: `transforms '.rl' =>
+# '.cc'`, bin/rave:635-636) -- handled generically here, keyed off the
+# resolved source list's own extension rather than the framework's name, so
+# a second Ragel file anywhere else in the tree would pick this up too
+# instead of needing its own special case.
+def emit_ragel_generated_sources(io, name, ragel_files, force_include:)
+  ragel_files.each do |rl|
+    base = File.basename(rl, '.rl')
+    # bin/rave's CompileRagel adds `-iquote <dirname of the .rl file>`
+    # (bin/rave:643, threaded through Compiler.transform's chaining at
+    # bin/rave:497-509) to whatever compiles ITS OWN output, because the
+    # generated .cc textually carries the original file's `#include "…"`
+    # lines (ascii.rl's `#include "ascii.h"`) unchanged, and a QUOTED
+    # include resolves relative to the compiled file's real on-disk
+    # location -- which for a $(DERIVED_FILE_DIR) output is nowhere near
+    # Frameworks/plist/src, unlike the -iquote'd original directory.
+    # Without this: "fatal error: 'ascii.h' file not found", a real Task 5
+    # build failure, not a hypothetical.
+    flags = ["-iquote $(SRCROOT)/#{File.dirname(rl)}"]
+    flags << '-include $(SRCROOT)/Shared/PCH/prelude.cc' if force_include
+    io.puts "      - path: #{yq("$(DERIVED_FILE_DIR)/_R#{name}_#{base}.cc")}"
+    io.puts '        optional: true'
+    io.puts '        buildPhase: sources'
+    io.puts "        compilerFlags: #{yq(flags.join(' '))}"
+  end
+end
+
+def emit_ragel_prebuild_script(io, name, ragel_files)
+  io.puts '    preBuildScripts:'
+  io.puts "      - script: #{yq(%("$SRCROOT/Xcode/scripts/gen_ragel.sh" #{name}))}"
+  io.puts "        name: #{yq("Run ragel (#{name})")}"
+  io.puts '        outputFiles:'
+  ragel_files.each do |rl|
+    base = File.basename(rl, '.rl')
+    io.puts "          - #{yq("$(DERIVED_FILE_DIR)/_R#{name}_#{base}.cc")}"
+  end
+end
+
+# vendor/*/default.rave targets: emit_sources's explicit-file-list handling
+# (never a directory reference -- Onigmo's own `vendor/` subtree has 60+
+# files far outside its `sources` glob, e.g. tests/tools that a directory
+# reference would over-include) plus the VENDOR_EXTRA table's per-target
+# extra HEADER_SEARCH_PATHS/OTHER_CFLAGS (see the comment above
+# VENDOR_EXTRA). None of the 3 vendor targets mix languages (kvdb is all
+# .m, Onigmo and xdiff are all .c), so emit_sources's homogeneous path
+# always applies here.
+def emit_vendor_target(io, target, header_deps)
+  name  = target.name
+  extra = VENDOR_EXTRA.fetch(name)
+
+  io.puts "  #{name}:"
+  io.puts '    type: library.static'
+  io.puts '    platform: macOS'
+  prefix_header = emit_sources(io, resolved(target.lists['sources']))
+
+  io.puts '    settings:'
+  io.puts '      base:'
+  io.puts "        GCC_PREFIX_HEADER: #{yq(prefix_header)}" if prefix_header
+  io.puts header_search_paths_line(header_deps, extra_paths: extra[:search_paths])
+  io.puts "        OTHER_CFLAGS: #{yq("$(inherited) #{extra[:other_cflags]}")}" if extra[:other_cflags]
 end
 
 def linked_sdks(name, deps, by_name)
@@ -389,10 +737,23 @@ def linked_sdks(name, deps, by_name)
   frameworks.map { |f| "#{f}.framework" } + libraries.map { |l| "lib#{l}.tbd" }
 end
 
-def emit_test_target(io, name, deps, by_name)
-  generated    = "$(DERIVED_FILE_DIR)/_T#{name}.cc"
-  search_paths = ['$(inherited)', "$(SRCROOT)/Xcode/include/#{name}"] +
-                 deps.map { |d| "$(SRCROOT)/Xcode/include/#{d}" }
+# The generated CxxTest runner's own extension must match bin/rave's choice
+# (bin/rave:1392: any .mm/.m test source promotes the WHOLE runner to .mm,
+# since bin/gen_test textually concatenates every t_*.{cc,mm} file's body
+# into one generated translation unit -- ObjC++ is a superset of C++, so one
+# .mm runner safely holds both kinds of test bodies, but a .cc runner cannot
+# hold Objective-C++ syntax). Xcode/scripts/gen_test.sh must compute this
+# exact same extension for its output filename to agree with what this
+# function tells Xcode to expect.
+def test_runner_ext(target)
+  resolved(target.lists['tests']).any? { |f| f.end_with?('.mm', '.m') } ? '.mm' : '.cc'
+end
+
+def emit_test_target(io, target, deps, header_deps, by_name)
+  name = target.name
+  ext  = test_runner_ext(target)
+
+  generated = "$(DERIVED_FILE_DIR)/_T#{name}#{ext}"
 
   io.puts "  #{name}_test:"
   io.puts '    type: tool'
@@ -408,8 +769,8 @@ def emit_test_target(io, name, deps, by_name)
   io.puts "          - #{yq(generated)}"
   io.puts '    settings:'
   io.puts '      base:'
-  io.puts "        GCC_PREFIX_HEADER: #{yq('$(SRCROOT)/Shared/PCH/prelude.cc')}"
-  io.puts "        HEADER_SEARCH_PATHS: #{yq(search_paths.join(' '))}"
+  io.puts "        GCC_PREFIX_HEADER: #{yq("$(SRCROOT)/Shared/PCH/#{PRELUDE_FOR_EXT.fetch(ext)}")}"
+  io.puts header_search_paths_line(header_deps, extra_paths: ["$(SRCROOT)/Xcode/include/#{name}"])
   io.puts '    dependencies:'
   io.puts "      - target: #{name}"
   deps.each { |d| io.puts "      - target: #{d}" }
@@ -419,11 +780,12 @@ end
 def run_emit_yaml(target_names, io)
   by_name = all_targets_by_name
 
-  closure = {} # name => true, every framework needing a library.static block
+  closure = {} # name => true, every framework/vendor target needing a library.static block
   target_names.each do |start|
     checked_target(start, by_name)
     closure[start] = true
     transitive_requires(start, by_name).each_key { |dep| closure[dep] = true }
+    transitive_header_deps(start, by_name).each_key { |dep| closure[dep] = true }
   end
 
   io.puts "# generated by bin/rave2yaml --emit-yaml #{target_names.join(' ')} -- do not hand-edit"
@@ -440,9 +802,11 @@ def run_emit_yaml(target_names, io)
   io.puts '    GCC_C_LANGUAGE_STANDARD: c99'        # base.yml preset ships gnu11; override wins, see Base.xcconfig
   io.puts 'targets:'
   closure.each_key do |name|
-    deps = transitive_requires(name, by_name).keys
-    emit_library_target(io, name, deps)
-    emit_test_target(io, name, deps, by_name) unless by_name[name].lists['tests'].empty?
+    target      = by_name[name]
+    deps        = transitive_requires(name, by_name).keys
+    header_deps = transitive_header_deps(name, by_name).keys
+    target.vendor ? emit_vendor_target(io, target, header_deps) : emit_library_target(io, target, header_deps)
+    emit_test_target(io, target, deps, header_deps, by_name) unless target.lists['tests'].empty?
   end
 end
 

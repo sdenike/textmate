@@ -4,6 +4,85 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 2 Task 5 (1/2): rave2yaml closes all 3 known gaps, decides header-farm fidelity
+
+**What:** Scaled `bin/rave2yaml --emit-yaml` from the Task 4 pilot (`text` alone) to translating
+any of the 46 frameworks + 3 vendor targets, closing the three gaps the task named plus one fidelity
+question:
+
+**1. `require_headers` (weak, header-only dependency).** Added `transitive_header_deps`, mirroring
+`bin/rave`'s `required_targets(..., include_weak: true)` (bin/rave:786-806) exactly: follows BOTH
+`require` and `require_headers` at every node the walk discovers (not just the start), so it's
+always a superset of the hard-only closure. Used for `HEADER_SEARCH_PATHS` on both library and test
+targets; the hard-only closure (`transitive_requires`) stays the one used for `dependencies:`/linked
+frameworks, matching rave's executable()/test-link steps which never pass `include_weak`. Verified
+against a hand-traced BFS for `TMFileReference` (`require_headers scm`, which itself pulls in scm's
+own `require text cf io settings regexp xdiff` and regexp's `require Onigmo text cf`, all
+transitively): 13 entries, matched exactly. `CommitWindowTool`'s `require_headers CommitWindow` is
+NOT a true self-reference (the task's framing) -- it's a second, `tool`-kind target declared in the
+same `Frameworks/CommitWindow/default.rave` file requiring the FIRST target's (a real framework)
+headers for its own `#include <CommitWindow/CommitWindow.h>`. Confirmed a genuine no-op for
+`--emit-yaml`'s framework-only graph: `CommitWindowTool` is never a `framework` kind (fails
+`checked_target`'s kind check) and nothing else `require`s a `tool`, so it never appears as a node
+in any closure.
+
+**2. `cxx_tests` (dead metadata).** Removed from the fail-loud `UNTRANSLATED_DIRECTIVES` list;
+`emit_cxx_tests_skip_comment` now prints a visible YAML comment (naming the file count and citing
+`bin/rave:137`) immediately before any target that declares it (`ns`, `layout`, `OakAppKit`) instead
+of either raising or silently dropping it, per the task's explicit instruction.
+
+**3. Vendor targets (kvdb, Onigmo, xdiff), replacing the `04ac5128` fail-loud guard with real
+translation.** Added `VENDOR_EXTRA`, a 3-entry table hand-built from each vendor `.rave` file's exact
+`add FLAGS`/`add C_FLAGS` content (not parsed generically -- `add` is in `INERT_DIRECTIVES`, plumbing
+this parser was never asked to record until now): Onigmo gets `-Ivendor/Onigmo -Ivendor/Onigmo/vendor`
++ 2 warning suppressions, xdiff gets `-Ivendor/xdiff/src` + 3 suppressions, kvdb gets nothing extra.
+`checked_target` now only raises for a vendor target ABSENT from this table, preserving the guard's
+spirit for anything not yet taught. New `emit_vendor_target` lists each vendor target's resolved
+`sources` as explicit files (never a directory reference -- Onigmo's own `vendor/` subtree has 60+
+files far outside its `sources` glob).
+
+**Fidelity decision: narrowed the header farm to declared headers, not whole `src/`.** The Task 4
+farm symlinked one directory per framework (`Xcode/include/<n>/<n>` -> `Frameworks/<n>/src`),
+exposing every file, including private ones 8+ frameworks' `headers` directives deliberately don't
+export (e.g. `settings` exports only `settings.h keys.h`, not its 4 real headers). That's the same
+class of risk as the flat-`-I` trap Task 3 already rejected. Rewrote `run_header_farm` to symlink one
+file per DECLARED header (resolved via the same `Dir.glob` the parser already uses for the `headers`
+GLOB_DIRECTIVE), landing at the same path rave's own `ExportHeader` would use. 46 frameworks -> 186
+header symlinks; regenerating also now covers `vendor/*/` (3 more: kvdb, Onigmo, xdiff), which the
+Task 4 farm never walked at all. Added a migration guard: the OLD farm's `Xcode/include/<n>/<n>` was
+itself a symlink, and naively `mkdir_p`-ing over an existing symlink-to-a-directory does nothing,
+which would have made the new code's pruning step resolve THROUGH the old symlink and start
+deleting real files under `Frameworks/<n>/src` -- caught by explicitly unlinking a symlink at that
+path before creating a real directory there. Verified: `text` (whose `headers src/*.h` already names
+every header) is unaffected (still 17/17); `regexp` now gets exactly its 7 declared headers, not the
+5 private ones (`private.h`, `parser.h`, `parser_base.h`, `parse_glob.h`, `dependency_graph.h`) the
+old farm also exposed. Full reasoning in `docs/benchmarks/2026-08-12-header-strategy.md`'s new
+addendum.
+
+Also found and fixed a real bug while regenerating: a genuine cycle in the `.rave` require graph
+(covered in the next STREAM entry, since it was found while emitting the full 46+3 set, not this
+narrower gap-closing pass).
+
+`bash tests/rave2yaml_test.sh` updated and still passing (`PASS: 56 targets, all dependencies
+resolve`): the old regression check asserted `--emit-yaml kvdb` RAISES (the gap this task closes);
+replaced with an assertion that it now succeeds, emits explicit `vendor/kvdb/...` source paths, and
+never references a nonexistent `Frameworks/kvdb/src`, plus a static (non-`eval`, no
+arbitrary-code-execution risk) check that the unknown-vendor-target guard and its 3 `VENDOR_EXTRA`
+entries are still present in the source.
+
+**Why:** These are exactly the three gaps and the one fidelity question the task named as blocking
+the full 46-framework graph; closing them here, individually, with dedicated verification per gap,
+is what let the full build (next entry) find real build-recipe issues instead of tripping over
+already-known translation gaps.
+
+### If interrupted here
+
+Committed. `bin/rave2yaml`, `Xcode/include/*` (regenerated farm), `tests/rave2yaml_test.sh`,
+`docs/benchmarks/2026-08-12-header-strategy.md` all reflect this state. The full 46+3 `project.yml`
+emission and the build-recipe fixes it surfaced are the next STREAM entry (same task, committed
+separately since they touch a different, non-overlapping set of files: `Xcode/Base.xcconfig`,
+`Xcode/scripts/*`, `project.yml`).
+
 ## 2026-08-13 — Xcode/scripts/gen_test.sh now collects .mm test sources (CRITICAL, pre-Task-5)
 
 **What:** `gen_test.sh`'s test-source glob only matched `t_*.cc`, silently dropping every `.mm`

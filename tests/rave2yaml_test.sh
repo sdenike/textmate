@@ -29,20 +29,39 @@ for dep in $(awk '/^  requires /{$1=""; print}' /tmp/inv.txt | tr ' ' '\n' | sor
     grep -qx "$dep" <<<"$names" || { echo "FAIL: unresolved dependency: $dep"; exit 1; }
 done
 
-# --emit-yaml on a vendor target must RAISE, not silently emit a project.yml
-# pointing at a nonexistent Frameworks/kvdb/src. Vendor targets (kvdb,
-# Onigmo, xdiff) declare no `executable`, so they pass the 'framework' kind
-# check same as any real framework -- nothing else catches them without an
-# explicit vendor check. Regression test for that gap: a rave2yaml that lost
-# the check would print a project.yml here instead of failing.
-if out=$(./bin/rave2yaml --emit-yaml kvdb 2>&1); then
-    echo "FAIL: --emit-yaml kvdb should have raised (vendor target), produced output instead:"
+# --emit-yaml on a vendor target (kvdb, Onigmo, xdiff) must translate it as
+# a library.static target with an explicit, resolved sources: file list --
+# never a `path: Frameworks/kvdb/src` directory reference (that directory
+# doesn't exist; vendor targets don't follow the Frameworks/<name>/src/
+# convention). Regression test for the gap 04ac5128 originally closed by
+# raising: a rave2yaml that regresses to guessing a Frameworks/<name>/src
+# directory for a vendor target would silently emit a project.yml pointing
+# nowhere real instead of either translating it correctly or failing loud.
+out=$(./bin/rave2yaml --emit-yaml kvdb 2>&1) || {
+    echo "FAIL: --emit-yaml kvdb should now succeed (vendor targets are translated), got:"
     echo "$out"
-    exit 1
-fi
-grep -q 'vendor target' <<<"$out" || {
-    echo "FAIL: --emit-yaml kvdb failed, but not with a vendor-target error: $out"; exit 1; }
-grep -q 'vendor/kvdb/default.rave' <<<"$out" || {
-    echo "FAIL: --emit-yaml kvdb error doesn't name the .rave file: $out"; exit 1; }
+    exit 1; }
+grep -q 'type: library.static' <<<"$out" || {
+    echo "FAIL: --emit-yaml kvdb didn't emit a library.static target: $out"; exit 1; }
+grep -q 'path: "vendor/kvdb/' <<<"$out" || {
+    echo "FAIL: --emit-yaml kvdb didn't emit explicit vendor/kvdb/... source paths: $out"; exit 1; }
+grep -q 'Frameworks/kvdb/src' <<<"$out" && {
+    echo "FAIL: --emit-yaml kvdb referenced a nonexistent Frameworks/kvdb/src: $out"; exit 1; }
+
+# A vendor target with no VENDOR_EXTRA entry must still raise -- the
+# fail-loud guard's spirit (04ac5128) survives for anything the table
+# hasn't been taught, even though the 3 known vendor targets now translate.
+# There's no 4th vendor fixture to exercise this end-to-end (no --root
+# override, and adding a fake vendor/ directory would be its own scope), so
+# this is a static check that checked_target's guard clause and its
+# VENDOR_EXTRA gate are both still present in the source, rather than an
+# eval of the script (arbitrary-code-execution risk for no real benefit
+# here -- the guard's shape is simple enough to assert on textually).
+grep -q "target.vendor && !VENDOR_EXTRA.key?(name)" bin/rave2yaml || {
+    echo "FAIL: checked_target's unknown-vendor-target guard (VENDOR_EXTRA gate) is missing"; exit 1; }
+for v in kvdb Onigmo xdiff; do
+    grep -q "'$v'" <<<"$(sed -n '/^VENDOR_EXTRA = {/,/^}.freeze/p' bin/rave2yaml)" || {
+        echo "FAIL: VENDOR_EXTRA has no entry for '$v'"; exit 1; }
+done
 
 echo "PASS: $found targets, all dependencies resolve"

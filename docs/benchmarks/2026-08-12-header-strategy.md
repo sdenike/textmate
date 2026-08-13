@@ -109,6 +109,55 @@ Both were assumptions in the plan that the build itself contradicted.
    This one is worth watching: code guarded by `@available` or `#if` on older versions may
    behave differently once the deployment target really is 26.0. The test suite is the check.
 
+## Addendum (2026-08-13, Phase 2 Task 5): fidelity — declared headers vs. whole src/
+
+The farm above was originally one directory symlink per framework
+(`Xcode/include/<n>/<n>` -> `Frameworks/<n>/src`), exposing **every** file in
+`src/`. That is more permissive than rave: 8+ frameworks (`settings`,
+`OakFilterList`, `OakTextView`, `Preferences`, `regexp`, `scm`, `parse`,
+`buffer`, …) declare a `headers` list **narrower** than `src/*.h` — e.g.
+`Frameworks/settings/src/` has 4 headers but `settings`' `headers` directive
+names only `settings.h keys.h`; `parser.h` and `track_paths.h` are private.
+rave's `ExportHeader` rule (the top of this doc) copies headers **one at a
+time**, sourced from exactly that `headers` glob (`bin/rave:820,
+if headers = target[:headers]`) — never the whole directory. A directory
+symlink let any consumer reach any framework's private headers, silently
+destroying the same compiler-enforced isolation this whole document is
+about. Same category of risk as the flat-`-I` trap above, just one level
+inside it.
+
+**Decided: narrow the farm to declared headers, not whole src/.** Verified
+this doesn't just move the goalposts — it's the more-correct translation,
+not merely stricter-for-its-own-sake:
+
+- Rejected the "accept the deviation" alternative because the two
+  properties this document exists to protect (compiler-enforced isolation,
+  and no target reaching something rave itself would reject) are exactly
+  what a whole-`src/` farm gives up, and Task 5 was already fixing an
+  analogous whole-project default (Xcode auto-copying every `.h` under a
+  `sources:` directory as an installed **public** header — see
+  `bin/rave2yaml`'s `emit_sources` comment) for the same reason.
+- `headers` is already one of `--emit-yaml`'s GLOB_DIRECTIVES, resolved via
+  the same `Dir.glob` rave's own parser uses (`Parser#expand_globs`), so no
+  new parsing was needed — only `run_header_farm` changed, from one
+  directory symlink per framework to one **file** symlink per declared
+  header, landing at the identical path `ExportHeader` would use
+  (`Xcode/include/<n>/<n>/<basename>.h`). 46 frameworks -> 186 header
+  symlinks (vendor targets included too, now that Task 5 translates them:
+  kvdb 1, Onigmo 1, xdiff 1 — matching each one's own single-file `headers`
+  declaration exactly).
+- Confirmed this doesn't regress anything a framework legitimately needs:
+  rave never grants a framework `-I` to its *own* export directory for its
+  *own* sources (`objects()` calls `required_targets(..., include_weak:
+  true)` **without** `include_self: true` — only test binaries get
+  `include_self: true`, bin/rave:1409), so narrowing what OTHER targets can
+  see through a framework's farm entry never affects that framework's own
+  compile.
+- Regression check: `text`'s farm entry (`headers src/*.h`, i.e. every
+  header) is unchanged in content (still all 17 headers) — narrowing only
+  removes files a target's own `headers` directive never named, which
+  `text` has none of.
+
 ## Reproducing
 
 ```bash
