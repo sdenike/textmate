@@ -4,6 +4,63 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 3 Task 3: `network` deleted (not migrated), libcurl dropped
+
+**What:** The plan's premise ("replace `network` with `URLSession`") was wrong — recon proved
+the migration already happened in the textmatelives merge. `Frameworks/SoftwareUpdate/src/`
+already calls `NSURLSession` directly (`SoftwareUpdate.mm:373`, `OakDownloadManager.mm:78,336`)
+and `Security.framework` for signature verification; `network`'s only consumer was its own
+test (`Frameworks/network/tests/t_download.cc`, hits a live HTTP endpoint). Verified
+independently before touching anything: repo-wide `grep` for `#include`/`#import` of any
+`network/*.h` (`.cc`/`.h`/`.mm`/`.cpp`/`.m`, excluding `vendor/`) found zero hits outside
+`Frameworks/network/` itself. So this was a deletion, not a migration.
+
+`git rm -r Frameworks/network` (20 files: 9 `.cc`, 10 `.h`, 1 test). Also
+`git rm -r Xcode/include/network` (10 files) — the per-header symlinks staging `network`'s
+public headers for Xcode's header search paths, same convention every other framework under
+`Xcode/include/` uses (confirmed by comparing to `OakFoundation`'s identical structure);
+leaving them would have left dangling symlinks pointing at deleted files, not a partial
+deletion worth keeping.
+
+`project.yml`: removed the `network` and `network_test` target blocks, and removed
+`network`'s `- target: network` / `link: true` from the `TextMate` app target's dependencies
+(the "declares network as a dependency of SoftwareUpdate" in the task brief turned out to
+mean the `TextMate` app target itself, which links `SoftwareUpdate` — `project.yml`'s actual
+`SoftwareUpdate`/`SoftwareUpdate_test` target blocks never referenced `network` at all).
+Also dropped both `sdk: libcurl.tbd` lines (`network_test`'s own, and `TextMate`'s): repo-wide
+`grep` for `curl_easy_*`/`CURL*`/`libcurl` outside `vendor/` found hits only in
+`network/src/download.cc` and `download_tbz.cc` — nothing else in the tree calls libcurl.
+This build now links zero libcurl. (This was the system SDK's `libcurl.tbd`, not a Homebrew
+package — `./configure` never checked for `curl` — so it isn't a Homebrew-dependency-count
+change like Task 1/2, just one fewer linked library.)
+
+`xcodegen generate --spec project.yml` regenerated `TextMate.xcodeproj`
+(`grep -c network TextMate.xcodeproj/project.pbxproj` → 0). `./bin/build TextMate` succeeds,
+output still under `~/build/textmate-revived/xcode`.
+
+**Verification against `docs/benchmarks/2026-08-12-ninja-parity.md`:** all 25 remaining
+baseline targets (26 minus `network_test`) rebuilt and rerun individually
+(`./bin/build <name>/test`) match the recorded result exactly — 19/20 CI-included pass, `scm`
+fails identically (`2 of 84`, `hg`/`svn` absent); the six CI-excluded targets reproduce the
+same pattern (`buffer` 3/26 misspellings, `cf` SIGBUS/exit 138, `layout`/`command`/`editor`
+pass, `file` 1/11 iconv TRANSLIT). `SoftwareUpdate_test` passes; `Frameworks/SoftwareUpdate`
+was not touched. Parity doc updated with a dated section explaining the 26→25 count change so
+it reads as an accounted-for deletion, not a lost test.
+
+**Why:** Phase 3 dependency purge. Recon disproved the plan's migration premise before any
+code was written, so the correct action was deletion, matching the fork's stated goal (keep
+the updater, unlike tectiv3, who deleted `network` and the updater together) while still
+removing dead code and its libcurl link.
+
+### If interrupted here
+
+Task 3 complete, uncommitted at time of writing this entry — commit lands in the same commit
+as this entry (`build!:` prefix, breaking: deletes a framework). Branch
+`phase-3/dependency-purge`, unpushed, no PR. Next: Task 4 (`crash`/`CrashReporter` — keep,
+delete, or replace; no crash-reporting endpoint exists since `api.textmate.org` is gone, so an
+enabled reporter posting nowhere is dead weight, but the local assertion helpers may still be
+useful).
+
 ## 2026-08-13 — Phase 3 Task 2 complete: ragel removed
 
 **What:** Commit `848dd1a8` (parser port + verification, see entry below). This wrap-up:

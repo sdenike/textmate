@@ -1752,61 +1752,6 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.m"
         HEADER_SEARCH_PATHS: "$(inherited)"
-  network:
-    type: library.static
-    platform: macOS
-    sources:
-      - path: "Frameworks/network/src/constants.cc"
-      - path: "Frameworks/network/src/download.cc"
-      - path: "Frameworks/network/src/download_tbz.cc"
-      - path: "Frameworks/network/src/filter_check_signature.cc"
-      - path: "Frameworks/network/src/key_chain.cc"
-      - path: "Frameworks/network/src/network.cc"
-      - path: "Frameworks/network/src/proxy.cc"
-      - path: "Frameworks/network/src/tbz.cc"
-      - path: "Frameworks/network/src/user_agent.cc"
-    settings:
-      base:
-        GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
-        HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/OakSystem"
-  network_test:
-    type: tool
-    platform: macOS
-    sources:
-      - path: "$(DERIVED_FILE_DIR)/_Tnetwork.cc"
-        optional: true
-        buildPhase: sources
-    preBuildScripts:
-      - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" network"
-        name: "Generate CxxTest runner (network)"
-        outputFiles:
-          - "$(DERIVED_FILE_DIR)/_Tnetwork.cc"
-    settings:
-      base:
-        GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
-        HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/network $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/OakSystem"
-        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
-    dependencies:
-      - target: network
-      - target: text
-      - target: cf
-      - target: io
-      - target: ns
-      - target: OakFoundation
-      - target: plist
-      - target: regexp
-      - target: Onigmo
-      - target: crash
-      - target: OakSystem
-      - sdk: SystemConfiguration.framework
-      - sdk: Security.framework
-      - sdk: CoreFoundation.framework
-      - sdk: ApplicationServices.framework
-      - sdk: Carbon.framework
-      - sdk: Cocoa.framework
-      - sdk: Foundation.framework
-      - sdk: libcurl.tbd
-      - sdk: libiconv.tbd
   OakDebug:
     type: library.static
     platform: macOS
@@ -1947,8 +1892,6 @@ targets:
         link: true
       - target: kvdb
         link: true
-      - target: network
-        link: true
       - sdk: Cocoa.framework
       - sdk: AddressBook.framework
       - sdk: Foundation.framework
@@ -1966,7 +1909,6 @@ targets:
       - sdk: libsqlite3.tbd
       - sdk: libiconv.tbd
       - sdk: libz.tbd
-      - sdk: libcurl.tbd
       - target: PrivilegedTool
         embed: true
         codeSign: true
