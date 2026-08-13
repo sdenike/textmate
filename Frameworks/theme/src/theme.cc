@@ -112,7 +112,7 @@ std::vector<theme_t::decomposed_style_t> theme_t::global_styles (scope::scope_t 
 		if(item)
 		{
 			res.emplace_back(item->scope_selector());
-			res.back().*(colorKey.field) = read_color(plist::get<std::string>(value));
+			res.back().*(colorKey.field) = read_color(plist::convert<std::string>(value));
 		}
 	}
 
@@ -132,7 +132,7 @@ std::vector<theme_t::decomposed_style_t> theme_t::global_styles (scope::scope_t 
 	if(fontNameItem)
 	{
 		res.emplace_back(fontNameItem->scope_selector());
-		res.back().font_name = plist::get<std::string>(fontNameValue);
+		res.back().font_name = plist::convert<std::string>(fontNameValue);
 	}
 
 	bundles::item_ptr fontSizeItem;
@@ -140,7 +140,7 @@ std::vector<theme_t::decomposed_style_t> theme_t::global_styles (scope::scope_t 
 	if(fontSizeItem)
 	{
 		res.emplace_back(fontSizeItem->scope_selector());
-		res.back().font_size = read_font_size(plist::get<std::string>(fontSizeValue));
+		res.back().font_size = read_font_size(plist::convert<std::string>(fontSizeValue));
 	}
 
 	return res;
@@ -181,7 +181,6 @@ theme_ptr theme_t::copy_with_font_name_and_size (std::string const& fontName, CG
 theme_t::theme_t (bundles::item_ptr const& themeItem, std::string const& fontName, CGFloat fontSize) :_item(themeItem), _font_name(fontName), _font_size(fontSize)
 {
 	_styles = find_shared_styles(themeItem);
-	_cache.set_empty_key(scope::scope_t{});
 }
 
 static CGColorRef OakColorCreateCopySoften (CGColorPtr cgColor, CGFloat factor)
@@ -256,7 +255,7 @@ void theme_t::shared_styles_t::setup_styles ()
 		{
 			for(auto const& it : items)
 			{
-				if(plist::dictionary_t const* styles = boost::get<plist::dictionary_t>(&it))
+				if(plist::dictionary_t const* styles = plist::get<plist::dictionary_t>(&it))
 				{
 					_styles.push_back(parse_styles(*styles));
 					if(!_styles.back().invisibles.is_blank())

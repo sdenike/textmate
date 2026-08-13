@@ -21,10 +21,13 @@ it, `bin/rave2yaml`, was deleted along with the `.rave` files it read.
 
 `xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build` produces
 the app; ⌘B works from inside Xcode too. Dependencies (`boost`, `google-sparsehash`,
-`multimarkdown`, `ragel`) are installed via Homebrew and are not checked automatically the way
+`multimarkdown`) are installed via Homebrew and are not checked automatically the way
 `./configure` used to check them — `Xcode/Base.xcconfig`'s `HEADER_SEARCH_PATHS` hardcodes
 `/opt/homebrew/include`, so a MacPorts prefix does not currently work. `capnp` is **not** a
-dependency — Cap'n Proto was removed by the textmatelives merge.
+dependency — Cap'n Proto was removed by the textmatelives merge. `ragel` is also **not** a
+dependency: `Frameworks/plist/src/ascii.cc` (formerly `ascii.rl`) is a hand-written ASCII plist
+parser, ported from the ragel-generated state machine and verified byte-for-byte against it
+across quoting, escaping, and unterminated-input edge cases before the switch.
 
 The compiler config is C++20 (`CLANG_CXX_LANGUAGE_STANDARD = c++20`), ObjC ARC, deployment target
 macOS 26.0, all set in `Xcode/Base.xcconfig`. Precompiled headers live in

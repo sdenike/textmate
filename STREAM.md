@@ -4,6 +4,462 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 3 Task 4: `CrashReporter` deleted, `crash` kept (Phase 3 complete)
+
+**What:** Investigated both frameworks before touching either. `Frameworks/CrashReporter`
+(342 lines, `CrashReporter.mm`/`.h`) is a static library linked into the `TextMate` app target
+(`project.yml`), but `CrashReporter.sharedInstance`, `applicationDidFinishLaunching:`, and
+`postNewCrashReportsToURLString:` have zero callers anywhere in the tree outside the framework's
+own definition — confirmed by repo-wide grep. So it was already fully dead before this task:
+never instantiated, never wired to the app delegate. Its only two jobs were (1) scanning
+`~/Library/Logs/DiagnosticReports` — which macOS populates on its own regardless of this
+framework — and (2) POSTing gzipped reports to a URL string that would have to be supplied by a
+caller that doesn't exist; `REST_API`/`api.textmate.org` was removed in PR #9 with nothing put
+in its place, so even a wired-up call site would have nowhere to send reports. No signal
+handlers anywhere in it either — it's an uploader, not a crash-catching mechanism.
+
+`Frameworks/crash` (62 lines, `info.cc`/`.h`) is different: `crash_reporter_info_t` is a
+thread-local RAII breadcrumb stack that publishes a description string into
+`__crashreporter_info__`, a symbol macOS's own crash reporter reads via a linker `.desc`
+directive — pure annotation, no signal handling, no change to whether/how the app crashes.
+**Correction to the plan's recon:** the plan's "measured facts" counted 4 external includers
+(all `.cc`); actual count is **12 files, 15 call sites** — the plan's grep only covered `.cc`
+files and missed `.mm` consumers: `Applications/TextMate/src/{main,OakMainMenu,
+TMPlugInController}.mm`, `Frameworks/OakTextView/src/{OakTextView,GutterView}.mm`,
+`Frameworks/OakAppKit/src/{OakAppKit,OakPasteboard}.mm`,
+`Frameworks/DocumentWindow/src/DocumentWindowController.mm`, plus the 4 `.cc` files the plan
+named (`io/src/exec.cc`, `layout/src/{ct,layout}.cc`, `selection/src/selection.cc`). This
+doesn't change the decision — it strengthens it: `crash` is woven through menu key handling,
+text-view selectors, drag & drop, document switching, and plug-in loading, not a narrow corner,
+so deleting it for zero behavioural gain would be real, unjustified churn across 12 files.
+tectiv3's own removal (`025f2ef8`) also left `crash` alone and only deleted `CrashReporter`.
+
+**Decision: delete `CrashReporter`, keep `crash` unchanged.** `git rm -r Frameworks/CrashReporter
+Xcode/include/CrashReporter` (4 files: the `.h`/`.mm` pair, the `bin/symbolicate` dsym-lookup
+script, and the header-staging symlink). `project.yml`: removed the `CrashReporter` target
+block, its `- target: CrashReporter` / `link: true` dependency on the `TextMate` app target, and
+the now-dangling `Xcode/include/CrashReporter` entry from that target's `HEADER_SEARCH_PATHS`.
+Also removed `kUserDefaultsDisableCrashReportingKey` and `kUserDefaultsCrashReportsContactInfoKey`
+from `Frameworks/Preferences/src/Keys.h`/`.mm` (plus their one registration-defaults dictionary
+entry) — both existed solely to configure the now-deleted uploader and had no other reader,
+confirmed by repo-wide grep before removal; same "delete what the removal orphans" precedent as
+Task 3 dropping `libcurl.tbd` once `network` was gone.
+
+`xcodegen generate --spec project.yml` regenerated `TextMate.xcodeproj`
+(`grep -c CrashReporter project.pbxproj` → 0). `./bin/build` succeeds;
+`CFBundleIdentifier`/`CFBundleName` unchanged (`com.macromates.TextMate`/`TextMate`).
+
+**Verification against `docs/benchmarks/2026-08-12-ninja-parity.md`:** all 25 baseline test
+targets rebuilt and rerun individually (`./bin/build <name>/test`) match the recorded result
+exactly — 19 of 20 CI-included pass, `scm` fails identically (`2 of 84`, `hg`/`svn` absent); the
+six CI-excluded targets reproduce the same pattern (`buffer` 3/26 misspellings, `cf` SIGBUS/exit
+138, `layout`/`command`/`editor` pass, `file` 1/11 iconv TRANSLIT). `command_test` briefly showed
+`exit=124` when run inside one 25-target batched loop — the exact same batching artifact
+Task 3's baseline already documented for `command`/`editor`; re-run individually it passed in
+under a second, no hang. Target count stays 25 — `CrashReporter` never had a test target.
+Final repo-wide grep (`grep -rn "crash/\|CrashReporter" --include='*.cc' --include='*.h'
+--include='*.mm' . | grep -v vendor/`) shows only the 12 legitimate `crash/info.h` includes plus
+one self-referential comment in `Frameworks/crash/src/info.cc:4` — zero `CrashReporter` matches.
+
+**Why:** Phase 3 dependency purge, and the last task of the phase. `CrashReporter` was dead
+weight pointed at a dead endpoint — deleting it shrinks the tree with zero behavioural change
+(nothing called it, so nothing now doesn't call it). `crash` earns its keep: it's cheap (62
+lines, no external deps), installs no signal handler, and is genuinely used across the app to
+annotate the crash reports macOS writes anyway.
+
+### If interrupted here
+
+Phase 3 (dependency purge) is functionally complete after this task — all four tasks done:
+boost/sparsehash removed (v3.0.0-revived.6), ragel removed (v3.0.0-revived.7), `network` deleted
+(v3.0.0-revived.8), `CrashReporter` deleted (this task, pending version bump to
+v3.0.0-revived.9). At time of writing, the code commit for this task is about to land
+(`build!:` prefix — deletes a linked framework), followed by a `release:` commit bumping
+`CHANGELOG.md`, then `bin/deploy-local`. Branch `phase-3/dependency-purge`, unpushed, no PR.
+Next: Phase 3 exit criteria review (all four checked in the plan's own terms: zero Homebrew
+deps, `/opt/homebrew/include` gone from `HEADER_SEARCH_PATHS`, no stray `.rl`/`boost`/
+`sparsehash` outside `vendor/`, updater untouched, 25/25 test parity, a versioned/changelogged/
+deployed release) before starting Phase 4.
+
+## 2026-08-13 — Phase 3 Task 3: `network` deleted (not migrated), libcurl dropped
+
+**What:** The plan's premise ("replace `network` with `URLSession`") was wrong — recon proved
+the migration already happened in the textmatelives merge. `Frameworks/SoftwareUpdate/src/`
+already calls `NSURLSession` directly (`SoftwareUpdate.mm:373`, `OakDownloadManager.mm:78,336`)
+and `Security.framework` for signature verification; `network`'s only consumer was its own
+test (`Frameworks/network/tests/t_download.cc`, hits a live HTTP endpoint). Verified
+independently before touching anything: repo-wide `grep` for `#include`/`#import` of any
+`network/*.h` (`.cc`/`.h`/`.mm`/`.cpp`/`.m`, excluding `vendor/`) found zero hits outside
+`Frameworks/network/` itself. So this was a deletion, not a migration.
+
+`git rm -r Frameworks/network` (20 files: 9 `.cc`, 10 `.h`, 1 test). Also
+`git rm -r Xcode/include/network` (10 files) — the per-header symlinks staging `network`'s
+public headers for Xcode's header search paths, same convention every other framework under
+`Xcode/include/` uses (confirmed by comparing to `OakFoundation`'s identical structure);
+leaving them would have left dangling symlinks pointing at deleted files, not a partial
+deletion worth keeping.
+
+`project.yml`: removed the `network` and `network_test` target blocks, and removed
+`network`'s `- target: network` / `link: true` from the `TextMate` app target's dependencies
+(the "declares network as a dependency of SoftwareUpdate" in the task brief turned out to
+mean the `TextMate` app target itself, which links `SoftwareUpdate` — `project.yml`'s actual
+`SoftwareUpdate`/`SoftwareUpdate_test` target blocks never referenced `network` at all).
+Also dropped both `sdk: libcurl.tbd` lines (`network_test`'s own, and `TextMate`'s): repo-wide
+`grep` for `curl_easy_*`/`CURL*`/`libcurl` outside `vendor/` found hits only in
+`network/src/download.cc` and `download_tbz.cc` — nothing else in the tree calls libcurl.
+This build now links zero libcurl. (This was the system SDK's `libcurl.tbd`, not a Homebrew
+package — `./configure` never checked for `curl` — so it isn't a Homebrew-dependency-count
+change like Task 1/2, just one fewer linked library.)
+
+`xcodegen generate --spec project.yml` regenerated `TextMate.xcodeproj`
+(`grep -c network TextMate.xcodeproj/project.pbxproj` → 0). `./bin/build TextMate` succeeds,
+output still under `~/build/textmate-revived/xcode`.
+
+**Verification against `docs/benchmarks/2026-08-12-ninja-parity.md`:** all 25 remaining
+baseline targets (26 minus `network_test`) rebuilt and rerun individually
+(`./bin/build <name>/test`) match the recorded result exactly — 19/20 CI-included pass, `scm`
+fails identically (`2 of 84`, `hg`/`svn` absent); the six CI-excluded targets reproduce the
+same pattern (`buffer` 3/26 misspellings, `cf` SIGBUS/exit 138, `layout`/`command`/`editor`
+pass, `file` 1/11 iconv TRANSLIT). `SoftwareUpdate_test` passes; `Frameworks/SoftwareUpdate`
+was not touched. Parity doc updated with a dated section explaining the 26→25 count change so
+it reads as an accounted-for deletion, not a lost test.
+
+**Why:** Phase 3 dependency purge. Recon disproved the plan's migration premise before any
+code was written, so the correct action was deletion, matching the fork's stated goal (keep
+the updater, unlike tectiv3, who deleted `network` and the updater together) while still
+removing dead code and its libcurl link.
+
+### If interrupted here
+
+Task 3 complete, uncommitted at time of writing this entry — commit lands in the same commit
+as this entry (`build!:` prefix, breaking: deletes a framework). Branch
+`phase-3/dependency-purge`, unpushed, no PR. Next: Task 4 (`crash`/`CrashReporter` — keep,
+delete, or replace; no crash-reporting endpoint exists since `api.textmate.org` is gone, so an
+enabled reporter posting nowhere is dead weight, but the local assertion helpers may still be
+useful).
+
+## 2026-08-13 — Phase 3 Task 2 complete: ragel removed
+
+**What:** Commit `848dd1a8` (parser port + verification, see entry below). This wrap-up:
+trimmed `ragel` from all three CI `brew install` lines (`build-and-test.yml` ×2, kept
+`mercurial subversion` for `scm`'s tests; `release.yml`'s step installed only `ragel`, so
+that step was deleted outright rather than left installing nothing). Updated `CLAUDE.md` and
+`README.md` — neither lists `ragel` as a dependency anymore. `git ls-files '*.rl'` returns
+nothing. Rebuilt (`./bin/build TextMate`, picks up `CHANGELOG.md`'s new top entry
+automatically via `assemble_resources.sh`'s `app_version()`), deployed with
+`bin/deploy-local` (replaced 3.0.0-revived.6 in `/Applications`), confirmed
+`CFBundleIdentifier`/`CFBundleName` unchanged. Released v3.0.0-revived.7.
+
+**Why:** Phase 3 targets zero Homebrew dependencies to build. Three of four are now gone
+(boost, sparsehash, ragel).
+
+### If interrupted here
+
+`/Applications/TextMate.app` is v3.0.0-revived.7. Branch `phase-3/dependency-purge`,
+unpushed, no PR. Next: Task 3 replaces `Frameworks/network` with `URLSession` — enumerate
+what `SoftwareUpdate` actually uses (download, tbz extraction, signature verification,
+keychain), implement on `URLSession`, port `network`'s tests before deleting the framework.
+**Keep the updater** — tectiv3 deleted `network` and the updater together; this fork keeps
+the updater (textmatelives' GitHub-Releases updater, a stated project goal for Phase 5). Then
+Task 4 (`crash`/`CrashReporter` — keep, delete, or replace; note there's no crash-reporting
+endpoint since `api.textmate.org` is gone, so an enabled reporter posting nowhere is dead
+weight, but the local assertion helpers may still be useful).
+
+## 2026-08-13 — Phase 3 Task 2: ragel removed, ASCII plist parser hand-written
+
+**What:** `Frameworks/plist/src/ascii.rl` (191 lines) → `ascii.cc`. Chose option (b), porting
+tectiv3's hand-written parser (`34e166b9`), not (a) committing generated output. Reasoning: the
+actual ragel usage was two small sub-machines — a string tokenizer and a comment/whitespace
+skipper — not a large grammar; the array/dict/int/bool/date logic around them was already
+hand-written C++, untouched by ragel. A hand-written replacement stays reviewable; a committed
+`.cc` from `ragel -o` is an opaque state table forever. Ported by hand rather than copying
+tectiv3's file wholesale: their `ascii.cc` predates this fork's Task 1 (`boost::get` →
+`plist::get`/`plist::convert`), so a literal copy would have reintroduced `boost::get` in
+`parse_key`. Only `parse_ws` and `parse_string` changed; everything else in the file is
+untouched.
+
+`project.yml`'s `plist` target loses the `preBuildScripts` ragel phase and the
+`$(DERIVED_FILE_DIR)/_Rplist_ascii.cc` optional source, gaining a plain `ascii.cc` entry.
+`Xcode/scripts/gen_ragel.sh` deleted (only caller was that phase). `TextMate.xcodeproj`
+regenerated via `xcodegen generate --spec project.yml`.
+
+**Verification, in order of rigor:**
+1. Generated the *actual* ragel output from the current `ascii.rl` (ragel still installed,
+   pre-removal) and diffed a standalone extraction of its `parse_ws`/`parse_string` state
+   machine against the hand-written port across 19 cases: quoting, `\\`/`\"` escapes, escapes
+   TextMate relies on staying literal (`\d`, `\s\t` — regex fragments in grammars/themes must
+   not be unescaped), unterminated strings/comments, bare words, comments. One real divergence
+   found and fixed before porting: an unterminated `/* comment` at EOF left one trailing byte
+   unconsumed in tectiv3's version; ragel consumes to EOF. Fixed with `p = pe` in the fallback
+   branch; re-verified byte-for-byte identical on every case afterward.
+2. `plist/test` (33 tests, the exact count `docs/benchmarks/2026-08-12-ninja-parity.md` and
+   Task 1 both record) passes unchanged — this suite already covers exactly the escape/comment
+   edge cases from step 1.
+3. Real-world round-trip: built a standalone driver linking the actual `libplist.a`/`libtext.a`/
+   etc., loading real XML bundle files via the unmodified `plist::load`, serializing to
+   TextMate's ASCII plist text via the unmodified `to_s()`, then parsing that text back via
+   `parse_ascii` and re-serializing. Ran across 10 real files — 3 themes (Twilight, macOS
+   System Theme, Undead), 5 bundles' `info.plist`, the `Plain text.plist` grammar, and a
+   `.tmPreferences` file with regex scope selectors — against both a build linking the new
+   hand-written `parse_ascii` and one linking the actual ragel-generated object file recompiled
+   from git HEAD's `ascii.rl`. Every file's re-parsed output was byte-identical between old and
+   new parser.
+4. All 26 test targets run individually and compared against
+   `docs/benchmarks/2026-08-12-ninja-parity.md`: 21 pass with exact test counts matching Task
+   1's own more recent tally (authorization 1, bundles 5, BundlesManager 10, document 9,
+   encoding 6, FileBrowser 1, HTMLOutput 1, io 24, network 1, ns 6, parse 4, plist 33, regexp
+   41, scope 13, selection 24, settings 9, SoftwareUpdate 20, text 34, theme 1, layout 9,
+   command 4, editor 9); `scm` fails 2/84 (hg/svn not on this machine, documented), `buffer`
+   fails 3/26 (headless `NSSpellChecker`, documented), `cf` crashes SIGBUS/exit 138
+   (documented), `file` fails 1/11 (iconv TRANSLIT, documented). **26/26 match, zero deltas.**
+   `./bin/build TextMate` succeeds; `CFBundleIdentifier`/`CFBundleName` unchanged.
+
+**Why:** Phase 3 targets zero Homebrew dependencies to build. Three of four are now gone
+(boost, sparsehash, ragel); only `multimarkdown`'s removal was already done pre-Phase-3.
+
+### If interrupted here
+
+Core parser change committed. Still pending for Task 2: `git ls-files '*.rl'` confirmed empty;
+CI's three `brew install` lines still need `ragel` trimmed (`build-and-test.yml` ×2,
+`release.yml` ×1 — the latter installed only ragel, so that whole step should be deleted, not
+edited to install nothing); CLAUDE.md/README.md still describe ragel as a dependency; version
+needs bumping to v3.0.0-revived.7 in `CHANGELOG.md`; then rebuild, `bin/deploy-local`, verify,
+final `release:` commit. After that: Task 3 (replace `network` with `URLSession`, KEEPING the
+updater) and Task 4 (`crash`/`CrashReporter`).
+
+## 2026-08-13 — Phase 3 Task 1: boost and sparsehash removed
+
+**What:** `boost::variant` → `std::variant` (153 call sites), `boost::crc_32_type` → zlib
+`crc32()`, `dense_hash_map` → `std::unordered_map` (1 site). `/opt/homebrew/include` dropped from
+`HEADER_SEARCH_PATHS`. CI's `brew install` trimmed to `ragel mercurial subversion` — boost,
+google-sparsehash, and multimarkdown all removed (multimarkdown was already unused).
+Commits `3bf1efe8`, `e767e4e0`, `2cf30c91`, `3c74199f`. Released v3.0.0-revived.6.
+
+**The CRC equivalence proof mattered more than expected.** `boost::crc_32_type` and zlib's
+`crc32()` both claim "CRC-32", but CRC variants differ in polynomial, initial value, reflection,
+and final XOR — a mismatch would not surface as a compile error or necessarily as a test failure.
+Verified byte-for-byte over empty/ASCII/single-byte/all-256-values/high-bytes-only/8KB-random
+inputs, plus the published check vector `"123456789"` → `0xCBF43926`, which confirms both compute
+the *standard* variant rather than merely agreeing with each other.
+
+It is used for `com.macromates.crc32`, a **persisted xattr** gating code-fold-state restore on
+reopen. A silently different checksum would have discarded fold state on every existing file, with
+nothing failing to report it.
+
+**Two incidental finds:** `any_t` becoming a real `plist` type rather than a boost alias made an
+unqualified `equal()` in `delta.cc` ADL-ambiguous against the now-visible `plist::equal` — fixed by
+qualifying. And `ascii.rl` (ragel source) used `boost::get`, missed by a `.cc/.h/.mm` grep and
+caught by the build.
+
+All 26 test targets match `docs/benchmarks/2026-08-12-ninja-parity.md` with zero deltas.
+
+**Why:** Phase 3 targets zero Homebrew dependencies to build. Two of four are gone.
+
+### If interrupted here
+
+`/Applications/TextMate.app` is v3.0.0-revived.6. Branch `phase-3/dependency-purge`, unpushed, no
+PR. Next: Task 2 removes `ragel` — one file (`Frameworks/plist/src/ascii.rl`, 191 lines), decide
+between committing the generated output or porting tectiv3's hand-written parser (`34e166b9`).
+Then Task 3 (replace `network` with URLSession, KEEPING the updater) and Task 4 (crash/CrashReporter).
+
+
+## 2026-08-13 — Phase 3 Task 1 (4/4) complete: /opt/homebrew/include dropped, full verification
+
+**What:** `Xcode/Base.xcconfig`'s `HEADER_SEARCH_PATHS` loses `/opt/homebrew/include` — the last
+line item existed only to serve `boost` and `sparsehash`, both fully gone as of the previous
+three commits. Re-verified with the path actually removed, not just reasoned about: full
+`./bin/build TextMate` (0 errors, `BUILD SUCCEEDED`) plus all 26 test targets run individually
+and compared against `docs/benchmarks/2026-08-12-ninja-parity.md`'s Xcode column —
+
+19 of 20 CI-included targets pass (authorization 1, bundles 5, BundlesManager 10, document 9,
+encoding 6, FileBrowser 1, HTMLOutput 1, io 24, network 1, ns 6, parse 4, plist 33, regexp 41,
+scope 13, selection 24, settings 9, SoftwareUpdate 20, text 34, theme 1 — all exact test-count
+matches); `scm` fails 2/84 for the same documented `hg`/`svn`-not-on-this-machine reason. Of the
+6 CI-excluded targets: `buffer` fails 3/26 (misspellings, headless `NSSpellChecker`), `file` fails
+1/11 (iconv TRANSLIT), `cf` crashes SIGBUS/exit 138 — all three identical to the baseline; layout
+(9), command (4), editor (9) pass, matching this machine's own more-permissive local results the
+baseline already recorded. **26/26 match, zero deltas.**
+
+`grep -rn "boost/\|sparsehash\|dense_hash_map" --include='*.cc' --include='*.h' --include='*.mm' .
+| grep -v vendor/` returns nothing. App bundle: `CFBundleIdentifier` still `com.macromates.TextMate`,
+`CFBundleName` still `TextMate` (untouched, per constraint), ad-hoc codesign verifies clean,
+Mach-O arm64 only, `otool -L` shows `/usr/lib/libz.1.dylib` correctly linked.
+
+**Why:** Phase 3 Task 1 exit criteria.
+
+### If interrupted here
+
+Task 1 is done and verified end to end, committed as 4 commits on `phase-3/dependency-purge`
+(variant → crc → dense_hash_map+prelude → header path). Not touched, deliberately out of Task 1's
+scope: `.github/workflows/*.yml`'s `brew install boost google-sparsehash ...` lines (still
+harmless no-ops; Task 2 removes `ragel`/`multimarkdown` from the same lines, so one consolidated
+CI cleanup after Task 2 makes more sense than two partial edits) and `Applications/TextMate/about/
+Legal.md`'s boost attribution (a packaging/distribution concern, not a build one). Next: Task 2
+(remove ragel) per the same plan document — decide between committing generated `ascii.cc` vs.
+porting tectiv3's hand-written parser (`34e166b9`), per the plan's own two-option framing.
+
+## 2026-08-13 — Phase 3 Task 1 (3/4): dense_hash_map → unordered_map; prelude.cc finished
+
+**What:** `theme_t`'s per-scope style cache (`Frameworks/theme/src/theme.h`) was the only
+`google::dense_hash_map` in the tree — `std::unordered_map<scope::scope_t, styles_t>` replaces
+it, and the `_cache.set_empty_key(scope::scope_t{})` call in `theme.cc`'s constructor is deleted
+outright (`unordered_map` has no empty-key concept; nothing else used it). `scope::scope_t`
+already had a `std::hash` specialization (`Frameworks/scope/src/scope.h:116`), so no new hasher
+was needed. Checked iteration-order dependence per the task's instruction: `_cache` is only ever
+touched via `find()`/`insert()` (confirmed by grep) — never iterated — so it's a pure
+key→value memoization cache and the swap changes nothing observable.
+
+`Shared/PCH/prelude.cc` now drops all three original includes (`boost/crc.hpp`,
+`boost/variant.hpp`, `sparsehash/dense_hash_map`) and adds `<unordered_map>` — safe here and not
+earlier, since by this commit nothing in the tree references any of the three anymore (variant:
+commit 1; crc: commit 2; dense_hash_map: this commit) and this commit's own `theme.h` change is
+the first thing that actually needs `<unordered_map>`.
+
+**Why:** Phase 3 Task 1.
+
+### If interrupted here
+
+`Xcode/Base.xcconfig` still has `/opt/homebrew/include` on `HEADER_SEARCH_PATHS` — one more
+commit removes it, once the full-tree build + all 26 test targets are re-verified against it
+gone. Next: full `./bin/build`, then each of the 26 test targets individually
+(`./bin/build <name>/test`), compared against `docs/benchmarks/2026-08-12-ninja-parity.md`.
+
+## 2026-08-13 — Phase 3 Task 1 (2/4): boost::crc_32_type → zlib crc32()
+
+**What:** The two call sites (`io::bytes_t::crc32()` in `Frameworks/file/src/bytes.cc`, and four
+inline uses in `Frameworks/document/src/OakDocument.mm` — folded-region xattr, in-flight search
+double-check, and a disk re-read checksum) now call zlib's `crc32()` directly
+(`#include <zlib.h>`, no prelude change — only these two files need it). Streaming accumulation
+(`boost::crc_32_type::process_bytes()` called repeatedly, `.checksum()` read once at the end)
+becomes `crc = ::crc32(crc, bytes, len)` chained across calls, seeded via `::crc32(0, nullptr, 0)`
+— the documented zlib idiom, and algebraically just 0. `Xcode/Base.xcconfig`'s `OTHER_LDFLAGS`
+gains `-lz`, applied to every target (mirroring the existing `-fobjc-link-runtime` precedent and
+its own comment's reasoning: harmless/inert on `library.static` targets, cheaper than hunting down
+every final target whose dependency closure reaches these two translation units).
+
+**Byte-for-byte equivalence proof (required before deleting the boost code, done — verifiable at
+`/tmp/crc_probe/probe.cc`, not part of the repo):** a standalone program linking both
+`boost::crc_32_type` and zlib's `crc32()` against the same inputs — empty string, ASCII text, a
+single byte, all 256 possible byte values, the 0x80-0xFF high-byte-only range, an 8KB
+pseudo-random buffer, and the published CRC-32 check vector `"123456789"` → `0xCBF43926`.
+**All seven matched exactly**, including the standard check vector, confirming both compute the
+same well-known CRC-32 variant rather than merely agreeing with each other by chance.
+
+**What the CRC is actually used for (checked, not assumed):** two real uses. (1)
+`com.macromates.crc32` is written as a **persisted extended attribute** alongside
+`com.macromates.folded` on saved files, and read back on next open to decide whether saved fold
+state still applies to the file's current content (`OakDocument.mm` around line 848) — this is
+exactly the "persisted and keyed on checksum" risk the task called out, since a file saved by an
+older (boost-based) build could be reopened by this one. The equivalence proof directly
+de-risks it: a boost-computed xattr and a zlib-computed fresh checksum agree, so fold-state
+restoration keeps working across the migration. (2) `OakDocumentMatch.checksum` /
+`performReplacements:checksum:` is an in-memory-only same-run guard (computed during a search,
+consumed moments later during "Replace All", never serialized) — no cross-version risk regardless
+of which algorithm computes it, since both sides of that comparison always run under the same
+build.
+
+**Why:** Phase 3 Task 1.
+
+### If interrupted here
+
+`file` and `document` frameworks not yet individually rebuilt in isolation after this commit
+(will be, along with everything else, in the full-tree verification once `dense_hash_map` and
+the prelude/header-path cleanup land too — next two commits). `google::dense_hash_map` (1 file)
+still untouched; `Shared/PCH/prelude.cc` still includes `boost/crc.hpp` (now unused) on purpose —
+cleaned up in the dense_hash_map commit, once nothing needs any of the three original includes.
+
+## 2026-08-13 — Phase 3 Task 1 (1/4): boost::variant → std::variant
+
+**What:** `plist::any_t` and `parser::node_t` (regexp) were `typedef`s for
+`boost::make_recursive_variant<...>::type` / `boost::variant<RW(t)...>`. Replaced both with a
+hand-rolled struct wrapping `std::variant`, matching tectiv3's `2c49eead` design: `any_t`/`node_t`
+hold a `.data` member, plus drop-in `plist::get<T>(any_t&/const&/*/const*)` overloads standing in
+for `boost::get`. `boost::apply_visitor(v, x)` → `std::visit(v, x.data)` everywhere;
+`boost::static_visitor<R>` base classes dropped (unneeded with `std::visit`). ~100 call sites
+across plist/regexp and ~20 consumer frameworks (BundleEditor, BundlesManager, OakFilterList,
+OakTextView, ns, layout, parse, selection, command, editor, bundles, buffer, theme, document,
+plist tests) updated by the same mechanical rule.
+
+**Also found and fixed:** `Frameworks/plist/src/ascii.rl` (ragel source, not caught by an
+initial `--include='*.cc,*.h,*.mm'` grep since it's `.rl`) had 5 more `boost::get` uses — this is
+why the first build attempt failed with "use of undeclared identifier 'boost'" pointing at the
+*generated* `_Rplist_ascii.cc`, not a hand-written file.
+
+**A second, non-mechanical fix:** `plist.h` already declared a *different*, pre-existing
+`template <typename T> T get(any_t const&)` — a value-converting getter (numeric/string
+coercion via `convert_to_helper_t`), semantically unrelated to `boost::get`'s discriminating
+accessor. Both can't be named `get` with the same parameter type. Renamed the converting one to
+`plist::convert<T>` (matching tectiv3) and updated its ~19 call sites (schema.h, grammar.cc,
+theme.cc, OakTheme.mm, t_simple.cc) — a blanket rename, not a selective one, since `convert<T>`
+is provably behaviour-identical to the old `get<T>` in 100% of cases (same underlying code, just
+renamed) whereas selectively keeping some as the new discriminating `get` would require proving
+per-call-site that the parsed type always matches exactly.
+
+**A third, ADL-driven fix in `delta.cc`:** once `any_t` became a real type in `namespace plist`
+(previously it was only a `boost::variant` alias, so ADL only ever found `namespace boost`, which
+is why `to_s` lived there under a "we place this in the boost namespace to support ADL" comment —
+moved to `namespace plist` now that it's unnecessary), an unqualified call to a file-local
+`static bool equal(any_t const&, any_t const&)` became genuinely ambiguous against the
+newly-ADL-visible `plist::equal` of the identical signature (reproduced and confirmed with a
+throwaway repro before touching the real file, since this class of bug doesn't show up as a
+type error — it's an overload-resolution ambiguity). Fixed by qualifying that one call as
+`plist::equal(...)`; verified both implementations perform the same deep structural comparison
+so this is a disambiguation, not a behaviour change.
+
+**Why:** Phase 3 Task 1 — zero Homebrew (`boost`) dependency to build.
+
+### If interrupted here
+
+`plist`, `regexp`, and `theme` frameworks' tests individually rebuilt and pass (33/41/1 tests,
+matching the parity doc) as an early sanity check before the full-tree sweep. `boost::crc_32_type`
+(2 files) and `google::dense_hash_map` (1 file) are NOT yet touched — `Shared/PCH/prelude.cc`
+still includes all three original headers on purpose, so this commit alone doesn't yet compile
+`file/src/bytes.cc` or `document/OakDocument.mm` or `theme/*` in isolation; the next commits
+finish those and the full-tree build/test verification happens once all four land. Do not remove
+`/opt/homebrew/include` from `Xcode/Base.xcconfig` yet — `boost/crc.hpp` and
+`sparsehash/dense_hash_map` are still `#include`d there.
+
+## 2026-08-13 — Phase 2 merged; Phase 3 planned (much smaller than scoped)
+
+**What:** PR #4 merged to master with a REAL merge commit (`8f47182d`), not a squash — 39 commits
+of history preserved, applying the lesson from Phase 1's squash that destroyed the textmatelives
+merge base. Phase 3 planned at
+`docs/superpowers/plans/2026-08-13-phase-3-dependency-purge.md`.
+
+**Recon shrank Phase 3 considerably.** The spec assumed a broad dependency purge; measurement says
+otherwise:
+
+- `boost` is **2 lines** (`Shared/PCH/prelude.cc:2-3`), `sparsehash` is **1 line** (`:4`)
+- `ragel` is **1 file** (`Frameworks/plist/src/ascii.rl`, 191 lines)
+- `multimarkdown` has **zero references — already gone**
+- `Frameworks/network` (1236 lines) has **zero includes from outside itself**; only
+  `SoftwareUpdate` and `network_test` depend on the target
+- `crash`/`CrashReporter` is 404 lines with 4 external includers
+
+Only `/opt/homebrew/include` remains on `HEADER_SEARCH_PATHS`, serving boost and sparsehash.
+Removing those two lines removes the header path with them.
+
+**Harvest, don't re-derive.** tectiv3 (PR #1467) solved four of these in an 8-hour window AFTER
+their CMake migration landed, so the removals are not tangled with CMake and are mechanical:
+boost → `std::variant` + zlib `crc32()` (`2c49eead`), sparsehash → `std::unordered_map`
+(`36acd469`), ragel → hand-written parser (`34e166b9`), multimarkdown → pre-generated HTML
+(`4aa342a9`). Their tree is upstream-based and ours is textmatelives-based with 231 commits of
+divergence, so cherry-picks may not apply — use the approach, port by hand where it conflicts.
+
+**One place we must NOT follow tectiv3.** They deleted `Frameworks/network` and the software
+updater *together* (`a85e40af`). We keep the updater — textmatelives' GitHub-Releases updater is
+what Phase 5 builds on and is a stated project goal. For us `network` is a replacement job on
+URLSession, not a deletion. Following them blindly would silently remove in-app updates.
+
+**Why:** Phase 3's goal is zero Homebrew dependencies to build.
+
+### If interrupted here
+
+Phase 2 complete and merged. `/Applications/TextMate.app` is v3.0.0-revived.5, built by Xcode,
+arm64. Branch `phase-3/dependency-purge` created off master with the plan committed. Next:
+Task 1 (remove boost and sparsehash — 3 lines of includes, but scattered uses; the zlib CRC
+replacement needs a byte-for-byte equivalence probe before the old code is deleted).
+
+
 ## 2026-08-13 — Task 8 verification: fixed a real regression from the previous commit's --no-parallel fix
 
 **What:** Running all 26 test targets end to end (the actual parity-document

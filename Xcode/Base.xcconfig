@@ -77,7 +77,12 @@ SWIFT_VERSION = 6.0
 //
 // So the per-target HEADER_SEARCH_PATHS is generated per framework from its
 // `require` list. Only the roots common to every target live here.
-HEADER_SEARCH_PATHS = $(SRCROOT)/Shared/include /opt/homebrew/include
+//
+// /opt/homebrew/include was here to serve boost and sparsehash. Phase 3 Task 1
+// removed both (std::variant, zlib crc32, std::unordered_map); nothing else in
+// this tree includes a Homebrew header (confirmed: a full ./bin/build plus all
+// 26 test targets pass with the path gone), so the path itself goes too.
+HEADER_SEARCH_PATHS = $(SRCROOT)/Shared/include
 
 // ---- Prefix header -------------------------------------------------------
 // rave precompiles Shared/PCH/prelude.{c,cc,m,mm} per language and passes it
@@ -148,7 +153,14 @@ OTHER_CFLAGS = $(inherited) -fobjc-call-cxx-cdtors
 // actual link error ("Undefined symbols ... _CFRunLoopRun") instead of
 // silently working by accident. library.static targets never link, so
 // this is inert for them regardless of scope.
-OTHER_LDFLAGS = $(inherited) -fobjc-link-runtime
+//
+// -lz: Phase 3 Task 1 replaced boost::crc_32_type with zlib's crc32() (only
+// io::bytes_t and OakDocument call it). Same reasoning as -fobjc-link-runtime
+// above applies -- rather than hunting down every final target whose
+// dependency closure reaches those two translation units, link libz
+// everywhere; it is a no-op for the library.static targets that don't need it
+// and for the final links that already pull it in transitively.
+OTHER_LDFLAGS = $(inherited) -fobjc-link-runtime -lz
 
 // ---- Optimisation, release config ----------------------------------------
 // rave release: -Os -flto=thin -DNDEBUG plus dead stripping. (NDEBUG itself

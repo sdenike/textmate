@@ -2,6 +2,75 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.9)
+
+The dependency purge is done — this build links nothing that isn't part of Xcode itself.
+
+### Removed
+
+* The crash-report uploader. It was linked into the app but never actually
+  used anywhere — nothing called it — and the server it was written to send
+  reports to was retired years ago with nothing put in its place, so even if
+  it had been wired up it had nowhere to send them. macOS already writes its
+  own crash reports to `~/Library/Logs/DiagnosticReports` regardless; that is
+  untouched. The small helper that adds extra descriptive context to those
+  system crash reports (used throughout the text editor and window code) was
+  kept, since it's unrelated to the uploader and still pulls its weight.
+
+## 2026-08-13 (v3.0.0-revived.8)
+
+The app no longer needs anything installed to build it.
+
+### Removed
+
+* The `ragel` build tool. The one parser that needed it — for the classic
+  ASCII property-list format used by bundles, themes, and settings — is now
+  plain, readable C++. It was checked against the old parser byte-for-byte on
+  ten real files, including three themes, five bundle manifests, a grammar, and
+  a preferences file with regular-expression scope selectors.
+* A dead networking layer, 1236 lines of it, left over from before software
+  updates moved to the system's own networking. Nothing used it. Removing it
+  also drops libcurl from the app.
+
+### Build
+
+Building TextMate now requires only Xcode. No Homebrew packages, no build
+tools, no external headers. Mercurial and Subversion are still installed in
+continuous integration, but only as fixtures for the version-control tests.
+
+## 2026-08-13 (v3.0.0-revived.7)
+
+`ragel` is no longer needed to build. Three of the four remaining build
+dependencies are gone.
+
+### Changed
+
+* Replaced the ragel-generated ASCII property list parser with a
+  hand-written one. This is the parser behind bundle/theme/grammar editing
+  in the Bundle Editor; it was verified byte-for-byte against the
+  ragel-generated state machine it replaces (including escape handling and
+  unterminated-input edge cases) and against real bundle, theme, grammar,
+  and preferences files before the switch.
+
+## 2026-08-13 (v3.0.0-revived.6)
+
+Two of the four remaining build dependencies are gone. Building the app no longer
+needs Boost or Google's sparsehash installed.
+
+### Changed
+
+* Replaced Boost's `variant` with the C++ standard library equivalent across 153
+  call sites, and Boost's CRC-32 with zlib's.
+* Replaced `dense_hash_map` with the standard `unordered_map`.
+
+The CRC change was verified byte-for-byte against the previous implementation
+before the old code was removed, including the published CRC-32 check vector.
+That mattered: the checksum is stored in a file attribute that decides whether
+code-folding state is restored when you reopen a document, so a subtly different
+result would have silently discarded fold state on every existing file.
+
+`ragel` is still needed to build; removing it is next.
+
 ## 2026-08-13 (v3.0.0-revived.5)
 
 **The Xcode migration is complete.** TextMate now builds with Xcode and nothing

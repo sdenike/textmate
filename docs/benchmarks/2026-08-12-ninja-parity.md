@@ -390,3 +390,50 @@ touches only the Xcode project generator, so ninja's build is provably unaffecte
    fixed bug in the Xcode project generator, then re-verified passing on both builds.
 
 **Parity is proven.** Task 8 may proceed on the strength of this measurement.
+
+---
+
+## network removed — 2026-08-13 (Phase 3 Task 3)
+
+Phase 3 Task 3's plan assumed `network` needed migrating to `URLSession`. Recon proved that
+premise wrong: `Frameworks/SoftwareUpdate` already called `NSURLSession` directly
+(`SoftwareUpdate.mm:373`, `OakDownloadManager.mm:78,336`) and `Security.framework` for
+signature verification; `network`'s only consumer was its own test
+(`Frameworks/network/tests/t_download.cc`). Confirmed independently before deleting anything:
+repo-wide `grep` for `#include`/`#import` of any `network/*.h` (`.cc`/`.h`/`.mm`/`.cpp`/`.m`,
+excluding `vendor/`) found zero hits outside `Frameworks/network/` itself. `network` was
+therefore deleted outright (`git rm -r Frameworks/network`), not migrated — along with its
+`Xcode/include/network/` header-staging symlinks (the same per-header-symlink convention
+every other framework under `Xcode/include/` uses; leaving them would have left dangling
+symlinks pointing at deleted files) and its `network`/`network_test` targets in `project.yml`.
+
+`project.yml` also dropped `libcurl.tbd`: `network/src/download.cc` and `download_tbz.cc`
+were the only callers of `curl_easy_*`/`CURL*` anywhere in the tree outside `vendor/`, and the
+only two `sdk: libcurl.tbd` lines in `project.yml` were `network_test`'s own dependencies
+(deleted with it) and the `TextMate` app target's (removed — nothing else references it).
+This build now links zero libcurl.
+
+### Test-target count: 26 → 25, everything else re-verified
+
+`network_test` is gone, dropping this document's ninja-baseline inventory from 26 to 25. All
+25 remaining targets were rebuilt and rerun individually (`./bin/build <name>/test`, matching
+this document's own per-target methodology) after `xcodegen generate --spec project.yml` and a
+full `./bin/build TextMate`, and every one reproduces the result already recorded above,
+exactly:
+
+19 of the 20 CI-included targets pass; `scm` still fails the same documented way (`2 of 84`,
+`hg`/`svn` absent from this machine). The six CI-excluded targets reproduce the same
+pass/fail/crash pattern already recorded: `buffer` FAIL (3/26, misspellings), `cf` CRASH
+(SIGBUS, exit 138), `layout`/`command`/`editor` PASS, `file` FAIL (1/11, iconv TRANSLIT).
+`command` and `editor` briefly appeared to hang when run back-to-back with 23 other targets in
+one long shell invocation that hit a 10-minute wall-clock cap; re-run individually with a
+bounded `timeout` guard, both passed in seconds with no hang, matching this document's original
+finding for both. `SoftwareUpdate_test` passes (`Frameworks/SoftwareUpdate` was not modified).
+
+`Onigmo_test` also exists in `project.yml` and still passes, but is out of scope for this
+comparison: it postdates this document's ninja-derived 26-target inventory (added during the
+Xcode migration, no `vendor/Onigmo` equivalent ever existed under the rave/ninja build) and was
+never part of the baseline being matched here.
+
+**25 of 25 baseline targets match. The count drop from 26 to 25 is `network_test` being
+deleted, not a lost or skipped test.**

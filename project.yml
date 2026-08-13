@@ -266,15 +266,8 @@ targets:
         compilerFlags: "-include $(SRCROOT)/Shared/PCH/prelude.cc"
       - path: "Frameworks/plist/src/fs_cache.mm"
         compilerFlags: "-include $(SRCROOT)/Shared/PCH/prelude.mm"
-      - path: "$(DERIVED_FILE_DIR)/_Rplist_ascii.cc"
-        optional: true
-        buildPhase: sources
-        compilerFlags: "-iquote $(SRCROOT)/Frameworks/plist/src -include $(SRCROOT)/Shared/PCH/prelude.cc"
-    preBuildScripts:
-      - script: "\"$SRCROOT/Xcode/scripts/gen_ragel.sh\" plist"
-        name: "Run ragel (plist)"
-        outputFiles:
-          - "$(DERIVED_FILE_DIR)/_Rplist_ascii.cc"
+      - path: "Frameworks/plist/src/ascii.cc"
+        compilerFlags: "-include $(SRCROOT)/Shared/PCH/prelude.cc"
     settings:
       base:
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash"
@@ -1728,15 +1721,6 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/HTMLOutputWindow $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/undo $(SRCROOT)/Xcode/include/OakFilterList"
-  CrashReporter:
-    type: library.static
-    platform: macOS
-    sources:
-      - path: "Frameworks/CrashReporter/src/CrashReporter.mm"
-    settings:
-      base:
-        GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
-        HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference"
   DocumentWindow:
     type: library.static
     platform: macOS
@@ -1759,61 +1743,6 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.m"
         HEADER_SEARCH_PATHS: "$(inherited)"
-  network:
-    type: library.static
-    platform: macOS
-    sources:
-      - path: "Frameworks/network/src/constants.cc"
-      - path: "Frameworks/network/src/download.cc"
-      - path: "Frameworks/network/src/download_tbz.cc"
-      - path: "Frameworks/network/src/filter_check_signature.cc"
-      - path: "Frameworks/network/src/key_chain.cc"
-      - path: "Frameworks/network/src/network.cc"
-      - path: "Frameworks/network/src/proxy.cc"
-      - path: "Frameworks/network/src/tbz.cc"
-      - path: "Frameworks/network/src/user_agent.cc"
-    settings:
-      base:
-        GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
-        HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/OakSystem"
-  network_test:
-    type: tool
-    platform: macOS
-    sources:
-      - path: "$(DERIVED_FILE_DIR)/_Tnetwork.cc"
-        optional: true
-        buildPhase: sources
-    preBuildScripts:
-      - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" network"
-        name: "Generate CxxTest runner (network)"
-        outputFiles:
-          - "$(DERIVED_FILE_DIR)/_Tnetwork.cc"
-    settings:
-      base:
-        GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.cc"
-        HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/network $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/OakSystem"
-        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
-    dependencies:
-      - target: network
-      - target: text
-      - target: cf
-      - target: io
-      - target: ns
-      - target: OakFoundation
-      - target: plist
-      - target: regexp
-      - target: Onigmo
-      - target: crash
-      - target: OakSystem
-      - sdk: SystemConfiguration.framework
-      - sdk: Security.framework
-      - sdk: CoreFoundation.framework
-      - sdk: ApplicationServices.framework
-      - sdk: Carbon.framework
-      - sdk: Cocoa.framework
-      - sdk: Foundation.framework
-      - sdk: libcurl.tbd
-      - sdk: libiconv.tbd
   OakDebug:
     type: library.static
     platform: macOS
@@ -1846,7 +1775,7 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
         INFOPLIST_FILE: "Applications/TextMate/Info.plist"
-        HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/HTMLOutputWindow $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/undo $(SRCROOT)/Xcode/include/OakFilterList $(SRCROOT)/Xcode/include/CommitWindow $(SRCROOT)/Xcode/include/CrashReporter $(SRCROOT)/Xcode/include/DocumentWindow $(SRCROOT)/Xcode/include/kvdb"
+        HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/HTMLOutputWindow $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/undo $(SRCROOT)/Xcode/include/OakFilterList $(SRCROOT)/Xcode/include/CommitWindow $(SRCROOT)/Xcode/include/DocumentWindow $(SRCROOT)/Xcode/include/kvdb"
         OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     entitlements:
       path: "Xcode/generated/TextMate.entitlements"
@@ -1946,15 +1875,11 @@ targets:
         link: true
       - target: CommitWindow
         link: true
-      - target: CrashReporter
-        link: true
       - target: DocumentWindow
         link: true
       - target: OakTabBarView
         link: true
       - target: kvdb
-        link: true
-      - target: network
         link: true
       - sdk: Cocoa.framework
       - sdk: AddressBook.framework
@@ -1973,7 +1898,6 @@ targets:
       - sdk: libsqlite3.tbd
       - sdk: libiconv.tbd
       - sdk: libz.tbd
-      - sdk: libcurl.tbd
       - target: PrivilegedTool
         embed: true
         codeSign: true
