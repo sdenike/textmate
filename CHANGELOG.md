@@ -2,6 +2,27 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.4)
+
+Build parity proven. The Xcode build now produces the same artifacts and passes
+the same tests as the old build system, which clears the way to remove it.
+
+### Fixed
+
+* **Unicode word matching in regular expressions.** Patterns using `\w`,
+  `\p{Upper}`, or `\p{Lower}` silently fell back to ASCII-only in the Xcode
+  build, so non-ASCII text capitalized incorrectly — "æblegrød" became
+  "æBlegrød". The regex engine enables its Unicode ranges from a startup routine
+  that the new build was discarding at link time because nothing referenced it.
+* **A missing helper tool.** `CommitWindowTool` was absent from the application
+  bundle under the Xcode build (29 executables where the old build shipped 30).
+
+### Verified
+
+* 41 of 41 artifacts present, matched by identity rather than path.
+* All 26 test targets run and match the previous build exactly — same passes,
+  same failures, same assertion counts.
+
 ## 2026-08-13 (v3.0.0-revived.3)
 
 **First build produced by the new Xcode project.** Functionally identical to the
