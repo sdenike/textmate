@@ -4,6 +4,41 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 3 Task 1 (4/4) complete: /opt/homebrew/include dropped, full verification
+
+**What:** `Xcode/Base.xcconfig`'s `HEADER_SEARCH_PATHS` loses `/opt/homebrew/include` — the last
+line item existed only to serve `boost` and `sparsehash`, both fully gone as of the previous
+three commits. Re-verified with the path actually removed, not just reasoned about: full
+`./bin/build TextMate` (0 errors, `BUILD SUCCEEDED`) plus all 26 test targets run individually
+and compared against `docs/benchmarks/2026-08-12-ninja-parity.md`'s Xcode column —
+
+19 of 20 CI-included targets pass (authorization 1, bundles 5, BundlesManager 10, document 9,
+encoding 6, FileBrowser 1, HTMLOutput 1, io 24, network 1, ns 6, parse 4, plist 33, regexp 41,
+scope 13, selection 24, settings 9, SoftwareUpdate 20, text 34, theme 1 — all exact test-count
+matches); `scm` fails 2/84 for the same documented `hg`/`svn`-not-on-this-machine reason. Of the
+6 CI-excluded targets: `buffer` fails 3/26 (misspellings, headless `NSSpellChecker`), `file` fails
+1/11 (iconv TRANSLIT), `cf` crashes SIGBUS/exit 138 — all three identical to the baseline; layout
+(9), command (4), editor (9) pass, matching this machine's own more-permissive local results the
+baseline already recorded. **26/26 match, zero deltas.**
+
+`grep -rn "boost/\|sparsehash\|dense_hash_map" --include='*.cc' --include='*.h' --include='*.mm' .
+| grep -v vendor/` returns nothing. App bundle: `CFBundleIdentifier` still `com.macromates.TextMate`,
+`CFBundleName` still `TextMate` (untouched, per constraint), ad-hoc codesign verifies clean,
+Mach-O arm64 only, `otool -L` shows `/usr/lib/libz.1.dylib` correctly linked.
+
+**Why:** Phase 3 Task 1 exit criteria.
+
+### If interrupted here
+
+Task 1 is done and verified end to end, committed as 4 commits on `phase-3/dependency-purge`
+(variant → crc → dense_hash_map+prelude → header path). Not touched, deliberately out of Task 1's
+scope: `.github/workflows/*.yml`'s `brew install boost google-sparsehash ...` lines (still
+harmless no-ops; Task 2 removes `ragel`/`multimarkdown` from the same lines, so one consolidated
+CI cleanup after Task 2 makes more sense than two partial edits) and `Applications/TextMate/about/
+Legal.md`'s boost attribution (a packaging/distribution concern, not a build one). Next: Task 2
+(remove ragel) per the same plan document — decide between committing generated `ascii.cc` vs.
+porting tectiv3's hand-written parser (`34e166b9`), per the plan's own two-option framing.
+
 ## 2026-08-13 — Phase 3 Task 1 (3/4): dense_hash_map → unordered_map; prelude.cc finished
 
 **What:** `theme_t`'s per-scope style cache (`Frameworks/theme/src/theme.h`) was the only

@@ -77,7 +77,12 @@ SWIFT_VERSION = 6.0
 //
 // So the per-target HEADER_SEARCH_PATHS is generated per framework from its
 // `require` list. Only the roots common to every target live here.
-HEADER_SEARCH_PATHS = $(SRCROOT)/Shared/include /opt/homebrew/include
+//
+// /opt/homebrew/include was here to serve boost and sparsehash. Phase 3 Task 1
+// removed both (std::variant, zlib crc32, std::unordered_map); nothing else in
+// this tree includes a Homebrew header (confirmed: a full ./bin/build plus all
+// 26 test targets pass with the path gone), so the path itself goes too.
+HEADER_SEARCH_PATHS = $(SRCROOT)/Shared/include
 
 // ---- Prefix header -------------------------------------------------------
 // rave precompiles Shared/PCH/prelude.{c,cc,m,mm} per language and passes it
