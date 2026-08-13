@@ -2,6 +2,20 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.7)
+
+`ragel` is no longer needed to build. Three of the four remaining build
+dependencies are gone.
+
+### Changed
+
+* Replaced the ragel-generated ASCII property list parser with a
+  hand-written one. This is the parser behind bundle/theme/grammar editing
+  in the Bundle Editor; it was verified byte-for-byte against the
+  ragel-generated state machine it replaces (including escape handling and
+  unterminated-input edge cases) and against real bundle, theme, grammar,
+  and preferences files before the switch.
+
 ## 2026-08-13 (v3.0.0-revived.6)
 
 Two of the four remaining build dependencies are gone. Building the app no longer

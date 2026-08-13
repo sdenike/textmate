@@ -4,6 +4,33 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 3 Task 2 complete: ragel removed
+
+**What:** Commit `848dd1a8` (parser port + verification, see entry below). This wrap-up:
+trimmed `ragel` from all three CI `brew install` lines (`build-and-test.yml` ×2, kept
+`mercurial subversion` for `scm`'s tests; `release.yml`'s step installed only `ragel`, so
+that step was deleted outright rather than left installing nothing). Updated `CLAUDE.md` and
+`README.md` — neither lists `ragel` as a dependency anymore. `git ls-files '*.rl'` returns
+nothing. Rebuilt (`./bin/build TextMate`, picks up `CHANGELOG.md`'s new top entry
+automatically via `assemble_resources.sh`'s `app_version()`), deployed with
+`bin/deploy-local` (replaced 3.0.0-revived.6 in `/Applications`), confirmed
+`CFBundleIdentifier`/`CFBundleName` unchanged. Released v3.0.0-revived.7.
+
+**Why:** Phase 3 targets zero Homebrew dependencies to build. Three of four are now gone
+(boost, sparsehash, ragel).
+
+### If interrupted here
+
+`/Applications/TextMate.app` is v3.0.0-revived.7. Branch `phase-3/dependency-purge`,
+unpushed, no PR. Next: Task 3 replaces `Frameworks/network` with `URLSession` — enumerate
+what `SoftwareUpdate` actually uses (download, tbz extraction, signature verification,
+keychain), implement on `URLSession`, port `network`'s tests before deleting the framework.
+**Keep the updater** — tectiv3 deleted `network` and the updater together; this fork keeps
+the updater (textmatelives' GitHub-Releases updater, a stated project goal for Phase 5). Then
+Task 4 (`crash`/`CrashReporter` — keep, delete, or replace; note there's no crash-reporting
+endpoint since `api.textmate.org` is gone, so an enabled reporter posting nowhere is dead
+weight, but the local assertion helpers may still be useful).
+
 ## 2026-08-13 — Phase 3 Task 2: ragel removed, ASCII plist parser hand-written
 
 **What:** `Frameworks/plist/src/ascii.rl` (191 lines) → `ascii.cc`. Chose option (b), porting

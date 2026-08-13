@@ -17,7 +17,7 @@ jobs:
           submodules: recursive
 
       - name: Install build dependencies
-        run: brew install ragel mercurial subversion
+        run: brew install mercurial subversion
 
       - name: Build TextMate.app
         run: xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build
@@ -32,7 +32,7 @@ jobs:
           submodules: recursive
 
       - name: Install build dependencies
-        run: brew install ragel mercurial subversion
+        run: brew install mercurial subversion
 
       - name: Build and run all framework tests
         run: |

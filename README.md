@@ -49,13 +49,12 @@ To build TextMate, you need the following:
  * [Xcode][]         — 26 or later; provides `xcodebuild` and opens `TextMate.xcodeproj`
  * [boost][]         — portable C++ source libraries
  * [multimarkdown][] — marked-up plain text compiler
- * [ragel][]         — state machine compiler
  * [sparsehash][]    — a cache friendly `hash_map`
 
 The non-Xcode dependencies are installed via [Homebrew][]:
 
 ```sh
-brew install boost google-sparsehash multimarkdown ragel
+brew install boost google-sparsehash multimarkdown
 ```
 
 (`Xcode/Base.xcconfig`'s header search path is Homebrew-specific — a MacPorts prefix is not
@@ -101,7 +100,6 @@ TextMate is a trademark of Allan Odgaard.
 
 [boost]:         http://www.boost.org/
 [multimarkdown]: http://fletcherpenney.net/multimarkdown/
-[ragel]:         http://www.complang.org/ragel/
 [Homebrew]:      http://brew.sh/
 [sparsehash]:    https://code.google.com/p/sparsehash/
 [Xcode]:         https://developer.apple.com/xcode/
