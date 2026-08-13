@@ -4,6 +4,33 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Task 8 verification: fixed a clean-clone build failure (pre-existing, Task 6/7)
+
+**What:** Verifying item 1 of Task 8's own bar ("`xcodebuild` succeeds from a
+clean clone state") turned up a real gap: `Xcode/generated/TextMate.entitlements`
+(XcodeGen's output from `project.yml`'s `entitlements: properties:` block) was
+`.gitignore`d, never committed, but the committed `TextMate.xcodeproj`'s
+`TextMate` target points `CODE_SIGN_ENTITLEMENTS` straight at that path.
+Reproduced directly: moved the directory aside, rebuilt — `BUILD FAILED`,
+`ProcessProductPackaging ... TextMate.app.xcent` missing input file. Every
+doc (this fork's own and this session's rewrites) says XcodeGen is optional
+for a plain build, so a genuinely fresh clone that never runs `xcodegen
+generate` could not build at all. Predates Task 8 (Task 6/7 committed the
+`.xcodeproj` but not this file) but blocks Task 8's own verification bar, so
+fixed here rather than escalated: un-ignored `Xcode/generated/` and committed
+`TextMate.entitlements` (content is fully deterministic — 4 static booleans
+from `project.yml`, reconfirmed by running `xcodegen generate` fresh and
+diffing). Regenerating also reshuffled unrelated `Embed Dependencies` build
+phase orderings inside `project.pbxproj` (XcodeGen's own non-determinism,
+nothing to do with this fix) — reverted that file to the committed version
+via `git checkout --` before staging, so only the entitlements file and the
+`.gitignore` line changed. Rebuilt clean afterward: `BUILD SUCCEEDED`.
+
+**Why:** A verification step is only real if it's actually run; running it
+found a genuine defect blocking the exact claim Task 8 must confirm.
+Two-focused-attempt rule from the builder brief didn't even need invoking —
+root cause was clear from the first failing build log.
+
 ## 2026-08-13 — Task 8: rave/ninja build deleted; Xcode is the only build
 
 **What:** The irreversible step. Deleted: `configure`, `bin/rave`, all 60
