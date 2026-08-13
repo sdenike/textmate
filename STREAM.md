@@ -4,6 +4,36 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Task 7 complete: Xcode/ninja parity measured and proven
+
+**What:** `docs/benchmarks/2026-08-12-ninja-parity.md` now has the full Xcode-side
+measurement alongside Task 2's ninja baseline: artifact parity (41/41 ninja
+artifacts confirmed under Xcode by identity, one real gap — `CommitWindowTool`
+— found and fixed, not explained away), test parity (all 26 test targets,
+identical pass/fail/crash pattern to the ninja baseline including failure
+counts and assertions), and the `regexp`/Onigmo discrepancy write-up
+(root-caused to `libtool -static`'s lazy archive linking dropping
+`vendor/Onigmo/src/setup.c`'s symbol-less constructor, fixed with
+`-force_load`, verified passing on both builds). The document states plainly:
+**parity is proven.**
+
+Four commits this session: `3cb54ea0` (the regexp/Onigmo fix), `4f848f7b` (the
+CommitWindowTool + empty-`dependencies:` fix), `26213106` (committed
+`TextMate.xcodeproj`, `.gitignore` updated), and this one (the parity doc).
+
+**Why:** Task 7 gates Task 8, the irreversible deletion of `configure`,
+`bin/rave`, and all 60 `.rave` files. The brief was explicit that an
+unmeasured parity claim is worse than no claim — every number in the parity
+doc traces back to a command actually run this session, not an assumption.
+
+### If interrupted here
+
+Task 7 is DONE. Phase 2 is 7 of 8. Task 8 (delete rave/ninja, switch CI to
+`xcodebuild`, strip any remaining Intel references, rewrite `README.md`/
+`CONTRIBUTING.md`/`bin/build`) is next and is the phase's only irreversible
+step — it should not start without the user's explicit go-ahead given its
+scope. Nothing pushed; no PR opened for Phase 2 yet.
+
 ## 2026-08-13 — Task 7: committed the generated TextMate.xcodeproj
 
 **What:** `.gitignore`'s blanket `*.xcodeproj/` pattern removed (it predated
