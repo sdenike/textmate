@@ -62,6 +62,13 @@ brew install boost google-sparsehash multimarkdown ninja ragel
 sudo port install boost multimarkdown ninja ragel sparsehash
 ```
 
+> **Build system in transition.** An Xcode project (`TextMate.xcodeproj`, generated from
+> `project.yml` by [XcodeGen](https://github.com/yonaskolb/XcodeGen)) is being introduced
+> alongside the existing `./configure` + `ninja` build. All frameworks build under Xcode
+> today; the application target is still produced by `ninja`, which remains authoritative
+> until artifact and test parity is proven. Follow the instructions below until this
+> notice is removed.
+
 After installing dependencies, make sure you have a full checkout (including submodules) and then run `./configure` followed by `ninja`, for example:
 
 ```sh

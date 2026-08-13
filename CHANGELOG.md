@@ -2,6 +2,42 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.2)
+
+Build-system progress. **No user-visible change** — this release exists so each
+completed migration task is compiled, versioned, and testable rather than
+accumulating unverified.
+
+### Xcode migration (Phase 2, 5 of 8 tasks)
+
+* **All 46 frameworks and 3 vendor targets now build under Xcode** — 76 targets
+  total, `xcodebuild -alltargets` clean from a fresh tree. The app target itself
+  is the next task, so this app is still produced by the existing ninja build.
+* **Header isolation preserved.** TextMate's build makes a framework's headers
+  reachable only by targets that declare a dependency on it, which means the
+  dependency graph is enforced by the compiler rather than merely documented.
+  The Xcode project reproduces that exactly instead of taking the easy route of
+  exposing everything.
+* Five build-fidelity bugs surfaced only by building all 46 at once: C++ modules
+  colliding with a vendored `struct entry`, a missing Objective-C runtime link,
+  a source-tree symlink silently duplicating files, prefix-header handling in
+  mixed C++/Objective-C++ frameworks, and a genuine dependency cycle
+  (`plist → io → ns → plist`).
+
+### Cleanup
+
+* Removed `.travis.yml` (dead since 2016), `local-orig.rave`, and the unused
+  `SyntaxMate` XPC service.
+* Repaired the git merge base with `textmatelives`, which an earlier squash
+  merge had discarded — future syncs from that fork will no longer re-conflict
+  on work already merged.
+
+### Known
+
+* One test assertion differs between the ninja and Xcode builds: a Unicode
+  casing case in `regexp`. Real and reproducible; being resolved as part of the
+  build-parity gate before the old build system is removed.
+
 ## 2026-08-12 (v3.0.0-revived.1)
 
 First build of **TextMate Revived**, the `sdenike/textmate` fork. Apple Silicon only,
