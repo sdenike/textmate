@@ -23,6 +23,13 @@
 
 require 'optparse'
 require 'shellwords'
+require 'fileutils'
+# Deliberately NOT `require 'yaml'`: psych is a C extension, and under a
+# leaked rbenv/chruby GEM_HOME/GEM_PATH (see CLAUDE.md's bin/build note)
+# system Ruby 2.6 dlopens a psych built for a different Ruby and dies with
+# "Symbol not found: _rb_cFalseClass" -- reproduced while building this
+# tool. --emit-yaml hand-prints YAML the same way --inventory hand-prints
+# its report, so it has no gem dependency to leak.
 
 ROOT = File.expand_path('..', __dir__)
 Dir.chdir(ROOT)
@@ -241,11 +248,45 @@ def run_inventory(io)
   end
 end
 
+# ---------------------------------------------------------------------------
+# --emit-header-farm: a committed symlink farm so any Xcode target can see a
+# framework's headers as <name>/<header>.h without a copy step.
+#
+# rave's ExportHeader rule (docs/benchmarks/2026-08-12-header-strategy.md)
+# does this with a real build rule -- cp Frameworks/<n>/src/x.h to
+# _Include/<n>/<n>/x.h -- so the header exists before anything compiles
+# against it. The farm needs no such step: Xcode/include/<n>/<n> is a
+# *relative* symlink straight at the tracked Frameworks/<n>/src, so it's
+# valid the moment it's checked out. Walking Frameworks/*/ (the same set
+# --inventory walks) means the farm can't drift as frameworks are added or
+# removed -- rerun this instead of hand-editing symlinks.
+def run_header_farm(io)
+  root  = 'Xcode/include'
+  names = Dir.glob('Frameworks/*/').map { |d| File.basename(d) }
+              .select { |n| Dir.exist?("Frameworks/#{n}/src") }.sort
+
+  names.each do |name|
+    dir    = File.join(root, name)
+    link   = File.join(dir, name)
+    target = File.join('..', '..', '..', 'Frameworks', name, 'src')
+
+    FileUtils.mkdir_p(dir)
+    next if File.symlink?(link) && File.readlink(link) == target
+    FileUtils.rm_f(link)
+    File.symlink(target, link)
+  end
+
+  io.puts "rave2yaml: wrote #{names.length} symlinks under #{root}/"
+end
+
 options = {}
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: #{File.basename(__FILE__)} --inventory"
+  opts.banner = "Usage: #{File.basename(__FILE__)} --inventory | --emit-header-farm"
   opts.on('--inventory', 'Print a human-readable inventory of every .rave target.') do
     options[:inventory] = true
+  end
+  opts.on('--emit-header-farm', 'Write the Xcode/include/<name>/<name> symlink farm.') do
+    options[:emit_header_farm] = true
   end
   opts.on('-h', '--help', 'Show this help.') do
     puts opts
@@ -254,13 +295,15 @@ parser = OptionParser.new do |opts|
 end
 parser.parse!
 
-unless options[:inventory]
-  warn parser.banner
-  exit 1
-end
-
 begin
-  run_inventory($stdout)
+  if options[:inventory]
+    run_inventory($stdout)
+  elsif options[:emit_header_farm]
+    run_header_farm($stdout)
+  else
+    warn parser.banner
+    exit 1
+  end
 rescue RaveError => e
   warn "rave2yaml: #{e.message}"
   exit 1
