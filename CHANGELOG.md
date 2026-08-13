@@ -2,6 +2,21 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.9)
+
+The dependency purge is done — this build links nothing that isn't part of Xcode itself.
+
+### Removed
+
+* The crash-report uploader. It was linked into the app but never actually
+  used anywhere — nothing called it — and the server it was written to send
+  reports to was retired years ago with nothing put in its place, so even if
+  it had been wired up it had nowhere to send them. macOS already writes its
+  own crash reports to `~/Library/Logs/DiagnosticReports` regardless; that is
+  untouched. The small helper that adds extra descriptive context to those
+  system crash reports (used throughout the text editor and window code) was
+  kept, since it's unrelated to the uploader and still pulls its weight.
+
 ## 2026-08-13 (v3.0.0-revived.8)
 
 The app no longer needs anything installed to build it.
