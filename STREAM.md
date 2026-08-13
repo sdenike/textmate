@@ -4,6 +4,82 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 3 Task 4: `CrashReporter` deleted, `crash` kept (Phase 3 complete)
+
+**What:** Investigated both frameworks before touching either. `Frameworks/CrashReporter`
+(342 lines, `CrashReporter.mm`/`.h`) is a static library linked into the `TextMate` app target
+(`project.yml`), but `CrashReporter.sharedInstance`, `applicationDidFinishLaunching:`, and
+`postNewCrashReportsToURLString:` have zero callers anywhere in the tree outside the framework's
+own definition — confirmed by repo-wide grep. So it was already fully dead before this task:
+never instantiated, never wired to the app delegate. Its only two jobs were (1) scanning
+`~/Library/Logs/DiagnosticReports` — which macOS populates on its own regardless of this
+framework — and (2) POSTing gzipped reports to a URL string that would have to be supplied by a
+caller that doesn't exist; `REST_API`/`api.textmate.org` was removed in PR #9 with nothing put
+in its place, so even a wired-up call site would have nowhere to send reports. No signal
+handlers anywhere in it either — it's an uploader, not a crash-catching mechanism.
+
+`Frameworks/crash` (62 lines, `info.cc`/`.h`) is different: `crash_reporter_info_t` is a
+thread-local RAII breadcrumb stack that publishes a description string into
+`__crashreporter_info__`, a symbol macOS's own crash reporter reads via a linker `.desc`
+directive — pure annotation, no signal handling, no change to whether/how the app crashes.
+**Correction to the plan's recon:** the plan's "measured facts" counted 4 external includers
+(all `.cc`); actual count is **12 files, 15 call sites** — the plan's grep only covered `.cc`
+files and missed `.mm` consumers: `Applications/TextMate/src/{main,OakMainMenu,
+TMPlugInController}.mm`, `Frameworks/OakTextView/src/{OakTextView,GutterView}.mm`,
+`Frameworks/OakAppKit/src/{OakAppKit,OakPasteboard}.mm`,
+`Frameworks/DocumentWindow/src/DocumentWindowController.mm`, plus the 4 `.cc` files the plan
+named (`io/src/exec.cc`, `layout/src/{ct,layout}.cc`, `selection/src/selection.cc`). This
+doesn't change the decision — it strengthens it: `crash` is woven through menu key handling,
+text-view selectors, drag & drop, document switching, and plug-in loading, not a narrow corner,
+so deleting it for zero behavioural gain would be real, unjustified churn across 12 files.
+tectiv3's own removal (`025f2ef8`) also left `crash` alone and only deleted `CrashReporter`.
+
+**Decision: delete `CrashReporter`, keep `crash` unchanged.** `git rm -r Frameworks/CrashReporter
+Xcode/include/CrashReporter` (4 files: the `.h`/`.mm` pair, the `bin/symbolicate` dsym-lookup
+script, and the header-staging symlink). `project.yml`: removed the `CrashReporter` target
+block, its `- target: CrashReporter` / `link: true` dependency on the `TextMate` app target, and
+the now-dangling `Xcode/include/CrashReporter` entry from that target's `HEADER_SEARCH_PATHS`.
+Also removed `kUserDefaultsDisableCrashReportingKey` and `kUserDefaultsCrashReportsContactInfoKey`
+from `Frameworks/Preferences/src/Keys.h`/`.mm` (plus their one registration-defaults dictionary
+entry) — both existed solely to configure the now-deleted uploader and had no other reader,
+confirmed by repo-wide grep before removal; same "delete what the removal orphans" precedent as
+Task 3 dropping `libcurl.tbd` once `network` was gone.
+
+`xcodegen generate --spec project.yml` regenerated `TextMate.xcodeproj`
+(`grep -c CrashReporter project.pbxproj` → 0). `./bin/build` succeeds;
+`CFBundleIdentifier`/`CFBundleName` unchanged (`com.macromates.TextMate`/`TextMate`).
+
+**Verification against `docs/benchmarks/2026-08-12-ninja-parity.md`:** all 25 baseline test
+targets rebuilt and rerun individually (`./bin/build <name>/test`) match the recorded result
+exactly — 19 of 20 CI-included pass, `scm` fails identically (`2 of 84`, `hg`/`svn` absent); the
+six CI-excluded targets reproduce the same pattern (`buffer` 3/26 misspellings, `cf` SIGBUS/exit
+138, `layout`/`command`/`editor` pass, `file` 1/11 iconv TRANSLIT). `command_test` briefly showed
+`exit=124` when run inside one 25-target batched loop — the exact same batching artifact
+Task 3's baseline already documented for `command`/`editor`; re-run individually it passed in
+under a second, no hang. Target count stays 25 — `CrashReporter` never had a test target.
+Final repo-wide grep (`grep -rn "crash/\|CrashReporter" --include='*.cc' --include='*.h'
+--include='*.mm' . | grep -v vendor/`) shows only the 12 legitimate `crash/info.h` includes plus
+one self-referential comment in `Frameworks/crash/src/info.cc:4` — zero `CrashReporter` matches.
+
+**Why:** Phase 3 dependency purge, and the last task of the phase. `CrashReporter` was dead
+weight pointed at a dead endpoint — deleting it shrinks the tree with zero behavioural change
+(nothing called it, so nothing now doesn't call it). `crash` earns its keep: it's cheap (62
+lines, no external deps), installs no signal handler, and is genuinely used across the app to
+annotate the crash reports macOS writes anyway.
+
+### If interrupted here
+
+Phase 3 (dependency purge) is functionally complete after this task — all four tasks done:
+boost/sparsehash removed (v3.0.0-revived.6), ragel removed (v3.0.0-revived.7), `network` deleted
+(v3.0.0-revived.8), `CrashReporter` deleted (this task, pending version bump to
+v3.0.0-revived.9). At time of writing, the code commit for this task is about to land
+(`build!:` prefix — deletes a linked framework), followed by a `release:` commit bumping
+`CHANGELOG.md`, then `bin/deploy-local`. Branch `phase-3/dependency-purge`, unpushed, no PR.
+Next: Phase 3 exit criteria review (all four checked in the plan's own terms: zero Homebrew
+deps, `/opt/homebrew/include` gone from `HEADER_SEARCH_PATHS`, no stray `.rl`/`boost`/
+`sparsehash` outside `vendor/`, updater untouched, 25/25 test parity, a versioned/changelogged/
+deployed release) before starting Phase 4.
+
 ## 2026-08-13 — Phase 3 Task 3: `network` deleted (not migrated), libcurl dropped
 
 **What:** The plan's premise ("replace `network` with `URLSession`") was wrong — recon proved

@@ -619,7 +619,6 @@
 		8F86A2024D5BEE81552DCAFF /* libio.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 10B874173E1C9917097A3BF4 /* libio.a */; };
 		8FF00324F5C97BB547CF30AF /* libplist.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A9ED9849685A43ABB394279 /* libplist.a */; };
 		9013E8D760C79D433600DAE9 /* parse.cc in Sources */ = {isa = PBXBuildFile; fileRef = 29B5391557900703B7FC4E5B /* parse.cc */; };
-		901B1DDCF0B99EA709220321 /* CrashReporter.mm in Sources */ = {isa = PBXBuildFile; fileRef = 500F96B3F4DE5A05379CFFF7 /* CrashReporter.mm */; };
 		9076304E15104632DE0C9D4D /* OFBHeaderView.mm in Sources */ = {isa = PBXBuildFile; fileRef = DF8D89B6433AE60CF0BCC7D5 /* OFBHeaderView.mm */; };
 		915FC16EF05738D196A9BC56 /* libtext.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A7346ADC7019D50D93E42B15 /* libtext.a */; };
 		917E048721A1A5CBDF7B3F3A /* libbundles.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B83C56CE5A3F71EB488200EF /* libbundles.a */; };
@@ -686,7 +685,6 @@
 		9F33968AD683C6752710570B /* find.cc in Sources */ = {isa = PBXBuildFile; fileRef = 5B929942A8DFBE336363B47A /* find.cc */; };
 		9F3BA0CB39F4139DE8AC13CC /* libns.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5ACA089AE982352D6F430735 /* libns.a */; };
 		9F57B7B2A8D418FCA275D7AB /* libBundleEditor.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5195E2F5FAB6505596CE693B /* libBundleEditor.a */; };
-		9FE0869241177D0B6EC79438 /* libCrashReporter.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A754A9B3D2A76E056B31CEEA /* libCrashReporter.a */; };
 		9FE331EE88C6DC59A78CEFE8 /* libns.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5ACA089AE982352D6F430735 /* libns.a */; };
 		A032CE76F7DE89F000062E99 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D45846DC7EE7EAB43FC926D8 /* ApplicationServices.framework */; };
 		A06DA58E8EEE9ED9F8E67451 /* libplist.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A9ED9849685A43ABB394279 /* libplist.a */; };
@@ -1152,13 +1150,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = 21867DB4985ED0DBF37AB02D;
 			remoteInfo = file;
-		};
-		0385CE7635BCC7BEAD9E1788 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 961AB9759251A2D39675C7E1 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 7A7409B7D2670F5C8D933E0A;
-			remoteInfo = CrashReporter;
 		};
 		03AB5564F4AE4B917BBBFD8B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -4782,11 +4773,10 @@
 		6021FC55BCDE5AE20F25F690 /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstPath = Contents/Library/QuickLook;
+			dstSubfolderSpec = 1;
 			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				E890A7A29ABD10C7678C4894 /* TextMateQL.bundle in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -4794,10 +4784,10 @@
 		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
-			dstPath = Contents/Library/QuickLook;
-			dstSubfolderSpec = 1;
+			dstPath = "";
+			dstSubfolderSpec = 7;
 			files = (
-				E890A7A29ABD10C7678C4894 /* TextMateQL.bundle in Embed Dependencies */,
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -4819,9 +4809,10 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 7;
+			dstSubfolderSpec = 13;
 			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -4973,7 +4964,6 @@
 		4ED613F37BF2D6ED7E498FEF /* encoding_test */ = {isa = PBXFileReference; includeInIndex = 0; path = encoding_test; sourceTree = BUILT_PRODUCTS_DIR; };
 		4EF0303D68F8EE184924BA9D /* OakAppKit.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OakAppKit.mm; sourceTree = "<group>"; };
 		4F34193CCD31D650ED700280 /* dispatch.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = dispatch.cc; sourceTree = "<group>"; };
-		500F96B3F4DE5A05379CFFF7 /* CrashReporter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CrashReporter.mm; sourceTree = "<group>"; };
 		5045182CB8B1A128DE3E50A9 /* path.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = path.cc; sourceTree = "<group>"; };
 		50A335D761D9538034A1D7B9 /* parser.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = parser.cc; sourceTree = "<group>"; };
 		50D9603AE808794FE105616D /* OakCommand.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OakCommand.mm; sourceTree = "<group>"; };
@@ -5127,7 +5117,6 @@
 		A5CD7C72B9104A1D854F97DC /* kvdb.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = kvdb.m; sourceTree = "<group>"; };
 		A6B940C06074B986F311E032 /* scm.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = scm.cc; sourceTree = "<group>"; };
 		A7346ADC7019D50D93E42B15 /* libtext.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libtext.a; sourceTree = BUILT_PRODUCTS_DIR; };
-		A754A9B3D2A76E056B31CEEA /* libCrashReporter.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libCrashReporter.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		A7D8C1350C9D28CDC0D59C03 /* format_string.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = format_string.cc; sourceTree = "<group>"; };
 		A8235BAC2049C9BEF85212FA /* private.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = private.cc; sourceTree = "<group>"; };
 		A845C8BFE9DC165677C6F0EE /* buffer.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = buffer.cc; sourceTree = "<group>"; };
@@ -6149,7 +6138,6 @@
 				5BF1938DF35F51D3579BF36E /* libundo.a in Frameworks */,
 				C10E75CBBC8D466C7DBCB944 /* libOakFilterList.a in Frameworks */,
 				B7F2E113F88EBCE44D2B1A60 /* libCommitWindow.a in Frameworks */,
-				9FE0869241177D0B6EC79438 /* libCrashReporter.a in Frameworks */,
 				44ABE7CCA48C2BB904AEA609 /* libDocumentWindow.a in Frameworks */,
 				23F8A7A03600B30F07F59A66 /* libOakTabBarView.a in Frameworks */,
 				EB2E6A7B9F6C316E10F21049 /* libkvdb.a in Frameworks */,
@@ -6481,7 +6469,6 @@
 				0E64CD87E06A78B547480572 /* libcommand.a */,
 				E6F25FEF76C02FD7745796C9 /* libCommitWindow.a */,
 				A364573F8340083ACF50E59E /* libcrash.a */,
-				A754A9B3D2A76E056B31CEEA /* libCrashReporter.a */,
 				B445F1B59EA641222953C49D /* libdocument.a */,
 				CB30AAA23498B5B7CC3792AE /* libDocumentWindow.a */,
 				5B7C77CF74A740586778C5A9 /* libeditor.a */,
@@ -6815,14 +6802,6 @@
 			path = vendor;
 			sourceTree = "<group>";
 		};
-		4674CCE8C572A4A9D5D68069 /* src */ = {
-			isa = PBXGroup;
-			children = (
-				500F96B3F4DE5A05379CFFF7 /* CrashReporter.mm */,
-			);
-			path = src;
-			sourceTree = "<group>";
-		};
 		46B4F5268B42CD73A18C243E /* src */ = {
 			isa = PBXGroup;
 			children = (
@@ -7070,14 +7049,6 @@
 			path = src;
 			sourceTree = "<group>";
 		};
-		87467690C0DBA310C47C104A /* CrashReporter */ = {
-			isa = PBXGroup;
-			children = (
-				4674CCE8C572A4A9D5D68069 /* src */,
-			);
-			path = CrashReporter;
-			sourceTree = "<group>";
-		};
 		914834A3F45E138400101013 /* src */ = {
 			isa = PBXGroup;
 			children = (
@@ -7292,7 +7263,6 @@
 				A92D3AC1B39486B007F4FE7E /* command */,
 				215BF868337D71F011B0789A /* CommitWindow */,
 				423A65F39850FEE93D0D6AD0 /* crash */,
-				87467690C0DBA310C47C104A /* CrashReporter */,
 				10F634107AA1B0650FB505BA /* document */,
 				9A1724F5294A4F19A4FA9FB2 /* DocumentWindow */,
 				DB07044FBBF1B66FACA17956 /* editor */,
@@ -8236,7 +8206,6 @@
 				C3782FAC4D4B54DDEBC5C31B /* PBXTargetDependency */,
 				45F99D26D5B6D8CB2832E0E4 /* PBXTargetDependency */,
 				F21FC27F8A70B87FB3406DFF /* PBXTargetDependency */,
-				2E442B644C8C5D65272501A9 /* PBXTargetDependency */,
 				4FD2FF18C59FC2D9D7DC6E06 /* PBXTargetDependency */,
 				4F5B317F5DA7AED7E50F3420 /* PBXTargetDependency */,
 				B54859D84913982046C02DF8 /* PBXTargetDependency */,
@@ -8664,23 +8633,6 @@
 			productName = SoftwareUpdate_test;
 			productReference = 6A76FA92248278D3B2DE188E /* SoftwareUpdate_test */;
 			productType = "com.apple.product-type.tool";
-		};
-		7A7409B7D2670F5C8D933E0A /* CrashReporter */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = A1953EE97F1217EC3E58741B /* Build configuration list for PBXNativeTarget "CrashReporter" */;
-			buildPhases = (
-				264AD19919C26AE4EB9573A4 /* Sources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = CrashReporter;
-			packageProductDependencies = (
-			);
-			productName = CrashReporter;
-			productReference = A754A9B3D2A76E056B31CEEA /* libCrashReporter.a */;
-			productType = "com.apple.product-type.library.static";
 		};
 		7D418F1CF3D70F21845D46D3 /* DocumentWindow */ = {
 			isa = PBXNativeTarget;
@@ -9939,9 +9891,6 @@
 					7833BBA38A74C2710294C4E4 = {
 						ProvisioningStyle = Manual;
 					};
-					7A7409B7D2670F5C8D933E0A = {
-						ProvisioningStyle = Manual;
-					};
 					7D418F1CF3D70F21845D46D3 = {
 						ProvisioningStyle = Manual;
 					};
@@ -10178,7 +10127,6 @@
 				FBE75F99ED84802F054A4F38 /* OakFilterList */,
 				22EAA7A41A4C4DDD26216D52 /* OakTabBarView */,
 				444C6CC0CD0F304E712C2269 /* CommitWindow */,
-				7A7409B7D2670F5C8D933E0A /* CrashReporter */,
 				7D418F1CF3D70F21845D46D3 /* DocumentWindow */,
 				92FCD798EB4385F8D9B1005A /* kvdb */,
 				AFB00373AC90573D79C7BFC8 /* OakDebug */,
@@ -10918,14 +10866,6 @@
 				0718C0C7981289B645DA2215 /* Dialog.mm in Sources */,
 				4D21622E47FC12524F471019 /* TMDChameleon.mm in Sources */,
 				ACDE655295A0C7F8C6B1FB79 /* TMDSemaphore.mm in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		264AD19919C26AE4EB9573A4 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				901B1DDCF0B99EA709220321 /* CrashReporter.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -12140,11 +12080,6 @@
 			isa = PBXTargetDependency;
 			target = 63F342C1E489CA4F04EABAC0 /* Onigmo */;
 			targetProxy = BC153CE471A523D36E3702FF /* PBXContainerItemProxy */;
-		};
-		2E442B644C8C5D65272501A9 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 7A7409B7D2670F5C8D933E0A /* CrashReporter */;
-			targetProxy = 0385CE7635BCC7BEAD9E1788 /* PBXContainerItemProxy */;
 		};
 		2E859DE8D1BD0FD2D3BD7B3C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -14531,7 +14466,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xcode/generated/TextMate.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				GCC_PREFIX_HEADER = "$(SRCROOT)/Shared/PCH/prelude.mm";
-				HEADER_SEARCH_PATHS = "$(inherited) $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/HTMLOutputWindow $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/undo $(SRCROOT)/Xcode/include/OakFilterList $(SRCROOT)/Xcode/include/CommitWindow $(SRCROOT)/Xcode/include/CrashReporter $(SRCROOT)/Xcode/include/DocumentWindow $(SRCROOT)/Xcode/include/kvdb";
+				HEADER_SEARCH_PATHS = "$(inherited) $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/HTMLOutputWindow $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/undo $(SRCROOT)/Xcode/include/OakFilterList $(SRCROOT)/Xcode/include/CommitWindow $(SRCROOT)/Xcode/include/DocumentWindow $(SRCROOT)/Xcode/include/kvdb";
 				INFOPLIST_FILE = Applications/TextMate/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -15258,21 +15193,6 @@
 			};
 			name = Release;
 		};
-		478051C1B55618CF9E5396C7 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				COMBINE_HIDPI_IMAGES = YES;
-				GCC_PREFIX_HEADER = "$(SRCROOT)/Shared/PCH/prelude.mm";
-				HEADER_SEARCH_PATHS = "$(inherited) $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-			};
-			name = Release;
-		};
 		47A7349BD899C1BF8D2CFC8E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -15861,21 +15781,6 @@
 			};
 			name = Debug;
 		};
-		91CE6D64B1C2097BE6996741 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				COMBINE_HIDPI_IMAGES = YES;
-				GCC_PREFIX_HEADER = "$(SRCROOT)/Shared/PCH/prelude.mm";
-				HEADER_SEARCH_PATHS = "$(inherited) $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-			};
-			name = Debug;
-		};
 		9248336F0065F02738C00149 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -16415,7 +16320,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xcode/generated/TextMate.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				GCC_PREFIX_HEADER = "$(SRCROOT)/Shared/PCH/prelude.mm";
-				HEADER_SEARCH_PATHS = "$(inherited) $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/HTMLOutputWindow $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/undo $(SRCROOT)/Xcode/include/OakFilterList $(SRCROOT)/Xcode/include/CommitWindow $(SRCROOT)/Xcode/include/CrashReporter $(SRCROOT)/Xcode/include/DocumentWindow $(SRCROOT)/Xcode/include/kvdb";
+				HEADER_SEARCH_PATHS = "$(inherited) $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/HTMLOutputWindow $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/undo $(SRCROOT)/Xcode/include/OakFilterList $(SRCROOT)/Xcode/include/CommitWindow $(SRCROOT)/Xcode/include/DocumentWindow $(SRCROOT)/Xcode/include/kvdb";
 				INFOPLIST_FILE = Applications/TextMate/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -17534,15 +17439,6 @@
 			buildConfigurations = (
 				175C90FFE72A866EAFB167E9 /* Debug */,
 				3040063E5A9D0AC6788C40D0 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
-		A1953EE97F1217EC3E58741B /* Build configuration list for PBXNativeTarget "CrashReporter" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				91CE6D64B1C2097BE6996741 /* Debug */,
-				478051C1B55618CF9E5396C7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
