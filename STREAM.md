@@ -4,6 +4,57 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 3 Task 1 (1/4): boost::variant → std::variant
+
+**What:** `plist::any_t` and `parser::node_t` (regexp) were `typedef`s for
+`boost::make_recursive_variant<...>::type` / `boost::variant<RW(t)...>`. Replaced both with a
+hand-rolled struct wrapping `std::variant`, matching tectiv3's `2c49eead` design: `any_t`/`node_t`
+hold a `.data` member, plus drop-in `plist::get<T>(any_t&/const&/*/const*)` overloads standing in
+for `boost::get`. `boost::apply_visitor(v, x)` → `std::visit(v, x.data)` everywhere;
+`boost::static_visitor<R>` base classes dropped (unneeded with `std::visit`). ~100 call sites
+across plist/regexp and ~20 consumer frameworks (BundleEditor, BundlesManager, OakFilterList,
+OakTextView, ns, layout, parse, selection, command, editor, bundles, buffer, theme, document,
+plist tests) updated by the same mechanical rule.
+
+**Also found and fixed:** `Frameworks/plist/src/ascii.rl` (ragel source, not caught by an
+initial `--include='*.cc,*.h,*.mm'` grep since it's `.rl`) had 5 more `boost::get` uses — this is
+why the first build attempt failed with "use of undeclared identifier 'boost'" pointing at the
+*generated* `_Rplist_ascii.cc`, not a hand-written file.
+
+**A second, non-mechanical fix:** `plist.h` already declared a *different*, pre-existing
+`template <typename T> T get(any_t const&)` — a value-converting getter (numeric/string
+coercion via `convert_to_helper_t`), semantically unrelated to `boost::get`'s discriminating
+accessor. Both can't be named `get` with the same parameter type. Renamed the converting one to
+`plist::convert<T>` (matching tectiv3) and updated its ~19 call sites (schema.h, grammar.cc,
+theme.cc, OakTheme.mm, t_simple.cc) — a blanket rename, not a selective one, since `convert<T>`
+is provably behaviour-identical to the old `get<T>` in 100% of cases (same underlying code, just
+renamed) whereas selectively keeping some as the new discriminating `get` would require proving
+per-call-site that the parsed type always matches exactly.
+
+**A third, ADL-driven fix in `delta.cc`:** once `any_t` became a real type in `namespace plist`
+(previously it was only a `boost::variant` alias, so ADL only ever found `namespace boost`, which
+is why `to_s` lived there under a "we place this in the boost namespace to support ADL" comment —
+moved to `namespace plist` now that it's unnecessary), an unqualified call to a file-local
+`static bool equal(any_t const&, any_t const&)` became genuinely ambiguous against the
+newly-ADL-visible `plist::equal` of the identical signature (reproduced and confirmed with a
+throwaway repro before touching the real file, since this class of bug doesn't show up as a
+type error — it's an overload-resolution ambiguity). Fixed by qualifying that one call as
+`plist::equal(...)`; verified both implementations perform the same deep structural comparison
+so this is a disambiguation, not a behaviour change.
+
+**Why:** Phase 3 Task 1 — zero Homebrew (`boost`) dependency to build.
+
+### If interrupted here
+
+`plist`, `regexp`, and `theme` frameworks' tests individually rebuilt and pass (33/41/1 tests,
+matching the parity doc) as an early sanity check before the full-tree sweep. `boost::crc_32_type`
+(2 files) and `google::dense_hash_map` (1 file) are NOT yet touched — `Shared/PCH/prelude.cc`
+still includes all three original headers on purpose, so this commit alone doesn't yet compile
+`file/src/bytes.cc` or `document/OakDocument.mm` or `theme/*` in isolation; the next commits
+finish those and the full-tree build/test verification happens once all four land. Do not remove
+`/opt/homebrew/include` from `Xcode/Base.xcconfig` yet — `boost/crc.hpp` and
+`sparsehash/dense_hash_map` are still `#include`d there.
+
 ## 2026-08-13 — Phase 2 merged; Phase 3 planned (much smaller than scoped)
 
 **What:** PR #4 merged to master with a REAL merge commit (`8f47182d`), not a squash — 39 commits
