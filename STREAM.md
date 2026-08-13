@@ -4,6 +4,51 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 3 merged; Phase 4 planned around a data-loss trap
+
+**What:** PR #5 merged to master (`851bec7c`) with a real merge commit. Phase 4 planned at
+`docs/superpowers/plans/2026-08-13-phase-4-identity.md`.
+
+**The recon finding that shapes the whole phase:** `com.macromates.*` in this tree is not one
+thing. It is three, with completely different migration semantics:
+
+1. **Identity — change these.** Bundle identifiers (app, QuickLookGenerator, Dialog, Dialog2),
+   six hardcoded cache paths under `~/Library/Caches/com.macromates.TextMate/`, app-bundle
+   lookups in `mate.mm:59` and `gtm.cc:104`, and the privileged helper's five launchd
+   identifiers (`constants.h:4-8`).
+2. **Data format — must NOT change.** Extended attributes written onto *the user's own
+   documents* (`com.macromates.bookmarks`, `.folded`, `.crc32`, `.selectionRange`,
+   `.visibleIndex`, `.backup.*`), the 38 `com.macromates.textmate.*` UTIs that every installed
+   bundle's `info.plist` references, and the `txmt://` URL scheme that external tools and links
+   across the internet use.
+3. **Internal chrome — leave alone.** Dispatch queue and log-subsystem names, error domain,
+   pasteboard type, Touch Bar identifiers, Mach port names. Renaming is churn with risk and no
+   benefit.
+
+**A naive `sed com.macromates → com.shelbydenike` would silently orphan every bookmark and code
+fold on every file the user has ever opened**, and break document-type associations with every
+installed bundle. The xattrs and the identifier live in the same tree and look identical to a
+grep; only their semantics differ.
+
+**What survives untouched:** `~/Library/Application Support/TextMate` is the literal string
+`TextMate`, not derived from the identifier (`main.mm:51`, `AppController.mm:505`,
+`tm_query.cc:32`, `generate.mm:30`). Bundles, themes, and gems need no migration — the single
+biggest piece of user state is safe.
+
+**What does need migrating:** `NSUserDefaults.standardUserDefaults` is implicitly keyed on the
+bundle identifier, so every setting reverts to defaults the moment it changes. Task 1 writes that
+migration and ships it in a release BEFORE the rename, so it has actually run against the old
+domain on a real machine before it is needed.
+
+**Why:** Phase 4 changes identity to `com.shelbydenike.*` without orphaning user state.
+
+### If interrupted here
+
+Phase 3 merged. `/Applications/TextMate.app` is v3.0.0-revived.9, zero build dependencies.
+Branch `phase-4/identity` created off master with the plan committed. Next: Task 1 (preferences
+migration — written and released BEFORE the identifier changes, never in the same build).
+
+
 ## 2026-08-13 — Phase 3 Task 4: `CrashReporter` deleted, `crash` kept (Phase 3 complete)
 
 **What:** Investigated both frameworks before touching either. `Frameworks/CrashReporter`
