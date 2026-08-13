@@ -4,6 +4,48 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 2 merged; Phase 3 planned (much smaller than scoped)
+
+**What:** PR #4 merged to master with a REAL merge commit (`8f47182d`), not a squash — 39 commits
+of history preserved, applying the lesson from Phase 1's squash that destroyed the textmatelives
+merge base. Phase 3 planned at
+`docs/superpowers/plans/2026-08-13-phase-3-dependency-purge.md`.
+
+**Recon shrank Phase 3 considerably.** The spec assumed a broad dependency purge; measurement says
+otherwise:
+
+- `boost` is **2 lines** (`Shared/PCH/prelude.cc:2-3`), `sparsehash` is **1 line** (`:4`)
+- `ragel` is **1 file** (`Frameworks/plist/src/ascii.rl`, 191 lines)
+- `multimarkdown` has **zero references — already gone**
+- `Frameworks/network` (1236 lines) has **zero includes from outside itself**; only
+  `SoftwareUpdate` and `network_test` depend on the target
+- `crash`/`CrashReporter` is 404 lines with 4 external includers
+
+Only `/opt/homebrew/include` remains on `HEADER_SEARCH_PATHS`, serving boost and sparsehash.
+Removing those two lines removes the header path with them.
+
+**Harvest, don't re-derive.** tectiv3 (PR #1467) solved four of these in an 8-hour window AFTER
+their CMake migration landed, so the removals are not tangled with CMake and are mechanical:
+boost → `std::variant` + zlib `crc32()` (`2c49eead`), sparsehash → `std::unordered_map`
+(`36acd469`), ragel → hand-written parser (`34e166b9`), multimarkdown → pre-generated HTML
+(`4aa342a9`). Their tree is upstream-based and ours is textmatelives-based with 231 commits of
+divergence, so cherry-picks may not apply — use the approach, port by hand where it conflicts.
+
+**One place we must NOT follow tectiv3.** They deleted `Frameworks/network` and the software
+updater *together* (`a85e40af`). We keep the updater — textmatelives' GitHub-Releases updater is
+what Phase 5 builds on and is a stated project goal. For us `network` is a replacement job on
+URLSession, not a deletion. Following them blindly would silently remove in-app updates.
+
+**Why:** Phase 3's goal is zero Homebrew dependencies to build.
+
+### If interrupted here
+
+Phase 2 complete and merged. `/Applications/TextMate.app` is v3.0.0-revived.5, built by Xcode,
+arm64. Branch `phase-3/dependency-purge` created off master with the plan committed. Next:
+Task 1 (remove boost and sparsehash — 3 lines of includes, but scattered uses; the zlib CRC
+replacement needs a byte-for-byte equivalence probe before the old code is deleted).
+
+
 ## 2026-08-13 — Task 8 verification: fixed a real regression from the previous commit's --no-parallel fix
 
 **What:** Running all 26 test targets end to end (the actual parity-document
