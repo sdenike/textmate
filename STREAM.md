@@ -4,6 +4,32 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 3 Task 1 (3/4): dense_hash_map → unordered_map; prelude.cc finished
+
+**What:** `theme_t`'s per-scope style cache (`Frameworks/theme/src/theme.h`) was the only
+`google::dense_hash_map` in the tree — `std::unordered_map<scope::scope_t, styles_t>` replaces
+it, and the `_cache.set_empty_key(scope::scope_t{})` call in `theme.cc`'s constructor is deleted
+outright (`unordered_map` has no empty-key concept; nothing else used it). `scope::scope_t`
+already had a `std::hash` specialization (`Frameworks/scope/src/scope.h:116`), so no new hasher
+was needed. Checked iteration-order dependence per the task's instruction: `_cache` is only ever
+touched via `find()`/`insert()` (confirmed by grep) — never iterated — so it's a pure
+key→value memoization cache and the swap changes nothing observable.
+
+`Shared/PCH/prelude.cc` now drops all three original includes (`boost/crc.hpp`,
+`boost/variant.hpp`, `sparsehash/dense_hash_map`) and adds `<unordered_map>` — safe here and not
+earlier, since by this commit nothing in the tree references any of the three anymore (variant:
+commit 1; crc: commit 2; dense_hash_map: this commit) and this commit's own `theme.h` change is
+the first thing that actually needs `<unordered_map>`.
+
+**Why:** Phase 3 Task 1.
+
+### If interrupted here
+
+`Xcode/Base.xcconfig` still has `/opt/homebrew/include` on `HEADER_SEARCH_PATHS` — one more
+commit removes it, once the full-tree build + all 26 test targets are re-verified against it
+gone. Next: full `./bin/build`, then each of the 26 test targets individually
+(`./bin/build <name>/test`), compared against `docs/benchmarks/2026-08-12-ninja-parity.md`.
+
 ## 2026-08-13 — Phase 3 Task 1 (2/4): boost::crc_32_type → zlib crc32()
 
 **What:** The two call sites (`io::bytes_t::crc32()` in `Frameworks/file/src/bytes.cc`, and four
