@@ -83,6 +83,15 @@ GCC_CHAR_IS_UNSIGNED_CHAR = YES
 // response file after this fix: `-DNULL_STR="<EF BF BF>"`, matching rave.
 GCC_PREPROCESSOR_DEFINITIONS = $(inherited) NULL_STR=\"￿\"
 
+// Release only, matching rave's `-DNDEBUG` (see build.ninja's release
+// CompileClang flags: `-Os -DNDEBUG -flto=thin -std=c++2a`). Missing this
+// is not cosmetic: Frameworks/OakDebug/src/OakAssert.h #ifdef NDEBUGs
+// ASSERT/ASSERT_EQ/etc. down to nothing; without it they expand to real
+// calls into OakBadAssertion/OakPrintBadAssertion/oak::to_s, which nothing
+// in this project links unless it also `require`s OakDebug -- confirmed by
+// an actual link failure (undefined symbols) building text_test without it.
+GCC_PREPROCESSOR_DEFINITIONS[config=Release] = $(inherited) NDEBUG
+
 // ---- Warning set, mirrored from build.ninja ------------------------------
 // Copied from rave's actual flags rather than chosen. The -Wno- entries are
 // deliberate suppressions the tree relies on; dropping one turns this into a
@@ -93,7 +102,8 @@ WARNING_CFLAGS = -Wall -Wwrite-strings -Wformat -Winit-self -Wmissing-include-di
 OTHER_CFLAGS = $(inherited) -fobjc-call-cxx-cdtors
 
 // ---- Optimisation, release config ----------------------------------------
-// rave release: -Os -flto=thin -DNDEBUG plus dead stripping.
+// rave release: -Os -flto=thin -DNDEBUG plus dead stripping. (NDEBUG itself
+// is above, in Preprocessor, config-scoped to Release only.)
 GCC_OPTIMIZATION_LEVEL = s
 LLVM_LTO = YES_THIN
 DEAD_CODE_STRIPPING = YES

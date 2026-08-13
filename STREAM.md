@@ -4,6 +4,48 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 2 Task 4c: gen_test.sh, a second real xcconfig bug (NDEBUG), text_test green
+
+**What:** `Xcode/scripts/gen_test.sh <name>` wraps `bin/gen_test`, writing the generated CxxTest
+runner to `$DERIVED_FILE_DIR/_T<name>.cc` with the same atomic `$out~ && mv` write as
+build.ninja's `GenTest` rule. `text_test`'s `preBuildScripts` entry (from `--emit-yaml`, previous
+commit) calls it. Verified the trick this depends on -- an XcodeGen source with `optional: true`
+and a `$(DERIVED_FILE_DIR)/...` path compiling even though the file doesn't exist until a
+preBuildScript creates it at build time -- in a scratch `/tmp` project before relying on it here,
+since it's not documented behavior, just an empirically-confirmed one.
+
+Building `text_test` (Release) then failed at **link**, not compile: undefined `OakBadAssertion`,
+`OakPrintBadAssertion`, `oak::to_s`. Traced it to `Frameworks/OakDebug/src/OakAssert.h`:
+`ASSERT`/`ASSERT_EQ`/`ASSERT_NE`/etc. (used throughout `text/src`, e.g. `transcode.h`) are
+`#ifdef NDEBUG`-gated to nothing; without `NDEBUG` they expand to real calls that only link if the
+target also `require`s `OakDebug` -- which `text` correctly doesn't. Base.xcconfig's own comment
+already said "rave release: ... `-DNDEBUG`" but the file never actually set it. Second real gap
+found by actually building, not two unrelated bugs -- both were "the comment describes rave
+correctly, the xcconfig line under it doesn't match the comment." Fixed with a config-scoped line,
+`GCC_PREPROCESSOR_DEFINITIONS[config=Release] = $(inherited) NDEBUG`, since Debug/Release share one
+xcconfig file and Debug should keep assertions live.
+
+**Full clean verification, from scratch:** deleted `TextMate.xcodeproj` and `build/`, re-ran
+`xcodegen generate --spec project.yml`, then `tests/xcode_parity_test.sh text` and
+`tests/xcode_parity_test.sh text_test` (both PASS), then ran the built binary directly:
+`text_test: 34 tests passed`, exit 0. Compared against `./bin/build text/test`'s own binary run
+directly (ninja's `RunTest` progress line is mislabeled for every target, per the Task 2 entry
+below, so the direct binary run is the trustworthy comparison): `text: 34 tests passed`, exit 0.
+Same count, both green -- Xcode and ninja agree on this framework.
+
+**Why:** Task 4's whole purpose is proving the pattern before Task 5 repeats it 45 times, so both
+xcconfig bugs found here (bare `"..."` quoting, missing `-DNDEBUG`) are exactly the kind of thing
+worth catching once on one framework instead of 45 times later.
+
+### If interrupted here
+
+Task 4 is functionally done: `text` and `text_test` both build clean under Xcode, tests run green
+and match ninja exactly. Remaining before closing out the task: commit this increment
+(`Xcode/scripts/gen_test.sh`, `tests/xcode_parity_test.sh`, the NDEBUG xcconfig fix, this entry),
+write the task-4-report.md, verify `git status --porcelain` is clean of `TextMate.xcodeproj`/`build/`
+(both gitignored) before that commit. Nothing else outstanding for Task 4 itself; Task 5 is next
+(replicate across the other 45 frameworks) and Task 6 (app target) is explicitly out of scope here.
+
 ## 2026-08-13 — Phase 2 Task 4b: rave2yaml --emit-yaml, project.yml, and a real xcconfig bug
 
 **What:** `bin/rave2yaml --emit-yaml <target>...` hand-prints (no `require 'yaml'`, see the entry
