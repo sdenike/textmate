@@ -4,6 +4,38 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 2: rave2yaml --emit-yaml now raises on vendor targets
+
+**What:** `bin/rave2yaml --emit-yaml`'s `checked_target` now raises immediately when the
+requested target (or anything in its transitive `require` closure) lives under `vendor/`
+(`kvdb`, `Onigmo`, `xdiff`) -- naming the target and its `default.rave:line`, and explaining why:
+vendor targets declare no `executable`, so they pass the `framework` kind check same as a real
+framework, but diverge from the `Frameworks/<name>/src/` convention `--emit-yaml` assumes
+(explicit `headers` paths, per-target `add FLAGS` include flags, brace-expansion source globs, no
+`src/` convention). Before this, `--emit-yaml kvdb` silently printed a `library.static` target
+whose `sources: Frameworks/kvdb/src` doesn't exist -- the exact silent-gap risk the task-4 report
+flagged. `--inventory` is untouched (it doesn't call `checked_target`), so its vendor listing
+(Task 7's parity checklist) stays complete. `cxx_tests`/`require_headers` fail-loud re-verified
+still firing (`ns`, `OakDebug`, `TMFileReference`).
+
+Added a regression test to `tests/rave2yaml_test.sh`: asserts `--emit-yaml kvdb` raises and that
+the error names both "vendor target" and the `.rave` file. Verified the test actually catches the
+regression -- ran it against the pre-fix tool (`git show HEAD:bin/rave2yaml` in a scratch copy)
+and confirmed FAIL before restoring the fix. `bash tests/rave2yaml_test.sh` still reports `PASS:
+56 targets, all dependencies resolve`; `xcodebuild -target text ...` (the Task 4 pilot) still
+`BUILD SUCCEEDED` -- `text`'s closure never touches a vendor target, confirmed by diffing
+`--emit-yaml text`'s output against the committed `project.yml` (byte-identical).
+
+**Why:** Task 5 scales `--emit-yaml` to 46 frameworks; `DocumentWindow` and `Applications/TextMate`
+both `require kvdb`, `regexp` requires `Onigmo` -- Task 5 would otherwise hit this cold and could
+ship a quietly-broken `project.yml` instead of a clear stop.
+
+### If interrupted here
+
+Committed (code + test + this entry, one `build:` commit). Nothing else outstanding for this gap.
+Vendor targets themselves are still NOT translated to Xcode -- deliberately out of scope here,
+left for whichever task decides how `kvdb`/`Onigmo`/`xdiff` map into XcodeGen.
+
 ## 2026-08-13 — Merge-base repaired; dead build files and SyntaxMate removed
 
 **What (merge base):** Phase 1 (#3) was squash-merged, which landed all 130 textmatelives commits'

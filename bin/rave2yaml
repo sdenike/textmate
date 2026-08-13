@@ -294,7 +294,8 @@ end
 # on the test tool, not the static lib.
 #
 # Deliberately narrow, same fail-loud stance as --inventory (see file
-# header): any target in the closure that isn't `framework` kind, or that
+# header): any target in the closure that isn't `framework` kind, that
+# lives under vendor/ (see the vendor check in checked_target), or that
 # uses a directive this tool doesn't translate yet (require_headers,
 # cxx_tests), raises rather than being silently dropped or guessed at. Task
 # 5/6 extend this when they actually need those cases; this tool won't
@@ -318,6 +319,21 @@ end
 
 def checked_target(name, by_name)
   target = by_name.fetch(name) { raise RaveError, "--emit-yaml: unknown target '#{name}'" }
+  # vendor/*/default.rave targets (kvdb, Onigmo, xdiff) declare no
+  # `executable`, so kind_of returns 'framework' and they'd otherwise sail
+  # past the kind check below -- the exact silent-gap the task-4 report
+  # flagged: kvdb would emit a library.static target whose
+  # `sources: Frameworks/kvdb/src` doesn't exist, quietly wrong rather than
+  # an error. Caught here, before that check runs, so the reason reported
+  # is about vendor divergence, not a bogus 'kind' mismatch.
+  if target.vendor
+    raise RaveError, "--emit-yaml: #{name}: vendor target (#{target.file}:#{target.line}) is " \
+                      "not yet translated -- vendor/*/default.rave diverges from the " \
+                      "Frameworks/<name>/src/ convention this tool assumes: explicit 'headers' " \
+                      "paths instead of an implicit src/*.h export, per-target 'add FLAGS' " \
+                      "include flags frameworks never use, brace-expansion source globs, and no " \
+                      "src/ convention for source paths"
+  end
   unless kind_of(target) == 'framework'
     raise RaveError, "--emit-yaml: #{name}: kind '#{kind_of(target)}' is not yet " \
                       "translated (only 'framework' targets are)"
