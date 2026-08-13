@@ -10,9 +10,11 @@ cd "$(git rev-parse --show-toplevel)"
 # count undercounts by one. `target` opens every target block in this
 # grammar (see bin/rave's Parser#flatten), so counting the directive
 # itself -- rather than inferring targets from sources/executable -- is
-# exact.
+# exact. PlugIns/*/default.rave (Dialog, Dialog2, each with a companion
+# tm_dialog*/tm_dialog2 tool -- 4 targets from 2 files) is included: Task 6
+# widened rave2yaml's walk to cover it.
 declared=$(grep -hE '^[[:space:]]*target[[:space:]]' \
-    Frameworks/*/default.rave Applications/*/default.rave | wc -l | tr -d ' ')
+    Frameworks/*/default.rave Applications/*/default.rave PlugIns/*/default.rave | wc -l | tr -d ' ')
 found=$(./bin/rave2yaml --inventory | grep -c '^target ')
 
 [ "$declared" = "$found" ] || {
