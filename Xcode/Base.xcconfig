@@ -4,6 +4,18 @@
 // so the Xcode build starts from what rave actually does. Where a value
 // deliberately DIFFERS from rave, it is called out below.
 
+// ---- Build location ------------------------------------------------------
+// Keep ALL build output out of the source tree. xcodebuild otherwise defaults
+// SYMROOT to <project>/build, which puts a fully launchable TextMate.app inside
+// the working copy — Spotlight indexes it, and you end up with duplicate
+// binaries competing with the installed one.
+//
+// ~/build/textmate-revived also carries a .metadata_never_index marker, so
+// build output stays out of Spotlight entirely.
+SYMROOT = $(HOME)/build/textmate-revived/xcode
+OBJROOT = $(HOME)/build/textmate-revived/xcode/obj
+SHARED_PRECOMPS_DIR = $(HOME)/build/textmate-revived/xcode/pch
+
 // ---- Architecture --------------------------------------------------------
 // Apple Silicon only. macOS 26 does not run on Intel, so there is no reason to
 // carry a second slice.

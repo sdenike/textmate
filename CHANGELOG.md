@@ -2,6 +2,33 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.3)
+
+**First build produced by the new Xcode project.** Functionally identical to the
+previous release — this is the build system changing underneath, not the app.
+
+### Xcode migration (Phase 2, 6 of 8 tasks)
+
+* `TextMate.app` now builds from `TextMate.xcodeproj` with Cmd-B, or
+  `xcodebuild -scheme TextMate`. 86 targets total.
+* All six embedded helpers build and land in the bundle at the right paths:
+  the privileged tool, the `mate` and `tm_query` command-line tools, both
+  Dialog plug-ins, and the QuickLook generator.
+* Bundle identity verified byte-for-byte against the old build — same name,
+  same version, same identifier — so this replaces the previous install
+  cleanly and keeps your settings and bundles.
+
+The old `configure` + `ninja` build still works and remains the reference until
+artifact and test parity is proven; only then does it get removed.
+
+### Known
+
+* One `regexp` test assertion differs between the two builds (a Unicode casing
+  case). Real and reproducible, and it must be resolved before the old build
+  system is retired.
+* Debug-configuration entitlements are simplified relative to the old build;
+  the Release path is unaffected.
+
 ## 2026-08-13 (v3.0.0-revived.2)
 
 Build-system progress. **No user-visible change** — this release exists so each
