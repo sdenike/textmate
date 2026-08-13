@@ -73,11 +73,15 @@ GCC_PRECOMPILE_PREFIX_HEADER = YES
 GCC_CHAR_IS_UNSIGNED_CHAR = YES
 
 // ---- Preprocessor --------------------------------------------------------
-// rave passes -D'NULL_STR="￿"' (default.rave:12). Verified byte-for-byte
-// that the literal form below produces the identical macro: 3 bytes EF BF BF,
-// i.e. U+FFFF in UTF-8. Do not "simplify" this to a different escape without
-// re-checking the emitted bytes.
-GCC_PREPROCESSOR_DEFINITIONS = $(inherited) NULL_STR="￿"
+// rave passes -D'NULL_STR="￿"' (default.rave:12). The 3-byte payload (EF BF
+// BF, U+FFFF in UTF-8) was verified byte-for-byte, but bare "..." in an
+// xcconfig value is grouping syntax that xcconfig strips before the value
+// ever reaches clang -- confirmed by reading the actual compiler response
+// file, which had `-DNULL_STR=<EF BF BF>` with NO quote bytes at all, i.e.
+// not a string literal. `\"` is the standard xcconfig escape to put a
+// literal quote character in a build setting value; re-verified in the
+// response file after this fix: `-DNULL_STR="<EF BF BF>"`, matching rave.
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) NULL_STR=\"￿\"
 
 // ---- Warning set, mirrored from build.ninja ------------------------------
 // Copied from rave's actual flags rather than chosen. The -Wno- entries are
