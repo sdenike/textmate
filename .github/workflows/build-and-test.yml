@@ -17,15 +17,10 @@ jobs:
           submodules: recursive
 
       - name: Install build dependencies
-        run: brew install boost google-sparsehash multimarkdown ninja ragel mercurial subversion
-
-      # No local.rave pre-seed: configure now derives the Homebrew prefix itself,
-      # so this step exercises that path on a clean arm64 runner.
-      - name: Configure
-        run: ./configure
+        run: brew install boost google-sparsehash multimarkdown ragel mercurial subversion
 
       - name: Build TextMate.app
-        run: ninja TextMate
+        run: xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build
 
   test:
     if: github.repository == 'sdenike/textmate'
@@ -37,29 +32,45 @@ jobs:
           submodules: recursive
 
       - name: Install build dependencies
-        run: brew install boost google-sparsehash multimarkdown ninja ragel mercurial subversion
+        run: brew install boost google-sparsehash multimarkdown ragel mercurial subversion
 
-      # No local.rave pre-seed: configure now derives the Homebrew prefix itself,
-      # so this step exercises that path on a clean arm64 runner.
-      - name: Configure
-        run: ./configure
-
-      - name: Discover and run all framework tests
+      - name: Build and run all framework tests
         run: |
-          # Excluded:
+          # Excluded (headless-hostile):
           #   buffer  - 3 spellcheck tests need NSSpellChecker dictionary (no headless support)
           #   cf,
           #   layout  - pure C++ data-structure tests trap/segfault under parallel runner on
-          #             macos-14 (.cc tests run parallel; .mm get --no-parallel via rave:1454)
+          #             macos-14
           #   command,
           #   editor  - both call runner_t::launch() + wait_for_command(); wait() polls NSApp
           #             events and a worker-thread runloop. With NSApp nil in a CLI binary the
           #             completion path never fires and the test hangs to job timeout.
           #   file    - test_save_translit relies on iconv //TRANSLIT behavior that differs
           #             between macOS 14.5 (runner SDK) and macOS 26 (local).
-          TESTS=$(grep -lE '^[[:space:]]*tests[[:space:]]' Frameworks/*/default.rave \
-                  | xargs -n1 dirname | xargs -n1 basename \
-                  | grep -vE '^(buffer|cf|command|editor|file|layout)$' \
-                  | sed 's|$|/test|')
+          #
+          # Fixed list, not discovered: the `.rave` files this used to be grepped from are
+          # gone (Phase 2 Task 8). This is the 20 CI-included test targets from the 26-target
+          # parity baseline (docs/benchmarks/2026-08-12-ninja-parity.md) -- add a new
+          # framework's `<name>_test` target here by hand if it ships tests.
+          TESTS="authorization_test bundles_test BundlesManager_test document_test encoding_test FileBrowser_test HTMLOutput_test io_test network_test ns_test parse_test plist_test regexp_test scm_test scope_test selection_test settings_test SoftwareUpdate_test text_test theme_test"
           echo "Running tests: $TESTS"
-          ninja $TESTS
+          FAIL=0
+          for t in $TESTS; do
+            echo "::group::$t"
+            xcodebuild -project TextMate.xcodeproj -target "$t" -configuration Release build CODE_SIGNING_ALLOWED=NO
+            BIN="$(xcodebuild -project TextMate.xcodeproj -target "$t" -configuration Release -showBuildSettings | awk -F' = ' '/ BUILT_PRODUCTS_DIR/{print $2; exit}')/$t"
+            # --no-parallel only for the frameworks whose tests are .mm and call Cocoa APIs
+            # that assert NSThread.isMainThread; ninja's RunTest rule forced this only for
+            # these (gen_test.sh's own comment names them). Forcing it for every runner is NOT
+            # safe: it reliably breaks settings_test's t_track_paths.cc, which needs real
+            # wall-clock time to pass between filesystem operations across concurrently
+            # running tests (found by testing: passes bare/parallel, fails 1/9 forced serial).
+            FLAGS=""
+            case " ${t%_test} " in
+              " buffer "|" document "|" BundlesManager "|" FileBrowser "|" ns "|" encoding "|" SoftwareUpdate ")
+                FLAGS="--no-parallel" ;;
+            esac
+            "$BIN" $FLAGS || { echo "FAILED: $t"; FAIL=1; }
+            echo "::endgroup::"
+          done
+          exit "$FAIL"

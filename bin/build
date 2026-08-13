@@ -1,6 +1,9 @@
 #!/bin/bash
-# Build wrapper. Exists because two things about a developer's shell reliably
-# break this build, and both produce errors that point at the wrong culprit.
+# Build wrapper around xcodebuild. Exists because two things about a
+# developer's shell reliably break this build, and both produce errors that
+# point at the wrong culprit. Xcode script phases still shell out to system
+# Ruby (bin/gen_test, bin/gen_html, bin/gen_credits.rb), so both guards below
+# are still needed even though the build itself is no longer ninja.
 #
 # 1. Ruby version managers (chruby, rbenv, rvm) export GEM_HOME/GEM_PATH into
 #    the environment. The build's helper scripts run under system Ruby 2.6 via
@@ -15,6 +18,13 @@
 #    DBM.new fails with EACCES even though the directory is yours. Deleting it
 #    needs write permission on the directory, not the file, so no sudo is
 #    required to clear it.
+#
+# Usage:
+#   bin/build                  # build the TextMate scheme (Release)
+#   bin/build <target>         # build any other Xcode target (e.g. mate)
+#   bin/build <framework>/test # build <framework>_test and run it (exit
+#                               # reflects pass/fail, same as the old
+#                               # `ninja <framework>/test`)
 set -euo pipefail
 
 CACHE="$HOME/Library/Caches/com.macromates.TextMate/githubcredits.db"
@@ -26,7 +36,36 @@ if [ -e "$CACHE" ] && [ ! -O "$CACHE" ]; then
 	}
 fi
 
-[ -f build.ninja ] || ./configure
+unset GEM_HOME GEM_PATH RUBYLIB RUBYOPT BUNDLE_GEMFILE
 
-exec env -u GEM_HOME -u GEM_PATH -u RUBYLIB -u RUBYOPT -u BUNDLE_GEMFILE \
-	ninja "${@:-TextMate}"
+PROJECT="TextMate.xcodeproj"
+CONFIGURATION="Release"
+TARGET="${1:-TextMate}"
+
+if [[ "$TARGET" == */test ]]; then
+	FRAMEWORK="${TARGET%/test}"
+	NAME="${FRAMEWORK}_test"
+	xcodebuild -project "$PROJECT" -target "$NAME" -configuration "$CONFIGURATION" \
+		build CODE_SIGNING_ALLOWED=NO
+	BIN="$(xcodebuild -project "$PROJECT" -target "$NAME" -configuration "$CONFIGURATION" \
+		-showBuildSettings | awk -F' = ' '/ BUILT_PRODUCTS_DIR/{print $2; exit}')/$NAME"
+	# --no-parallel (long form only -- bin/gen_test's getopt string is
+	# "bmpr:vhV", so -P is not actually wired despite its usage text), but
+	# ONLY for the frameworks whose tests are .mm and call Cocoa APIs that
+	# assert NSThread.isMainThread (e.g. TMFileReference); ninja's RunTest
+	# rule forced this only for these (gen_test.sh's own comment names
+	# them). Forcing it for every runner is NOT safe: it reliably breaks
+	# settings_test's t_track_paths.cc, which needs real wall-clock time to
+	# pass between filesystem operations across concurrently running tests
+	# (found by testing: passes bare/parallel, fails 1/9 under forced
+	# --no-parallel).
+	case " $FRAMEWORK " in
+		" buffer "|" document "|" BundlesManager "|" FileBrowser "|" ns "|" encoding "|" SoftwareUpdate ")
+			exec "$BIN" --no-parallel ;;
+	esac
+	exec "$BIN"
+elif [ "$TARGET" = "TextMate" ]; then
+	exec xcodebuild -project "$PROJECT" -scheme TextMate -configuration "$CONFIGURATION" build
+else
+	exec xcodebuild -project "$PROJECT" -target "$TARGET" -configuration "$CONFIGURATION" build
+fi

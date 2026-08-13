@@ -1,0 +1,1 @@
+../../../../Frameworks/FileBrowser/src/FileItemImage.h

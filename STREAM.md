@@ -4,6 +4,1216 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Task 8 verification: fixed a real regression from the previous commit's --no-parallel fix
+
+**What:** Running all 26 test targets end to end (the actual parity-document
+verification, not just spot checks) turned up a genuine regression from the
+"force --no-parallel for every runner" fix two commits ago: `settings_test`
+went from PASS (9 tests, matching the parity doc) to **1 of 9 failing**
+under forced serial execution, consistently reproducible. Root cause:
+`Frameworks/settings/tests/t_track_paths.cc`'s `test_track_file` depends on
+real wall-clock time passing between filesystem operations
+(`usleep(100000)` between writes and its change-tracker assertions) --
+under serial execution with nothing else contending for the CPU, that
+still wasn't enough elapsed time; under parallel (default), it reliably
+was. Confirmed directly: bare invocation (parallel, default) → silent
+pass; `--no-parallel` → same 1/9 failure every time, 3 runs. `settings` is
+a `.cc`-only framework -- ninja never forced `--no-parallel` for it either,
+only for the seven frameworks with `.mm` test sources (`gen_test.sh`'s own
+comment names them: buffer, document, BundlesManager, FileBrowser, ns,
+encoding, SoftwareUpdate). "Forcing it universally is always safe" was
+wrong -- reverted to matching ninja exactly: `bin/build` and
+`build-and-test.yml` now pass `--no-parallel` only for those seven,
+everything else runs bare. Re-ran all 26 targets after the fix: **26/26
+now match `docs/benchmarks/2026-08-12-ninja-parity.md`'s Xcode section
+exactly** -- 19 PASS + `scm` FAIL (hg/svn) among the 20 CI-included, and
+buffer FAIL/cf CRASH/layout+command+editor PASS/file FAIL among the six
+CI-excluded, byte-identical failure messages where applicable (spot-checked
+scm, buffer, cf, file logs against the parity doc's exact text).
+
+Also ran a genuine clean-state verification, not just a same-checkout
+rebuild: `git clone --recursive` this branch into `/tmp`, moved
+`~/build/textmate-revived/xcode` aside so the shared, xcconfig-pinned
+output directory couldn't mask staleness, and built from there --
+`BUILD SUCCEEDED`, `lipo -archs` reports `arm64` only, `codesign --verify
+--deep --strict` passes. The 22 `grep`-matched "error:"/"FAILED" hits in
+that build's full log are all pre-existing `-Wdeprecated-declarations`
+warnings whose message text happens to contain an Objective-C selector
+fragment like `...error:` -- not real failures.
+
+**Why:** A parity claim is only real once actually measured against all 26
+targets, not assumed from 25 matching and one "probably fine." The two
+prior commits' `--no-parallel` reasoning was plausible but untested against
+the specific test it was about to break; running it surfaced that
+immediately.
+
+### If interrupted here
+
+All of Task 8's required work and this verification fix are committed.
+Remaining before reporting done: confirm `git ls-files '*.rave'` is empty
+and `configure`/`bin/rave` are gone (already true, just needs a final
+one-line check), confirm the Intel grep is still clean, and write the
+final summary. Nothing pushed.
+
+## 2026-08-13 — Task 8 verification: fixed a clean-clone build failure (pre-existing, Task 6/7)
+
+**What:** Verifying item 1 of Task 8's own bar ("`xcodebuild` succeeds from a
+clean clone state") turned up a real gap: `Xcode/generated/TextMate.entitlements`
+(XcodeGen's output from `project.yml`'s `entitlements: properties:` block) was
+`.gitignore`d, never committed, but the committed `TextMate.xcodeproj`'s
+`TextMate` target points `CODE_SIGN_ENTITLEMENTS` straight at that path.
+Reproduced directly: moved the directory aside, rebuilt — `BUILD FAILED`,
+`ProcessProductPackaging ... TextMate.app.xcent` missing input file. Every
+doc (this fork's own and this session's rewrites) says XcodeGen is optional
+for a plain build, so a genuinely fresh clone that never runs `xcodegen
+generate` could not build at all. Predates Task 8 (Task 6/7 committed the
+`.xcodeproj` but not this file) but blocks Task 8's own verification bar, so
+fixed here rather than escalated: un-ignored `Xcode/generated/` and committed
+`TextMate.entitlements` (content is fully deterministic — 4 static booleans
+from `project.yml`, reconfirmed by running `xcodegen generate` fresh and
+diffing). Regenerating also reshuffled unrelated `Embed Dependencies` build
+phase orderings inside `project.pbxproj` (XcodeGen's own non-determinism,
+nothing to do with this fix) — reverted that file to the committed version
+via `git checkout --` before staging, so only the entitlements file and the
+`.gitignore` line changed. Rebuilt clean afterward: `BUILD SUCCEEDED`.
+
+**Why:** A verification step is only real if it's actually run; running it
+found a genuine defect blocking the exact claim Task 8 must confirm.
+Two-focused-attempt rule from the builder brief didn't even need invoking —
+root cause was clear from the first failing build log.
+
+## 2026-08-13 — Task 8: rave/ninja build deleted; Xcode is the only build
+
+**What:** The irreversible step. Deleted: `configure`, `bin/rave`, all 60
+`.rave` files, and three now-unreferenced rave-only helpers found by
+grepping the whole tree for real (non-comment) invocations —
+`bin/rave2yaml` (its only consumers were comments and its own test;
+nothing left to convert once `.rave` sources are gone), `bin/gen_build`
+(its only reference to itself was itself; its one job was calling the
+now-deleted `./configure`), and `tests/rave2yaml_test.sh` (tested
+`bin/rave2yaml` against `.rave` files, both gone). Confirmed
+`bin/gen_test`, `bin/gen_html`, `bin/gen_credits.rb`, `bin/build_app_icon.sh`
+are genuinely invoked by `Xcode/scripts/*.sh` (grepped each) — untouched.
+Also removed the stray untracked `local.rave` and `build.ninja` files this
+machine had on disk (dead weight, nothing reads them anymore) and dropped
+`.gitignore`'s `build.ninja`/`.ninja_deps`/`.ninja_log`/`local.rave` entries.
+
+`bin/build` rewritten around `xcodebuild`: no args builds the `TextMate`
+scheme; `<target>` builds any other Xcode target; `<framework>/test` builds
+`<framework>_test` and runs the binary directly (`BUILT_PRODUCTS_DIR`
+resolved via `-showBuildSettings`, same pattern Task 7's parity measurement
+proved), passing `--no-parallel` for every runner (not just `.mm` ones —
+ninja's `RunTest` rule forced it only for `.mm` runners whose Cocoa calls
+assert `NSThread.isMainThread`, e.g. `TMFileReference`; forcing it
+universally is always safe and avoids re-deriving `gen_test.sh`'s own
+`.cc`/`.mm` classification a third place). Both environment guards
+(leaked `GEM_HOME`/`GEM_PATH`, root-owned `githubcredits.db`) kept verbatim
+— Xcode's script phases still shell out to system Ruby. Tested directly:
+default build, `mate` (plain target), `scope/test` (pass) and `scm/test`
+(genuine local fail, `hg`/`svn` absent, exit 1 propagated correctly) all
+behave as expected.
+
+`README.md`: Building section rewritten for `xcodebuild`/Xcode, the
+"transition" notice removed, MacPorts instructions dropped (`Xcode/Base.xcconfig`
+hardcodes `/opt/homebrew/include` — MacPorts was never wired into the Xcode
+build, so continuing to advertise it would be newly false, not preserved
+truth), dead `[ninja]`/`[NinjaBundle]`/`[MacPorts]` footnote links removed.
+`CONTRIBUTING.md` checked and needs no change — it never described the
+build system. `CLAUDE.md`'s Build system and Tests sections rewritten for
+Xcode only; every remaining "ninja"/"rave" mention left in it is now
+explicitly past-tense ("no longer works", "was deleted"), not an
+instruction. `project.yml`'s stale `# generated by bin/rave2yaml ... do not
+hand-edit` header corrected to say it's hand-maintained now that the
+generator is gone.
+
+Two files beyond the required list, found via a repo-wide `ninja` grep and
+fixed because they are genuinely live (not historical) build/dev docs:
+`.tm_properties` (removed `TM_NINJA_FILE`/`TM_NINJA_TARGET` — the optional
+Ninja bundle integration they configured has no replacement, so self-hosted
+⌘B-inside-TextMate building is gone, documented as such in README rather
+than papered over) and `docs/RELEASING.md` (steps/line-citations updated
+for the new `release.yml`; the old claim that `Applications/TextMate/default.rave`
+stamps `CFBundleShortVersionString` from `CHANGELOG.md` was removed rather
+than guessed at a replacement — grepping `project.yml` and the built
+`project.pbxproj` for `APP_VERSION`/`CHANGELOG` found no wiring, which
+looks like a pre-existing gap from Task 6/7, out of scope here to fix).
+
+Left referencing ninja, deliberately not touched (out of scope, not "how
+to build"): `Frameworks/scm/tests/t_hg.cc`/`t_svn.cc` test-failure messages
+suggesting `ninja scm/coerce` to skip (a test-content edit, not build
+docs); `Xcode/Base.xcconfig` and `Xcode/scripts/*.sh` historical
+"matches/replaces what rave did" provenance comments; `project.yml`'s three
+`cxx_tests` non-translation rationale comments; `CHANGELOG.md`,
+`docs/benchmarks/*`, `docs/superpowers/*` (historical records);
+`.github/dependabot.yml` (still-accurate phase-tracking rationale);
+`Default.tmProperties`/bundle `.plist` data files/`bindings.plist`/
+`DocumentWindowController.mm`/`bin/generate_available_bundles.rb` (all
+about the unrelated `.ninja`-file-format grammar or the third-party Ninja
+bundle by name, not this repo's own build).
+
+**Why:** Task 8 items 2–6: delete the rave build now that Task 7 proved
+parity; keep `bin/build` working; rewrite the build docs in the same
+commit as the deletion so they never lie even transiently; clean
+`.gitignore` of patterns that no longer apply.
+
+### If interrupted here
+
+The deletion, `bin/build`, `.gitignore`, `project.yml`'s header,
+`.tm_properties`, and `docs/RELEASING.md` are committed together (the
+docs had to land atomically with the deletion). `README.md` and `CLAUDE.md`
+are in the same commit. Still to verify and report: a clean-state
+`xcodebuild -scheme TextMate -configuration Release build`, all 26 test
+targets against the parity doc, `git ls-files '*.rave'` empty,
+`lipo -archs` on the freshly built app, and the Intel grep. Nothing pushed.
+
+## 2026-08-13 — Task 8, step 1: CI workflows switched from ninja to xcodebuild
+
+**What:** `.github/workflows/build-and-test.yml`: both jobs' `Configure`
+step (`./configure`) and `ninja` invocation replaced with `xcodebuild
+-project TextMate.xcodeproj -scheme TextMate -configuration Release build`;
+`ninja` dropped from both `brew install` lines. The test job's dynamic
+`.rave`-file discovery (`grep ... Frameworks/*/default.rave`) replaced with
+a fixed, hand-maintained list of the 20 CI-included `<name>_test` Xcode
+targets (the same 20 from the 26-target parity baseline) — dynamic
+discovery has no source left to discover from once `.rave` files are gone.
+Each target is now built with `xcodebuild -target <name>_test ...
+CODE_SIGNING_ALLOWED=NO` and then its compiled binary is executed directly
+(mirrors Task 7's proven per-target method exactly), since there is no
+native `xcodebuild` action equivalent to ninja's build+run `RunTest` rule
+for these CxxTest binaries. Verified locally against the real
+`TextMate.xcodeproj` before writing this: `text_test` builds and runs exit
+0 via this exact pattern. `.github/workflows/release.yml`: `ninja` dropped
+from its `brew install` line; the `Pre-seed local.rave` + `Configure` +
+`ninja TextMate` steps collapsed into one `xcodebuild ... CODE_SIGN_IDENTITY=
+"$CS_IDENTITY" OTHER_CODE_SIGN_FLAGS="--timestamp" build` step; `Locate built
+app` now points at the fixed, xcconfig-pinned `~/build/textmate-revived/xcode/
+Release/TextMate.app` instead of a generic `$HOME/build` search. The
+inside-out manual re-sign/re-seal/re-sign-outer-app steps that follow are
+left structurally unchanged (still correct and still needed: `assemble_resources.sh`
+copies some embedded binaries with plain `cp`, which Xcode's native
+Embed-and-sign machinery never touches, unlike the real Xcode targets
+Task 7 confirmed are auto re-signed on embed). `.github/workflows/ci.yml`
+needed no change — it only delegates to `build-and-test.yml` and never
+mentions ninja itself. `gitleaks.yml` untouched, as instructed.
+
+**Why:** Task 8 item 1: switch CI to `xcodebuild` before deleting the files
+CI used to depend on, so CI is never broken mid-migration. The
+`github.repository == 'sdenike/textmate'` guard and the six headless-hostile
+test exclusions (buffer, cf, layout, command, editor, file) are preserved
+verbatim per the task brief. `hg`/`svn` installation for `scm`'s tests is
+untouched.
+
+### If interrupted here
+
+CI conversion is committed and complete. Task 8's remaining, irreversible
+step — deleting `configure`, `bin/rave`, all `.rave` files, and the
+now-dead rave-only helpers (`bin/rave2yaml`, `bin/gen_build`,
+`tests/rave2yaml_test.sh`), rewriting `bin/build` to drive `xcodebuild`,
+and rewriting `README.md`/`CLAUDE.md` in the same commit — has not started
+yet. `CONTRIBUTING.md` was checked and needs no change (it never described
+the build system). Nothing pushed.
+
+## 2026-08-13 — Task 7 complete: Xcode/ninja parity measured and proven
+
+**What:** `docs/benchmarks/2026-08-12-ninja-parity.md` now has the full Xcode-side
+measurement alongside Task 2's ninja baseline: artifact parity (41/41 ninja
+artifacts confirmed under Xcode by identity, one real gap — `CommitWindowTool`
+— found and fixed, not explained away), test parity (all 26 test targets,
+identical pass/fail/crash pattern to the ninja baseline including failure
+counts and assertions), and the `regexp`/Onigmo discrepancy write-up
+(root-caused to `libtool -static`'s lazy archive linking dropping
+`vendor/Onigmo/src/setup.c`'s symbol-less constructor, fixed with
+`-force_load`, verified passing on both builds). The document states plainly:
+**parity is proven.**
+
+Four commits this session: `3cb54ea0` (the regexp/Onigmo fix), `4f848f7b` (the
+CommitWindowTool + empty-`dependencies:` fix), `26213106` (committed
+`TextMate.xcodeproj`, `.gitignore` updated), and this one (the parity doc).
+
+**Why:** Task 7 gates Task 8, the irreversible deletion of `configure`,
+`bin/rave`, and all 60 `.rave` files. The brief was explicit that an
+unmeasured parity claim is worse than no claim — every number in the parity
+doc traces back to a command actually run this session, not an assumption.
+
+### If interrupted here
+
+Task 7 is DONE. Phase 2 is 7 of 8. Task 8 (delete rave/ninja, switch CI to
+`xcodebuild`, strip any remaining Intel references, rewrite `README.md`/
+`CONTRIBUTING.md`/`bin/build`) is next and is the phase's only irreversible
+step — it should not start without the user's explicit go-ahead given its
+scope. Nothing pushed; no PR opened for Phase 2 yet.
+
+## 2026-08-13 — Task 7: committed the generated TextMate.xcodeproj
+
+**What:** `.gitignore`'s blanket `*.xcodeproj/` pattern removed (it predated
+this task's decision to commit the generated project; the comment above it
+already said as much was still pending). `TextMate.xcodeproj/project.pbxproj`
+and `project.xcworkspace/contents.xcworkspacedata` now tracked --
+`xcuserdata/`/`*.xcuserstate`/`*.xcscmblueprint`/`*.xccheckout`, already
+present lower in `.gitignore`, still keep every per-user bit out regardless
+of the outer directory being tracked. Grepped the committed `project.pbxproj`
+for `/Users/shelby` first: zero matches -- every path XcodeGen emitted is
+`$(SRCROOT)`-relative, nothing machine-local leaked in.
+
+**Why:** Task 7's own checklist: "contributors need only Xcode, not
+XcodeGen." `project.yml` stays the source of truth; regenerate with
+`xcodegen generate --spec project.yml` after editing it.
+
+### If interrupted here
+
+Only the parity doc write-up (`docs/benchmarks/2026-08-12-ninja-parity.md`)
+remains for Task 7. All measurements (41/41 artifacts by identity, 26/26 test
+targets built and run, regexp discrepancy resolved and verified both ways)
+are already done and committed in the three prior commits this session.
+
+## 2026-08-13 — Task 7: artifact-parity sweep found and fixed a real missing artifact
+
+**What:** Measuring the Xcode build's artifacts against Task 2's recorded 41
+ninja artifacts (by identity, not path, per this task's instruction) found one
+real gap: `TextMate.app/Contents/MacOS/CommitWindowTool` was absent -- 29
+executables under the Xcode-built app instead of ninja's 30. `bin/rave2yaml`'s
+`EMBED` table (Task 6) captured every `files`/`copy` directive declared
+directly on a bundle-producing target's own `default.rave`, but missed the one
+case where the directive lives on a plain library that a bundle target merely
+`require`s: `Frameworks/CommitWindow/default.rave:5` has `files
+@CommitWindowTool "MacOS"`, and rave's own `signature()` (bin/rave:1097)
+folds every REQUIRED target's own assets into the requiring bundle -- not
+just the bundle's own declared assets. Confirmed by reading bin/rave's
+source, not inferred. Fixed by adding `CommitWindowTool` to `EMBED['TextMate']`
+(keyed by the bundle that actually copies it in, matching every other EMBED
+entry) and `EMBED_DESTINATION['CommitWindowTool']`.
+
+That surfaced a second, previously-latent bug: `CommitWindowTool` is the
+first-ever tool-kind target with neither a `require` nor a `frameworks`/
+`libraries` line (confirmed against its own build.ninja Link edge, which
+really links nothing but libc++), so `emit_tool_target`'s unconditional
+`dependencies:` key had nothing under it -- valid to bin/rave2yaml, but `nil`
+to a YAML parser, and XcodeGen rejected it ("Incorrect type, expected
+Array<Any>"). Fixed by only emitting the `dependencies:` key when there is at
+least one target or SDK to list.
+
+`project.yml` regenerated (additive: one new `CommitWindowTool` target block,
+one new embed dependency entry, one guarded `dependencies:` block).
+`TextMate.app` rebuilt clean and now has all 30 executables under
+`Contents/`, matching ninja's 30 exactly. Full `xcodebuild -scheme TextMate
+-configuration Release build` still succeeds, zero real errors (`grep
+error:` hits are all inside deprecation-warning text/selector names like
+`...configuration:error:`, not actual failures).
+
+**Why:** Task 7's artifact-parity requirement is explicit: "every ninja
+artifact needs an Xcode counterpart... an unexplained missing artifact
+blocks Task 8." This one was neither explained away nor missed.
+
+### If interrupted here
+
+Full artifact parity (41/41 by identity) and full test parity (26/26 targets
+built and run, results matching the ninja baseline's pass/fail/crash pattern
+target-for-target) are both MEASURED and confirmed as of this entry. Not yet
+done: commit `TextMate.xcodeproj` itself (`.gitignore` already updated to stop
+excluding it), and write up
+`docs/benchmarks/2026-08-12-ninja-parity.md` with the Xcode-side results and
+the CommitWindowTool/regexp findings.
+
+---
+
+## 2026-08-13 — Task 7: root-caused and fixed the regexp/Onigmo Xcode-vs-ninja discrepancy
+
+**What:** `bin/rave2yaml` now emits `OTHER_LDFLAGS: "$(inherited) -force_load
+$(BUILT_PRODUCTS_DIR)/libOnigmo.a"` on every tool/bundle/app/test target whose
+dependency closure links Onigmo (`emit_onigmo_force_load`, called from
+`emit_tool_target`, `emit_bundle_target`, `emit_app_target`, `emit_test_target`).
+`project.yml` regenerated (28 additive lines, nothing else changed) and
+`TextMate.xcodeproj` regenerated from it. `regexp_test` now passes 41/41 under
+Xcode; re-ran ninja's `regexp/test` afterward and it still passes 41/41 too — the
+fix touches only the Xcode project generator, no `.rave` file or vendor source.
+
+**Root cause, found by measurement, not guesswork:** `vendor/Onigmo/src/setup.c`
+is a bare `__attribute__((constructor))` that calls `onig_set_default_syntax()`
+to turn Unicode-range `\w`/`\p{Upper}`/`\p{Lower}` matching ON (Onigmo's built-in
+default has `ONIG_OPTION_ASCII_RANGE` on, i.e. ASCII-only). It exports zero
+symbols — libtool's own build log says so: `warning: 'setup.o' has no symbols`.
+bin/rave links every object file directly onto each final link command, so
+setup.o always rides along. XcodeGen packages Onigmo as a real `libOnigmo.a` via
+`libtool -static`, and Xcode's final link consults that archive with ordinary
+lazy, reference-driven member selection — since nothing ever references
+setup.o, the linker never pulls it from the archive, the constructor never
+runs, and `\w` silently falls back to ASCII-only. That is exactly the observed
+bug: `capitalize()` on "æblegrød" produced "æBlegrød" (capitalizing the second
+letter, not the first) because `\w` no longer matched "æ" at all.
+
+Isolated empirically with a minimal `onig_new`/`onig_search` probe linked
+against real compiled objects from both builds, ruling out every flag-level
+candidate the task named before finding this: source-file set (identical, 24
+files), `-funsigned-char`/`-std=c99`/`-Os`/`-flto=thin`/`-DNDEBUG` (byte-identical
+in the real captured command lines, confirmed via `-showBuildSettings` and the
+build log's response file), `-fno-common` (tested in isolation, doesn't
+reproduce it), LTO (tested with `LLVM_LTO=NO`, bug persisted — ruling LTO out
+entirely), PCH content and a fully-cleared `SharedPrecompiledHeaders` cache (bug
+persisted). What finally isolated it: linking Xcode's own freshly, doubly-clean
+rebuilt object files directly (no archive) passed; linking the exact same
+objects via `libtool -static`'s `libOnigmo.a` failed. That is the whole
+difference — archive-mediated (lazy) linking vs. direct object linking.
+
+**Why:** Task 7 requires either a resolved discrepancy or an honest unresolved
+one with evidence — this is resolved, with the fix verified on both builds.
+
+### If interrupted here
+
+Fix is committed. Still open for Task 7: artifact-count comparison (41 ninja
+artifacts vs. Xcode), the full 26-target test-parity table under Xcode, then
+committing `TextMate.xcodeproj` itself (currently gitignored by `*.xcodeproj/`
+in `.gitignore` — that pattern needs a `TextMate.xcodeproj` exception before it
+can be added) and the final `docs/benchmarks/2026-08-12-ninja-parity.md` update
+stating whether parity is proven.
+
+## 2026-08-13 — Task 6 complete: TextMate.app builds from Xcode; duplicate binaries eliminated
+
+**What:** `TextMate.app` now builds from `TextMate.xcodeproj` (`fb8c3e61`..`9346f20b`, five
+incremental commits). 86 targets. All six embedded products land at their correct bundle paths:
+PrivilegedTool, `mate`, `tm_query`, Dialog.tmplugin, Dialog2.tmplugin, TextMateQL.qlgenerator.
+Bundle identity verified byte-for-byte against the ninja build — same `CFBundleName`,
+`CFBundleShortVersionString`, `CFBundleIdentifier`. Released as **v3.0.0-revived.3**, the first
+build the Xcode project produced rather than ninja.
+
+Scope discoveries handled: the app embeds six other built products via `@target` references, and
+two of them (`Dialog`, `Dialog2`) live under `PlugIns/`, which `bin/rave2yaml`'s walk scope had
+deliberately excluded since Task 1. The walk was widened.
+
+**Duplicate binaries — three distinct causes, all closed** (user reported two launchable copies
+in Spotlight):
+
+1. `xcodebuild` defaults `SYMROOT` to `<project>/build`, writing a fully launchable
+   `TextMate.app` **inside the working copy** where Spotlight indexes it. `SYMROOT`, `OBJROOT`,
+   and `SHARED_PRECOMPS_DIR` now point at `~/build/textmate-revived/xcode` (`b72c2d22`).
+2. `bin/deploy-local` copied rather than moved, leaving a launchable app in the build tree. It
+   now verifies the installed bundle's identifier matches what it built, **then** removes the
+   build copy (`1901536f`). The verification runs before the removal on purpose — never delete
+   the only copy on an unverified install.
+3. Stale copies in `DerivedData` and both build trees, plus the root-owned `~/build/textmate`
+   from an old sudo run (removed by the user), deleted.
+
+Result: `mdfind` for launchable `TextMate.app` returns exactly one path, `/Applications`.
+
+`.metadata_never_index` in `~/build` suppresses future indexing but does not retract existing
+index entries, which is why deleting the stray copies was necessary rather than optional.
+
+**Also:** `CFBundleName` reverted to `TextMate` at the user's request — the version string
+(`3.0.0-revived.N`) is what identifies this as the Revived build, so the menu bar does not need
+to carry it.
+
+**Carried into Task 7, not resolved:**
+- The `regexp` Unicode casing assertion still differs between the ninja and Xcode builds. Real,
+  reproducible, and it blocks retiring ninja.
+- `CS_GET_TASK_ALLOW` is fixed at project-generation time rather than read per-configuration at
+  build time, after three entitlements build-graph failures. Release unaffected; Debug
+  entitlements are a documented simplification.
+
+**Why:** Task 6's gate was a bundle Xcode produces that is identical to ninja's. It is, and it is
+installed and running.
+
+### If interrupted here
+
+Phase 2 is 6 of 8. `/Applications/TextMate.app` is v3.0.0-revived.3, built by Xcode. Next: Task 7
+proves parity against Task 2's recorded baseline (41 artifacts, 26 test targets) and must resolve
+the `regexp` discrepancy; Task 8 is the irreversible one that deletes `configure`, `bin/rave`, all
+60 `.rave` files, and switches CI to `xcodebuild`. Nothing pushed; Phase 2 has no PR yet.
+
+
+## 2026-08-13 — Phase 2 Task 6: TextMate.app builds and runs from Xcode
+
+**What:** `xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release
+build` now produces a working `TextMate.app`, with real (non-`CODE_SIGNING_ALLOWED=NO`)
+ad-hoc codesigning, matching the ninja build's identity exactly: `CFBundleName` TextMate,
+`CFBundleShortVersionString` 3.0.0-revived.2, `CFBundleIdentifier` com.macromates.TextMate
+(PlistBuddy-verified against both builds). All six embedded products
+(`PrivilegedTool`, `mate`, `tm_query`, `Dialog.tmplugin`, `Dialog2.tmplugin`,
+`TextMateQL.qlgenerator`) are present at their correct bundle paths. `./bin/deploy-local`
+succeeded against the Xcode-built app — identifier guard passed, installed to
+`/Applications/TextMate.app`. `xcodebuild -alltargets ... CODE_SIGNING_ALLOWED=NO` still
+succeeds for the full 86-target project (Task 5's 76 + mate/tm_query/PrivilegedTool/
+tm_dialog/tm_dialog2/Dialog/Dialog2/TextMateQL/TextMate); `text_test -v` still `34 tests
+passed`, exit 0.
+
+**Scope discoveries confirmed and closed, in order:**
+
+1. **PlugIns widened into rave2yaml's walk.** `all_targets_by_name`/`run_inventory` now
+   glob `PlugIns/*/default.rave` too (60 targets, was 56). `run_header_farm` deliberately
+   NOT widened — Dialog/Dialog2 never export headers to anything.
+2. **`checked_target` accepts non-framework kinds, but only at the walk's own root.**
+   `TOP_LEVEL_KINDS` (framework/tool/bundle/qlgenerator/app) applies only when
+   `name == root` (threaded through `transitive_requires`/`transitive_header_deps`);
+   anything reached via an ordinary `require` edge still must be `framework` — matches
+   rave's real graph, where nothing ever requires a tool/bundle/app/qlgenerator target.
+3. **`EMBED`/`EMBED_DESTINATION` tables** (hand-verified against each `files`/`copy` line,
+   same VENDOR_EXTRA rationale: `files`/`copy` content isn't parsed generically) translate
+   `files @X`/`copy @X` into native XcodeGen `dependencies: embed: true, copy:
+   {destination, subpath}` Copy Files phases — a real Xcode build phase Xcode itself
+   orders and re-signs on copy, not a raw `cp -R` racing the rest of the build.
+   `add_to_closure` recurses through EMBED so requesting just `TextMate` transitively
+   pulls in all eight embedded/nested targets and their own `require` closures.
+4. **Four new kind emitters** in `bin/rave2yaml`: `emit_tool_target` (mate, tm_query,
+   PrivilegedTool, tm_dialog, tm_dialog2 — generalizes the frameworks/libraries
+   aggregation Task 5 flagged as `_test`-only), `emit_bundle_target` (Dialog, Dialog2,
+   TextMateQL — `type: bundle` + `WRAPPER_EXTENSION`), `emit_app_target` (TextMate).
+   `choose_prefix_header`/`emit_sources` generalized from a hardcoded `.cc`+`.mm` mix to
+   any N-extension combination (TextMateQL is the first `.c`+`.mm` user).
+5. **Four new `Xcode/scripts/*.sh`**: `expand_plist.sh`/`markdown.sh`/`utf16.sh` (one per
+   non-native rule — ExpandVariables/CompileMarkdown/ConvertToUTF16 — mirroring
+   `build.ninja`'s actual command lines), `assemble_resources.sh` (postBuildScripts
+   orchestrator interpreting each bundle-like target's `files`/`copy` manifest by hand,
+   verified line-by-line against its `default.rave`). CompileIcon reuses the pre-existing
+   `bin/build_app_icon.sh` directly. `RunExecutable`/`RunApplication` deliberately NOT
+   ported — dev-only `ninja <target>/run` conveniences superseded by Xcode's native Run
+   scheme action; out of scope for a `build` action.
+
+**Seven real, distinct build failures, each traced to its actual cause, not guessed:**
+
+1. **Onigmo_test regression, caught before commit.** First kind-dispatch draft nested
+   `emit_test_target` inside the `'framework'` branch only; a vendor target with tests
+   (Onigmo) would have silently lost its `_test` block. Caught by diffing the regenerated
+   project.yml against the prior commit before building, not by a failed build.
+2. **`type: bundle` doesn't get XcodeGen's default "link static libs to executables"
+   treatment `type: tool` does** — TextMateQL linked with every `-framework` flag present
+   but every `-l<static-lib>` flag silently missing ("Undefined symbols" for
+   `buffer_t`/`settings_for_path`/etc). Fixed with explicit `link: true` on every
+   framework/vendor dependency `emit_bundle_target`/`emit_app_target` emit.
+3. **Real codesigning (no `CODE_SIGNING_ALLOWED=NO`) refuses to sign a bundle target with
+   no `INFOPLIST_FILE`** — invisible under the `CODE_SIGNING_ALLOWED=NO` per-target test
+   builds used through the rest of this task; only a full, actually-signing `-scheme`
+   build exercises it. Fixed by adding `INFOPLIST_FILE` (pointing at the real,
+   unexpanded plist) to `emit_bundle_target` too, derived from `target.file`'s own
+   directory rather than a second hand-built table.
+4. **Entitlements: three consecutive build-graph failures**, in order — "Entitlements
+   file ... was modified during the build" (generating it from the same late
+   `postBuildScripts` phase as everything else — ProcessProductPackaging reads
+   `CODE_SIGN_ENTITLEMENTS` far earlier than Resources); "Multiple commands produce ...
+   Entitlements.plist" (moved to `preBuildScripts`, but under `$(DERIVED_FILE_DIR)` with
+   the same filename Xcode stages internally); "Cycle inside TextMate" (renamed, still
+   under `$(DERIVED_FILE_DIR)` — ANY `CODE_SIGN_ENTITLEMENTS` path there makes Xcode treat
+   it as a node it's also responsible for producing). Resolved by abandoning build-time
+   generation entirely: XcodeGen's native `entitlements: path:/properties:` key (verified
+   against the installed 2.46.0's actual output, not assumed) writes the file at
+   `xcodegen generate` time, so by the time `xcodebuild` runs it's just an ordinary
+   pre-existing file. Trade-off recorded: `CS_GET_TASK_ALLOW` is fixed at generation time
+   (hardcoded to Release's `false`) rather than reading `$CONFIGURATION` at build time —
+   acceptable since Release is this task's verification target and Xcode's own local
+   ad-hoc signing already adds `get-task-allow=1` unconditionally regardless (observed
+   directly on `mate`, which has no entitlements wired at all).
+5. **`Frameworks/network` case-collides with Apple's real `Network.framework` on APFS** —
+   a NEW instance of the same class of risk header-strategy.md's Task 5 addendum already
+   flagged, via a different mechanism: rave precompiles `Shared/PCH/prelude.*` ONCE,
+   globally, with a fixed dependency-independent flag set, so its `#import <WebKit/
+   WebKit.h>` always resolves against Apple's real framework; Xcode's
+   `GCC_PRECOMPILE_PREFIX_HEADER` is inherently per-target, so TextMate — the first target
+   whose closure both requires `network` and forces `prelude.mm` — precompiled its PCH
+   with `$(SRCROOT)/Xcode/include/network` on the search path, and APFS treats that path's
+   own `network/` subdirectory as equal to `Network/`, shadowing Apple's framework
+   ("no template named 'map' in namespace 'std'"). Fixed narrowly: TextMate's own sources
+   never `#include <network/...>` directly (grepped, zero matches) — `network` is only in
+   its `require` for linking, unaffected by excluding it from `HEADER_SEARCH_PATHS`
+   specifically (`APP_HEADER_SEARCH_EXCLUDE`) rather than restructuring the farm itself
+   (a bigger, riskier change touching all 76 already-verified targets).
+6. **`destination: wrapper` means the product ROOT, not `Contents/`** — misread from the
+   ProjectSpec.md text on first pass; `TextMateQL`'s `subpath: 'Library/QuickLook'` alone
+   landed at `TextMate.app/Library/QuickLook/`, a stray top-level entry codesign refuses
+   to seal ("unsealed contents present in the bundle root"). Fixed by spelling out
+   `Contents/` in the subpath explicitly.
+7. **Leaked rbenv `GEM_HOME`/`GEM_PATH`** (the exact hazard CLAUDE.md documents for
+   `bin/build`) broke `markdown.sh`'s `bin/gen_html` call via `gen_credits.rb`'s ERB
+   template requiring `net/https` → `openssl` (system Ruby 2.6 dlopening a gem built for
+   Ruby 3.3.6). `xcodebuild` inherits the invoking shell's environment; `bin/build`'s own
+   `env -u GEM_HOME -u GEM_PATH -u RUBYLIB -u RUBYOPT -u BUNDLE_GEMFILE` sanitization
+   doesn't run in this path, so it's mirrored directly in `markdown.sh` instead of
+   depending on every future invoker remembering it.
+
+**Deliberately out of scope, recorded honestly rather than silently skipped:**
+`RunExecutable`/`RunApplication` (dev-only relaunch convenience, Xcode's Run scheme action
+already replaces it); `mate`'s own `expand CS_ENTITLEMENTS` (only the app's entitlements
+are load-bearing per the task brief's explicit rules; `mate` still builds and embeds fine
+without its two extra automation/library-validation grants). Neither affects the
+verification bar.
+
+**Why:** Task 6 is the last major translation gap before Task 7's parity proof — the app
+target is what actually ships, and it's the first target exercising nearly every
+mechanism this migration built (embedding, non-native resource rules, real codesigning,
+per-target PCH) at once, which is exactly why it surfaced seven real bugs six frameworks
+combined never did.
+
+### If interrupted here
+
+Task 6 is functionally complete: `TextMate.app` builds clean from Xcode with real
+codesigning, matches ninja's identity exactly, all six embedded products present,
+`bin/deploy-local` succeeded (currently installed at `/Applications/TextMate.app`).
+`TextMate.xcodeproj` and `build/`/`Xcode/generated/` are gitignored and regenerable
+(`xcodegen generate --spec project.yml`), not committed. Not yet done: updating
+`docs/superpowers/plans/2026-08-12-phase-2-xcode-migration.md`'s Task 6 checkboxes (left
+for the coordinating agent), and `docs/benchmarks/2026-08-12-header-strategy.md` could use
+a short addendum for the `network`/`Network.framework` per-target-PCH finding (a second,
+distinct instance of the same case-insensitivity risk class, found by a different
+mechanism than the first one). Task 7 (prove full parity against Task 2's ninja baseline,
+then commit the generated `.xcodeproj`) is next — it inherits one open item from Task 5
+(`regexp_test`'s Unicode `capitalize()` finding) and should re-check `text_test`'s 34/34
+against ninja's own count as part of its systematic pass, not just the pilot spot-check
+this task repeated.
+
+---
+
+## 2026-08-13 — Phase 2 Task 5 (2/2): build-recipe fixes found by actually building all 46+3, full project.yml
+
+**What:** With `bin/rave2yaml` translating every gap (previous entry), generated
+`project.yml` for all 46 frameworks + 3 vendor targets (`--emit-yaml <all 46 names> kvdb Onigmo
+xdiff`) and ran `xcodebuild -alltargets -configuration Release build CODE_SIGNING_ALLOWED=NO` to
+completion. First attempt failed immediately (vendor gap not yet closed at that point); after the
+gaps landed, four more real, distinct build failures surfaced, fixed one at a time as instructed,
+each traced to its actual cause rather than guessed at:
+
+1. **`CLANG_ENABLE_MODULES` defaults YES** (XcodeGen's own `base.yml` preset) but rave never passes
+   `-fmodules` anywhere. With modules on, `vendor/xdiff/src/xpatience.c` pulled in the `Darwin`
+   module (via the prelude header's system includes), whose own `search.h` declares an unrelated
+   `struct entry` (POSIX hsearch) colliding with xpatience.c's same-named local struct --
+   "incompatible definitions in different translation units". Fixed with `CLANG_ENABLE_MODULES = NO`
+   in Base.xcconfig, project-wide (any target could hit the same class of collision).
+2. **Xcode's automatic public-header install collided with a real Apple framework.** A
+   `library.static` target's directory `sources: path:` entry defaults every `.h` it contains to
+   Headers-phase PUBLIC visibility, copied to `build/Release/include/<TargetName>/`. APFS is
+   case-insensitive, so `Frameworks/network`'s copy at `.../include/network/` IS
+   `.../include/Network/` too -- exactly where WebKit.h's own `#import <Network/Network.h>`
+   resolves once that directory is on the search path, shadowing Apple's real Network.framework
+   with our own `network/constants.h` (compiled with no PCH context: "no type named 'string' in
+   namespace 'std'"). Chased this into a bigger, better fix (next item) rather than patching around
+   it with `headerVisibility:`.
+3. **Directory `sources: path:` over-includes vs. rave's exact glob -- the real fix for #2 too.**
+   `Frameworks/FileBrowser/src/drivers` is a pre-existing symlink to `Frameworks/scm/src/drivers`
+   (predates this migration). rave's own `sources src/*.mm src/OFB/*.mm` glob never traverses into
+   it, so rave never compiles it, but XcodeGen's directory `path:` entries recurse through symlinked
+   subdirectories too, silently duplicating scm's driver sources into FileBrowser (surfaced as a
+   spurious PCH request for `drivers/api.cc`, a `.cc` file inside an all-`.mm` target). Fixed by
+   switching EVERY framework's (and vendor target's) `sources:` from a directory reference to an
+   explicit, resolved file list built from the exact same glob rave itself resolves -- whatever rave
+   compiles is exactly and only what Xcode compiles now. This also fixes #2 for free: an explicit
+   list of `.cc`/`.mm`/`.c`/`.m` files never includes a `.h`, so Xcode's Headers-phase copy has
+   nothing to act on -- no `headerVisibility:` workaround needed at all (added then removed within
+   this same task once the better fix was found).
+4. **Mixed `.cc`+`.mm` targets (7: BundleEditor, OakDebug, command, document, io, plist, theme) need
+   a PER-FILE prelude, which Xcode's one-per-target `GCC_PREFIX_HEADER` can't give directly.**
+   Verified by direct clang invocation that neither prelude works for both languages at once (see
+   header-strategy.md addendum). First fix attempt (automatic `GCC_PREFIX_HEADER=prelude.cc` +
+   forced second `-include prelude.mm` via `compilerFlags:` on the `.mm` files) failed a real build
+   (`theme`): clang only honours the precompiled form of the FIRST `-include`; Xcode's own automatic
+   one lands second and falls back to a textual include of an internal cache path that isn't a real
+   file. Fixed by leaving `GCC_PREFIX_HEADER` unset for mixed targets entirely and forcing BOTH
+   `.cc` and `.mm` groups onto their own prelude via `compilerFlags:` -- verified end to end in a
+   scratch XcodeGen project before reapplying. The Ragel-generated `.cc` (plist only) needed the
+   same forced `-include`, PLUS `-iquote <dirname of the original .rl file>` (rave's own
+   `CompileRagel` adds exactly this, bin/rave:643, because the generated file textually carries
+   `ascii.rl`'s own `#include "ascii.h"` unchanged, which only resolves against the original
+   directory, not $(DERIVED_FILE_DIR)) -- without it: "fatal error: 'ascii.h' file not found".
+
+Two more, smaller: `Xcode/scripts/gen_test.sh` assumed every target's tests live under
+`Frameworks/<name>/tests/`, wrong for the one vendor target with tests (Onigmo, at
+`vendor/Onigmo/tests/`) -- fixed by checking which directory actually exists. Fixing that then
+exposed a real `/bin/bash` 3.2.57 quirk (Apple's frozen, GPLv2-licensed-ceiling shipped bash):
+expanding a zero-element array under `set -u` is an unbound-variable error there (fixed in bash
+4.4+), reproduced directly; fixed with the standard `"${arr[@]+"${arr[@]}"}"` guard everywhere the
+script touches the (now sometimes genuinely empty) test-file array. Added `Xcode/scripts/gen_ragel.sh`
+(new file, mirrors `gen_test.sh`'s pattern) to invoke `ragel` as a preBuildScript.
+
+**Also found and fixed in `bin/rave2yaml` itself:** a real cycle in the `.rave` require graph
+(`plist` requires `io`, `io` requires `ns`, `ns` requires `plist`) fed the starting target back into
+its own dependency closure, since the closure walk never special-cased "don't re-add the root".
+Manifested as `plist` listing itself in its own `HEADER_SEARCH_PATHS` and `plist_test` linking
+`- target: plist` twice. Fixed by threading a `root:` (defaults to the outer call's own name) through
+`transitive_requires`/`transitive_header_deps`'s recursion, excluded unconditionally regardless of
+how many cycles route back to it. Added `check_dupes`/`check_self_ref`-style invariant checks during
+development (not committed as test files -- ad hoc verification, superseded by the full green build).
+
+**Full verification:** `xcodebuild -alltargets -configuration Release build
+CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES` -- **BUILD SUCCEEDED**, exit 0. 49
+`library.static` targets (46 frameworks + kvdb/Onigmo/xdiff) + 27 `_test` tool targets, all
+produced (49 `.a` + 27 executables, zero missing). `text_test: 34 tests passed` (pilot, unchanged).
+Ran all 27 test binaries directly (`--no-parallel` for the 7 with `.mm` tests, per CLAUDE.md): 22
+clean passes; `buffer_test`/`file_test`/`cf_test` fail/crash exactly matching
+`docs/benchmarks/2026-08-12-ninja-parity.md`'s already-recorded pre-existing baseline (not a Task 5
+regression); `scm_test` fails needing `hg`/`svn`, also already documented as absent on this machine.
+`regexp_test` (1 of 41: a `capitalize()` Unicode-casing assertion on "æblegrød") is a genuinely NEW
+finding -- confirmed real and deterministic (3 reruns, identical), confirmed NOT caused by: source
+file set (byte-identical object list vs. a scratch ninja build), compile flags for the relevant file
+(diffed line-by-line, identical), `-flto=thin` (disabling it for this one target didn't change the
+result), or locale env (`LANG`/`LC_ALL` identical, explicit override didn't change it). Root cause
+sits somewhere inside Onigmo's Unicode property-matching at runtime, not isolated further --
+flagged for Task 7's parity work rather than chased past a reasonable budget here, since Task 5's
+gate is building, not full test-behaviour parity (`tests/rave2yaml_test.sh` still `PASS: 56 targets,
+all dependencies resolve`).
+
+**Why:** Task 5 exists to prove the pattern scales past one framework; every fix here would have
+either silently miscompiled or hard-failed 7-46 more times if found later instead of once, here.
+
+### If interrupted here
+
+Phase 2 Task 5 is functionally complete: all 46 frameworks + 3 vendor targets build clean under
+Xcode. `TextMate.xcodeproj` and `build/` are gitignored and regenerable (`xcodegen generate --spec
+project.yml`, then `xcodebuild -alltargets ...`), not committed. Not yet done: updating
+`docs/superpowers/plans/2026-08-12-phase-2-xcode-migration.md`'s Task 5 checkbox/status (left for
+the coordinating agent), and the `regexp_test` Unicode finding needs a line in whatever tracks
+Task 7's parity checklist. Task 6 (the TextMate app target itself) is next and explicitly out of
+scope here -- deliberately not touched, per the task brief. One thing Task 6 should know going in:
+`Applications/TextMate/default.rave` requires `kvdb` directly (confirmed already translatable, same
+VENDOR_EXTRA mechanism) and the app target will be the first consumer of `frameworks`/`libraries`
+declared on the framework/vendor targets themselves, which today only get surfaced for `_test`
+tool targets (`linked_sdks`) -- the app target's own link step needs the same aggregation.
+
+## 2026-08-13 — Phase 2 Task 5 (1/2): rave2yaml closes all 3 known gaps, decides header-farm fidelity
+
+**What:** Scaled `bin/rave2yaml --emit-yaml` from the Task 4 pilot (`text` alone) to translating
+any of the 46 frameworks + 3 vendor targets, closing the three gaps the task named plus one fidelity
+question:
+
+**1. `require_headers` (weak, header-only dependency).** Added `transitive_header_deps`, mirroring
+`bin/rave`'s `required_targets(..., include_weak: true)` (bin/rave:786-806) exactly: follows BOTH
+`require` and `require_headers` at every node the walk discovers (not just the start), so it's
+always a superset of the hard-only closure. Used for `HEADER_SEARCH_PATHS` on both library and test
+targets; the hard-only closure (`transitive_requires`) stays the one used for `dependencies:`/linked
+frameworks, matching rave's executable()/test-link steps which never pass `include_weak`. Verified
+against a hand-traced BFS for `TMFileReference` (`require_headers scm`, which itself pulls in scm's
+own `require text cf io settings regexp xdiff` and regexp's `require Onigmo text cf`, all
+transitively): 13 entries, matched exactly. `CommitWindowTool`'s `require_headers CommitWindow` is
+NOT a true self-reference (the task's framing) -- it's a second, `tool`-kind target declared in the
+same `Frameworks/CommitWindow/default.rave` file requiring the FIRST target's (a real framework)
+headers for its own `#include <CommitWindow/CommitWindow.h>`. Confirmed a genuine no-op for
+`--emit-yaml`'s framework-only graph: `CommitWindowTool` is never a `framework` kind (fails
+`checked_target`'s kind check) and nothing else `require`s a `tool`, so it never appears as a node
+in any closure.
+
+**2. `cxx_tests` (dead metadata).** Removed from the fail-loud `UNTRANSLATED_DIRECTIVES` list;
+`emit_cxx_tests_skip_comment` now prints a visible YAML comment (naming the file count and citing
+`bin/rave:137`) immediately before any target that declares it (`ns`, `layout`, `OakAppKit`) instead
+of either raising or silently dropping it, per the task's explicit instruction.
+
+**3. Vendor targets (kvdb, Onigmo, xdiff), replacing the `04ac5128` fail-loud guard with real
+translation.** Added `VENDOR_EXTRA`, a 3-entry table hand-built from each vendor `.rave` file's exact
+`add FLAGS`/`add C_FLAGS` content (not parsed generically -- `add` is in `INERT_DIRECTIVES`, plumbing
+this parser was never asked to record until now): Onigmo gets `-Ivendor/Onigmo -Ivendor/Onigmo/vendor`
++ 2 warning suppressions, xdiff gets `-Ivendor/xdiff/src` + 3 suppressions, kvdb gets nothing extra.
+`checked_target` now only raises for a vendor target ABSENT from this table, preserving the guard's
+spirit for anything not yet taught. New `emit_vendor_target` lists each vendor target's resolved
+`sources` as explicit files (never a directory reference -- Onigmo's own `vendor/` subtree has 60+
+files far outside its `sources` glob).
+
+**Fidelity decision: narrowed the header farm to declared headers, not whole `src/`.** The Task 4
+farm symlinked one directory per framework (`Xcode/include/<n>/<n>` -> `Frameworks/<n>/src`),
+exposing every file, including private ones 8+ frameworks' `headers` directives deliberately don't
+export (e.g. `settings` exports only `settings.h keys.h`, not its 4 real headers). That's the same
+class of risk as the flat-`-I` trap Task 3 already rejected. Rewrote `run_header_farm` to symlink one
+file per DECLARED header (resolved via the same `Dir.glob` the parser already uses for the `headers`
+GLOB_DIRECTIVE), landing at the same path rave's own `ExportHeader` would use. 46 frameworks -> 186
+header symlinks; regenerating also now covers `vendor/*/` (3 more: kvdb, Onigmo, xdiff), which the
+Task 4 farm never walked at all. Added a migration guard: the OLD farm's `Xcode/include/<n>/<n>` was
+itself a symlink, and naively `mkdir_p`-ing over an existing symlink-to-a-directory does nothing,
+which would have made the new code's pruning step resolve THROUGH the old symlink and start
+deleting real files under `Frameworks/<n>/src` -- caught by explicitly unlinking a symlink at that
+path before creating a real directory there. Verified: `text` (whose `headers src/*.h` already names
+every header) is unaffected (still 17/17); `regexp` now gets exactly its 7 declared headers, not the
+5 private ones (`private.h`, `parser.h`, `parser_base.h`, `parse_glob.h`, `dependency_graph.h`) the
+old farm also exposed. Full reasoning in `docs/benchmarks/2026-08-12-header-strategy.md`'s new
+addendum.
+
+Also found and fixed a real bug while regenerating: a genuine cycle in the `.rave` require graph
+(covered in the next STREAM entry, since it was found while emitting the full 46+3 set, not this
+narrower gap-closing pass).
+
+`bash tests/rave2yaml_test.sh` updated and still passing (`PASS: 56 targets, all dependencies
+resolve`): the old regression check asserted `--emit-yaml kvdb` RAISES (the gap this task closes);
+replaced with an assertion that it now succeeds, emits explicit `vendor/kvdb/...` source paths, and
+never references a nonexistent `Frameworks/kvdb/src`, plus a static (non-`eval`, no
+arbitrary-code-execution risk) check that the unknown-vendor-target guard and its 3 `VENDOR_EXTRA`
+entries are still present in the source.
+
+**Why:** These are exactly the three gaps and the one fidelity question the task named as blocking
+the full 46-framework graph; closing them here, individually, with dedicated verification per gap,
+is what let the full build (next entry) find real build-recipe issues instead of tripping over
+already-known translation gaps.
+
+### If interrupted here
+
+Committed. `bin/rave2yaml`, `Xcode/include/*` (regenerated farm), `tests/rave2yaml_test.sh`,
+`docs/benchmarks/2026-08-12-header-strategy.md` all reflect this state. The full 46+3 `project.yml`
+emission and the build-recipe fixes it surfaced are the next STREAM entry (same task, committed
+separately since they touch a different, non-overlapping set of files: `Xcode/Base.xcconfig`,
+`Xcode/scripts/*`, `project.yml`).
+
+## 2026-08-13 — Xcode/scripts/gen_test.sh now collects .mm test sources (CRITICAL, pre-Task-5)
+
+**What:** `gen_test.sh`'s test-source glob only matched `t_*.cc`, silently dropping every `.mm`
+test file. Seven frameworks (`buffer`, `document`, `BundlesManager`, `FileBrowser`, `ns`,
+`encoding`, `SoftwareUpdate`) have `.mm` tests -- their Xcode-generated runners would have compiled
+and reported success while running zero of those tests. The `text` pilot didn't catch this because
+`text` has no `.mm` tests. Fixed to glob both `t_*.cc` and `t_*.mm` under `nullglob` (so a
+framework with only one extension doesn't leave a literal unmatched pattern in the list), then
+merge-sort the combined array under `LC_ALL=C sort`. The plain `t_*.{cc,mm}` brace-expansion form
+globs and sorts each extension separately before concatenating -- that disagrees with
+`build.ninja`'s `GenTest` input order whenever a `.cc` and `.mm` file interleave alphabetically
+(`buffer`'s own `t_buffer.mm` sorts before `t_indexed_map.cc`), so it was rejected in favor of an
+explicit sort matching `bin/rave`'s `test_sources.sort.uniq`, which sorts the combined list by full
+filename regardless of extension. Comment on line 7-8 corrected to name both extensions.
+
+Verified by diffing the exact argv the script now passes to `bin/gen_test` against each framework's
+`GenTest` edge input list extracted straight from `build.ninja`, for both `buffer` and `document`
+(the latter has one `.cc` and one `.mm` test) -- byte-identical, same order, for both. `bash
+tests/rave2yaml_test.sh` still `PASS: 56 targets, all dependencies resolve` (untouched, `.rave`
+files not modified). `xcodebuild -target text ...` still `BUILD SUCCEEDED`; `text_test` still `34
+tests passed`.
+
+**Why:** Task 5 scales `gen_test.sh` to 46 frameworks; shipping this bug would have given seven of
+them a silently-incomplete (but green) test runner -- the dangerous kind of failure, since nothing
+in the build output flags it.
+
+### If interrupted here
+
+Committed (fix + this entry, one `fix:` commit). Nothing else outstanding for this gap. Task 5's
+scale-up can proceed; no other `Xcode/scripts/*.sh` files were audited for the same class of bug --
+worth a quick check if any other wrapper scripts glob framework sources by extension.
+
+## 2026-08-13 — Phase 2: rave2yaml --emit-yaml now raises on vendor targets
+
+**What:** `bin/rave2yaml --emit-yaml`'s `checked_target` now raises immediately when the
+requested target (or anything in its transitive `require` closure) lives under `vendor/`
+(`kvdb`, `Onigmo`, `xdiff`) -- naming the target and its `default.rave:line`, and explaining why:
+vendor targets declare no `executable`, so they pass the `framework` kind check same as a real
+framework, but diverge from the `Frameworks/<name>/src/` convention `--emit-yaml` assumes
+(explicit `headers` paths, per-target `add FLAGS` include flags, brace-expansion source globs, no
+`src/` convention). Before this, `--emit-yaml kvdb` silently printed a `library.static` target
+whose `sources: Frameworks/kvdb/src` doesn't exist -- the exact silent-gap risk the task-4 report
+flagged. `--inventory` is untouched (it doesn't call `checked_target`), so its vendor listing
+(Task 7's parity checklist) stays complete. `cxx_tests`/`require_headers` fail-loud re-verified
+still firing (`ns`, `OakDebug`, `TMFileReference`).
+
+Added a regression test to `tests/rave2yaml_test.sh`: asserts `--emit-yaml kvdb` raises and that
+the error names both "vendor target" and the `.rave` file. Verified the test actually catches the
+regression -- ran it against the pre-fix tool (`git show HEAD:bin/rave2yaml` in a scratch copy)
+and confirmed FAIL before restoring the fix. `bash tests/rave2yaml_test.sh` still reports `PASS:
+56 targets, all dependencies resolve`; `xcodebuild -target text ...` (the Task 4 pilot) still
+`BUILD SUCCEEDED` -- `text`'s closure never touches a vendor target, confirmed by diffing
+`--emit-yaml text`'s output against the committed `project.yml` (byte-identical).
+
+**Why:** Task 5 scales `--emit-yaml` to 46 frameworks; `DocumentWindow` and `Applications/TextMate`
+both `require kvdb`, `regexp` requires `Onigmo` -- Task 5 would otherwise hit this cold and could
+ship a quietly-broken `project.yml` instead of a clear stop.
+
+### If interrupted here
+
+Committed (code + test + this entry, one `build:` commit). Nothing else outstanding for this gap.
+Vendor targets themselves are still NOT translated to Xcode -- deliberately out of scope here,
+left for whichever task decides how `kvdb`/`Onigmo`/`xdiff` map into XcodeGen.
+
+## 2026-08-13 — Merge-base repaired; dead build files and SyntaxMate removed
+
+**What (merge base):** Phase 1 (#3) was squash-merged, which landed all 130 textmatelives commits'
+content but left **no merge relationship in git topology** — `git merge-base --is-ancestor` said
+NO, so a future sync from textmatelives would have re-conflicted on all 130 commits it no longer
+knew we had. Fixed with `git merge -s ours textmatelives/main` (`ad8f2cd8`): changes no file, only
+records the discarded ancestry. Verified the tree hash was byte-identical before and after, and
+`--is-ancestor` now reports YES with 0 behind.
+
+**Lesson:** whole-fork integrations get a real merge commit. Squash is for single units of work.
+This matters again in Phase 3, which ports tectiv3's dependency purge the same way.
+
+**What (cleanup, `87de6763`):**
+- `.travis.yml` — targets xcode7.2, dead since 2016
+- `local-orig.rave` — stale local build-config copy, referenced by nothing
+- `Applications/SyntaxMate` — XPC service nothing in the tree requires; tectiv3 already deleted
+  it and upstream PR #1462 exists to do the same. It carried a submodule
+  (`SyntaxMate.tmBundle`), removed cleanly from `.gitmodules`.
+
+Verified before deleting that nothing outside `Applications/SyntaxMate/` referenced it, then
+reconfigured and rebuilt: `ninja TextMate` still succeeds and signs. Target count 57 to 56;
+`tests/rave2yaml_test.sh` derives the count rather than hardcoding it, so it self-adjusted.
+
+**Why:** The tree had been growing, not shrinking — two build systems now coexist by design until
+Task 7 proves parity, but these three were dead regardless of which one wins, so there was no
+reason to wait for Task 8.
+
+### If interrupted here
+
+Phase 2 Tasks 1-4 complete. `master` carries the merge-base fix and cleanup; `phase-2/xcode-migration`
+has merged master and is 15 commits ahead. Next: Task 4 review, then the vendor-target gap
+(`kvdb` passes the kind check without erroring — a silent gap) before Task 5 scales to 46 frameworks.
+
+
+## 2026-08-13 — Phase 2 Task 4c: gen_test.sh, a second real xcconfig bug (NDEBUG), text_test green
+
+**What:** `Xcode/scripts/gen_test.sh <name>` wraps `bin/gen_test`, writing the generated CxxTest
+runner to `$DERIVED_FILE_DIR/_T<name>.cc` with the same atomic `$out~ && mv` write as
+build.ninja's `GenTest` rule. `text_test`'s `preBuildScripts` entry (from `--emit-yaml`, previous
+commit) calls it. Verified the trick this depends on -- an XcodeGen source with `optional: true`
+and a `$(DERIVED_FILE_DIR)/...` path compiling even though the file doesn't exist until a
+preBuildScript creates it at build time -- in a scratch `/tmp` project before relying on it here,
+since it's not documented behavior, just an empirically-confirmed one.
+
+Building `text_test` (Release) then failed at **link**, not compile: undefined `OakBadAssertion`,
+`OakPrintBadAssertion`, `oak::to_s`. Traced it to `Frameworks/OakDebug/src/OakAssert.h`:
+`ASSERT`/`ASSERT_EQ`/`ASSERT_NE`/etc. (used throughout `text/src`, e.g. `transcode.h`) are
+`#ifdef NDEBUG`-gated to nothing; without `NDEBUG` they expand to real calls that only link if the
+target also `require`s `OakDebug` -- which `text` correctly doesn't. Base.xcconfig's own comment
+already said "rave release: ... `-DNDEBUG`" but the file never actually set it. Second real gap
+found by actually building, not two unrelated bugs -- both were "the comment describes rave
+correctly, the xcconfig line under it doesn't match the comment." Fixed with a config-scoped line,
+`GCC_PREPROCESSOR_DEFINITIONS[config=Release] = $(inherited) NDEBUG`, since Debug/Release share one
+xcconfig file and Debug should keep assertions live.
+
+**Full clean verification, from scratch:** deleted `TextMate.xcodeproj` and `build/`, re-ran
+`xcodegen generate --spec project.yml`, then `tests/xcode_parity_test.sh text` and
+`tests/xcode_parity_test.sh text_test` (both PASS), then ran the built binary directly:
+`text_test: 34 tests passed`, exit 0. Compared against `./bin/build text/test`'s own binary run
+directly (ninja's `RunTest` progress line is mislabeled for every target, per the Task 2 entry
+below, so the direct binary run is the trustworthy comparison): `text: 34 tests passed`, exit 0.
+Same count, both green -- Xcode and ninja agree on this framework.
+
+**Why:** Task 4's whole purpose is proving the pattern before Task 5 repeats it 45 times, so both
+xcconfig bugs found here (bare `"..."` quoting, missing `-DNDEBUG`) are exactly the kind of thing
+worth catching once on one framework instead of 45 times later.
+
+### If interrupted here
+
+Task 4 is functionally done: `text` and `text_test` both build clean under Xcode, tests run green
+and match ninja exactly. Remaining before closing out the task: commit this increment
+(`Xcode/scripts/gen_test.sh`, `tests/xcode_parity_test.sh`, the NDEBUG xcconfig fix, this entry),
+write the task-4-report.md, verify `git status --porcelain` is clean of `TextMate.xcodeproj`/`build/`
+(both gitignored) before that commit. Nothing else outstanding for Task 4 itself; Task 5 is next
+(replicate across the other 45 frameworks) and Task 6 (app target) is explicitly out of scope here.
+
+## 2026-08-13 — Phase 2 Task 4b: rave2yaml --emit-yaml, project.yml, and a real xcconfig bug
+
+**What:** `bin/rave2yaml --emit-yaml <target>...` hand-prints (no `require 'yaml'`, see the entry
+below) an XcodeGen `project.yml` for the named targets plus their transitive `require` closure:
+`framework`-kind targets become `library.static`, and a target that declares `tests` also gets a
+`<name>_test` `tool` target. Fail-loud like `--inventory`: unknown target, non-`framework` kind, or
+an untranslated directive (`require_headers`, `cxx_tests`) all raise instead of being dropped.
+`HEADER_SEARCH_PATHS` per target is generated from that target's own transitive closure (self +
+deps for the test tool, deps-only for the library, matching how rave never grants a framework
+`-I` to its own headers -- only to consumers); `frameworks`/`libraries` become `sdk:` dependencies
+on the test tool only, since rave never needs them before final link either.
+
+Ran `bin/rave2yaml --emit-yaml text > project.yml`, then `xcodegen generate --spec project.yml`,
+then `xcodebuild -target text -configuration Release build CODE_SIGNING_ALLOWED=NO`.
+
+**Real bug found and fixed, not a re-derivation:** the `text` target's first build failed --
+`decode.cc:264: error: expected expression`, `NULL_STR` expanding to a bare unquoted `<U+FFFF>`
+token. Read the actual compiler response file (not just `-showBuildSettings`, which still *showed*
+quotes): `-DNULL_STR=<EF BF BF>` with **no quote bytes at all**. Bare `"..."` in an `.xcconfig`
+value is grouping syntax xcconfig strips before the value reaches clang; Base.xcconfig's committed
+line relied on the quotes surviving literally, and they don't. Fixed with the standard xcconfig
+escape, `NULL_STR=\"￿\"`; re-checked the response file after the fix and it now reads
+`-DNULL_STR="<EF BF BF>"`, matching rave byte-for-byte, quotes included. `text` builds clean
+(2 pre-existing deprecation warnings, no errors) -- `libtext.a` produced.
+
+Also added `*.xcodeproj/` to `.gitignore`: `project.yml` is the checked-in source of truth (same
+relationship as the `.rave` files to `build.ninja`, already gitignored); the `.xcodeproj` XcodeGen
+writes from it is regenerated on demand, never committed.
+
+**Why:** Task 4 exists to prove the pattern before Task 5 repeats it 45 times, and this is exactly
+the kind of bug that's cheap to fix once, on one framework, and expensive to rediscover 45 times if
+it ships silently broken in Base.xcconfig.
+
+### If interrupted here
+
+`text` (library.static) builds clean under Xcode. Still needed: `Xcode/scripts/gen_test.sh`
+(currently an empty dir), then generate+build `text_test`, run its binary, confirm exit 0, then
+`tests/xcode_parity_test.sh` and a final STREAM entry. `project.yml` and the `Base.xcconfig` fix
+are already committed-ready; `TextMate.xcodeproj` and `build/` are gitignored and untouched by any
+commit.
+
+## 2026-08-13 — Phase 2 Task 4a: header-farm symlinks generated by rave2yaml
+
+**What:** `bin/rave2yaml --emit-header-farm` walks `Frameworks/*/` (the same set `--inventory`
+walks) and writes a committed, relative symlink per framework: `Xcode/include/<name>/<name>` ->
+`../../../Frameworks/<name>/src`. Ran it: 46 symlinks, one per framework (all 46 have a `src` dir).
+Verified `Xcode/include/text/text/case.h` resolves through the link, a second run is a no-op
+(idempotent), and the existing `tests/rave2yaml_test.sh` (`--inventory` regression check) still
+passes untouched.
+
+**Why:** This is the header strategy `docs/benchmarks/2026-08-12-header-strategy.md` decided:
+per-framework include roots generated from the inventory so the farm can't drift as frameworks are
+added or removed, rather than hand-maintained symlinks. Generating it now, decoupled from
+`--emit-yaml`, means it survives on its own if the rest of Task 4 gets interrupted.
+
+Also discovered while adding this: `require 'yaml'` crashes under this shell's actual environment
+-- `GEM_HOME`/`GEM_PATH` are leaked from rbenv (`/Users/shelby/.gem/ruby/3.3.6`), so system Ruby
+2.6's `require 'yaml'` dlopens a psych built for Ruby 3.3 and dies with `Symbol not found:
+_rb_cFalseClass`. This is the same class of hazard CLAUDE.md documents for `bin/build`. Decided:
+`--emit-yaml` (next) hand-prints YAML the way `--inventory` hand-prints its report, so `rave2yaml`
+never gems-in `yaml`/`psych` at all.
+
+### If interrupted here
+
+Header farm is committed and regenerable. Still needed for Task 4: `--emit-yaml` in `bin/rave2yaml`
+(project.yml emission for `text` + its transitive closure), `Xcode/scripts/gen_test.sh`, and the
+actual `xcodegen generate` + `xcodebuild` verification. None of that depends on redoing this step.
+
+## 2026-08-13 — Phase 2 Task 4 blockers solved in main loop after agent cutoff
+
+**What:** The Task 4 implementer was cut off by a session limit after ~178k tokens having written
+nothing durable (no `project.yml`, no `.xcodeproj`, `rave2yaml` still `--inventory`-only, clean
+tree, no report). Rather than pay for another exploration round, settled its two blockers directly
+and recorded them in `Xcode/Base.xcconfig` so they cannot be lost again.
+
+**1. PCH.** `-include Shared/PCH/prelude.cc` works. clang does not care that the prefix file is a
+`.cc` rather than a `.h`. Symptom when missing is `use of undeclared identifier 'std'`, which reads
+like broken code and is not.
+
+**2. `-funsigned-char` is load-bearing, and was nearly missed.** Extracted rave's real flag line
+from `build.ninja` rather than assuming. Without it, `Frameworks/text/src/utf8.h` does not compile
+at all: `constant expression evaluates to 128 which cannot be narrowed to type 'char'`, because its
+UTF-8 lead-byte constants (128, 192, 224, 240) do not fit a signed char. Every framework including
+`utf8.h` inherits that failure, so this single missing flag would have broken Task 5 across all 46
+frameworks with an error pointing at the source rather than the build settings. Now
+`GCC_CHAR_IS_UNSIGNED_CHAR = YES`.
+
+**3. `NULL_STR` verified byte-for-byte.** rave passes `-D'NULL_STR="\uFFFF"'`. Compiled a probe
+that prints the macro's bytes: 3 bytes `EF BF BF`, U+FFFF in UTF-8. The literal form now in the
+xcconfig produces the identical macro.
+
+Also mirrored rave's actual warning set and release optimisation (`-Os`, `-flto=thin`,
+dead-strip) into the xcconfig, copied from `build.ninja` rather than chosen.
+
+**Why:** These are the settings all 46 frameworks inherit. Each was found by reading what the build
+actually does, and each would have failed later in a way that pointed at the wrong culprit.
+
+### If interrupted here
+
+Phase 2 Tasks 1, 2, 3 complete and reviewed. Task 4 (pilot framework under XcodeGen) still
+outstanding — its compile recipe is now fully solved and recorded, so what remains is the
+mechanical work: `rave2yaml` project.yml emission, the committed relative-symlink header farm at
+`Xcode/include/<n>/<n>`, and the CxxTest script phase. Nothing pushed; Phase 2 has no PR yet.
+
+
+## 2026-08-12 — Plan-number corrections and CLAUDE.md drift fix
+
+**What:** Settles the STREAM entry owed by `d89cc1d6`, plus a real doc-vs-code drift the check surfaced.
+
+Plan corrections (`d89cc1d6`):
+- The plan claimed **54 test binaries**. Wrong — 54 is the `RunTest` *edge* count in `build.ninja`
+  (27 targets x 2 configurations). Task 2 measured **26 discovered test targets**. Task 7's parity
+  gate now names 26, so it is not judged against a fabricated number.
+- Tech stack line said C++23; the tree compiles `-std=c++2a`. Aligned to C++20 per Task 3.
+- Recorded that `scm/test` needs `hg` and `svn`, absent on this machine but installed by CI.
+
+`CLAUDE.md` drift (this commit): it still listed **`capnp`** as a `./configure` dependency. Cap'n
+Proto was removed by the Phase 1 textmatelives merge, so that line had been wrong since `ef1db3f2`.
+This file is loaded into every agent session, so a wrong dependency list actively wastes time.
+Also documented `bin/setup-hooks`, `bin/build`, and `bin/deploy-local`, including *why* `bin/build`
+is preferred over bare `ninja` — the leaked `GEM_HOME` and root-owned credits-cache failures both
+produce errors that point at the wrong culprit, and rediscovering them costs an hour each time.
+
+**Why:** `README.md` and `CHANGELOG.md` were checked and genuinely need nothing: README still
+describes the rave build, which remains accurate until Phase 2 Task 8 deletes it, and no
+user-facing change has shipped since v3.0.0-revived.1.
+
+### If interrupted here
+
+Phase 2 Tasks 1, 2, 3 complete and reviewed on `phase-2/xcode-migration`. Task 4 (pilot framework
+under XcodeGen) is next and is the first task that generates an actual `.xcodeproj`. Nothing is
+pushed; Phase 2 has no PR open yet.
+
+
+## 2026-08-12 — Phase 2 Task 2: ninja build parity baseline recorded
+
+**What:** `./bin/build TextMate` succeeds (confirmed via zero `FAILED:` lines plus a clean
+idempotent re-run, exit 0) and produces **41 artifacts** (executables only — zero `.a`,
+zero `.dylib`, consistent with Task 4's static-linking finding). Discovered **26** test
+targets (matches Task 1's `bin/rave2yaml --inventory` `tests`-directive count exactly) and
+ran every one individually. Wrote `docs/benchmarks/2026-08-12-ninja-parity.md` with the full
+artifact list, the 20 CI-included targets' pass/fail, and the six CI-excluded targets called
+out separately, per the task's decided points.
+
+**Three findings, none fixed (diagnostic task):**
+
+1. **Genuine local failure outside the six CI excludes:** `scm/test` fails — `hg`/`svn` are
+   both absent from `PATH` here, while CI's own workflow `brew install`s both before testing.
+   Environment gap, not a code defect; 19 of the 20 CI-included targets pass.
+2. **Ninja's `RunTest` progress line is mislabeled for every target** — always prints `Run
+   tests for 'scope'…` regardless of which framework is actually running, because `bin/rave`
+   emits one `RunTest` rule per framework but ninja rules are looked up by name and all share
+   the name `RunTest`, so only one `description` string survives into `build.ninja`. The
+   command itself runs the correct per-target binary (confirmed via each failure's own
+   correctly-named source paths) — only the human-readable text is wrong. Worked around by
+   invoking each of the 26 targets as its own `./bin/build <name>/test` call rather than
+   trusting the brief's single combined command's log for per-target attribution.
+3. **Half of the six CI-excluded targets don't actually fail locally:** `layout`, `command`,
+   and `editor` all pass cleanly on this interactive, logged-in machine — CI's stated causes
+   (parallel-runner contention; `NSApp` nil on a headless runner) are specific to CI's
+   environment and don't hold here. `buffer` and `file` fail exactly as CI documents; `cf`
+   crashes with SIGBUS (exit 138), consistent with CI's trap/segfault characterization.
+
+Also caught and corrected the task brief's own inline test-discovery snippet: it keeps the
+`Frameworks/` path prefix (`sed 's|/default.rave||'`), producing names ninja rejects.
+`bin/rave`'s real phony targets are bare names (`target[:identifier]`, e.g. `authorization`,
+not `Frameworks/authorization`) — used CI's actual `dirname | basename` pipeline instead,
+per the brief's own pointer to `build-and-test.yml` as authoritative.
+
+**Why:** Task 8 deletes the rave/ninja build permanently and is gated on Task 7 proving the
+Xcode build matches this baseline. Without a recorded, honest baseline — including the
+failures, not just the passes — that gate has nothing real to check against.
+
+### If interrupted here
+
+Task 2 committed, nothing left in progress. Next: Phase 2 Task 4 (pilot framework under
+XcodeGen) per `docs/superpowers/plans/2026-08-12-phase-2-xcode-migration.md`.
+
+---
+
+## 2026-08-12 — Phase 2 Task 1 fix round 1/5: config-scope leak closed, PlugIns claim corrected
+
+**What:** Review (SPEC OK, parser output confirmed byte-correct against the repo) raised
+two Important findings against `bin/rave2yaml`, both fixed:
+
+1. **Docs error:** `docs/benchmarks/2026-08-12-rave-inventory.md` and
+   `task-1-report.md` (3 places) falsely claimed `PlugIns/dialog*/default.rave` was
+   out of scope because it used unimplemented directives (`arch`/`notarize`/`define`).
+   Re-read both files: they use only already-implemented directives
+   (`target sources executable frameworks add prefix files`); only the nested
+   `Bundle Support.tmbundle/src/default.rave` genuinely uses `arch`/`notarize`/`define`.
+   Exclusion was always correct (walk scope never included `PlugIns/`), the *reason*
+   given was wrong. Also fixed a swapped target-name pairing (`PlugIns/dialog` is
+   `tm_dialog2`+`Dialog2`, not `tm_dialog`+`Dialog2`).
+2. **Real bug:** `config { }` block content flowed through the same per-line dispatch
+   as target-level content, with only a bare depth counter — nothing stopped a
+   `sources`/`require`/`frameworks`/`libraries`/`executable`/`prefix` line inside a
+   `config` block from silently merging into the target's unconditional fields as if
+   config-independent. Never manifested (both real `config` blocks contain only inert
+   `add PLIST_FLAGS`) — luck, not enforcement. Fixed: `config_stack` (replacing the old
+   `depth` int) now tracks open config names, and a GLOB/LIST/SCALAR directive found
+   while any config block is open raises `RaveError` with file, line, directive,
+   config name(s), and target — rather than being recorded with no per-config
+   representation. `INERT_DIRECTIVES` still permitted inside `config` (never surfaced,
+   so can't misreport). Chose fail-loud over recording config scope, since the
+   `--inventory` interface never asked for per-config fields (Task 1 decided point 2).
+
+Full detail and checks in `task-1-report.md`'s "Fix round 1/5" section (gitignored,
+`.superpowers/sdd/2026-08-12-phase-2-xcode-migration/`). `bash tests/rave2yaml_test.sh`
+still reports `PASS: 57 targets, all dependencies resolve` — neither fix changes the
+target count or dependency graph, since the real tree's one `config` usage was already
+`add`-only.
+
+**Why:** A checklist stating a false "verified by reading" claim is worse than making no
+claim, since later tasks are measured against it. Silent config-scope merging is the same
+failure class the brief called out as the one thing to get right — one level deeper than
+an unrecognised directive: silent *misapplication* instead of silent *dropping*.
+
+### If interrupted here
+
+Fix round 1/5 committed on `phase-2/xcode-migration`, not yet merged. Two Minor findings
+(`BLOCK_DIRECTIVES` unreferenced; `resolve`'s variable regex narrower than `bin/rave`'s)
+were explicitly deferred to final review per the coordinator — do not fix until asked.
+Next: await round 2/5 or final review outcome.
+
+## 2026-08-12 — Phase 2 Task 3: header strategy decided by experiment
+
+**What:** `ExportHeader` (369 edges, the largest Phase 2 risk) reproduced in Xcode via a
+nesting-preserving symlink farm. Wrote `Xcode/Base.xcconfig` and
+`docs/benchmarks/2026-08-12-header-strategy.md`.
+
+**The finding that matters:** rave copies `Frameworks/<n>/src/x.h` to `_Include/<n>/<n>/x.h` and
+grants `-I_Include/<dep>` **only for frameworks a target declares in `require`**. The double
+nesting means a framework's headers are reachable only by targets that depend on it — the
+`require` graph is compiler-enforced, not documentation. The obvious shortcut
+(`-I$(SRCROOT)/Frameworks`) would compile and silently destroy that, with nothing failing to
+warn us.
+
+Verified both directions rather than assuming: with dependencies granted, compilation proceeds
+past every cross-framework include; withholding one produces
+`fatal error: 'regexp/find.h' file not found`. Chosen approach is 46 directory symlinks instead
+of 369 file copies, with per-target include paths generated from each `require` list.
+
+**Two plan assumptions the build contradicted:**
+
+1. Plan said `c++23`; `build.ninja` compiles `-std=c++2a`. Raising the standard across ~92K
+   lines is a behavioural change and gets its own commit with tests behind it, not a silent
+   rider on a build migration. xcconfig uses `c++20`.
+2. `build.ninja` still emits `-mmacosx-version-min=10.12`, inherited from upstream and untouched
+   by the textmatelives merge — their macOS 26 governed release packaging, not the compile flag.
+   Phase 2 is the first point the compiler is told the truth. Watch for `@available`-guarded
+   code behaving differently once the deployment target really is 26.0; the test suite is the
+   check.
+
+**Why:** Every remaining Phase 2 task generates include paths, so getting this wrong would have
+been invisible until the whole project was wired.
+
+### If interrupted here
+
+Tasks 1 and 3 done. Task 2 (ninja parity baseline) still outstanding — it is independent and was
+skipped ahead of, not lost. Next: Task 2, then Task 4 (pilot framework under XcodeGen).
+
+
+## 2026-08-12 — Phase 2 Task 1: `bin/rave2yaml --inventory` parses all 60 rave targets
+
+**What:** Added `bin/rave2yaml`, a Ruby parser that walks `Frameworks/*/default.rave` +
+`Applications/*/default.rave` (56 files) and `vendor/*/default.rave` (3 files, tagged
+`vendor-target` and reported separately), and prints every target's kind, `sources`/
+`tests` globs, `require` deps, frameworks, and libraries. Grammar was read out of
+`bin/rave`'s `Parser` class, not guessed from samples. Finds **57** targets in
+Frameworks/Applications (not 56 — `Frameworks/CommitWindow/default.rave` declares two:
+`CommitWindow` and `CommitWindowTool`) plus 3 vendor targets. Full directive-grammar
+table, per-target dependency list, and the `cxx_tests`-is-parsed-but-never-built finding
+are in `docs/benchmarks/2026-08-12-rave-inventory.md`. Added `tests/rave2yaml_test.sh`
+(passes: `PASS: 57 targets, all dependencies resolve`) — fixed its target-count heuristic
+from file-based `grep -l` (undercounts CommitWindow's second target) to counting `target`
+directive occurrences directly, and widened its dependency-resolution check to accept
+`vendor-target` names too (`TextMate` requires `kvdb`, a vendor target). Both fixes are
+justified in the doc, per task-1's decided point 4 (investigate before changing either).
+Unrecognised directives are fatal (file:line:name) by design — verified against a scratch
+`.rave` file, not the real tree. Task 1 report:
+`.superpowers/sdd/2026-08-12-phase-2-xcode-migration/task-1-report.md`.
+
+**Why:** Every later Phase 2 task consumes this inventory; a parser that silently drops a
+target or misreads a dependency makes the generated Xcode project quietly wrong in ways
+that surface later as link errors. `--inventory` only — `project.yml` emission is Task 4,
+deliberately not touched here.
+
+### If interrupted here
+
+Task 1 committed on `phase-2/xcode-migration`. Not yet merged. Next: Phase 2 Task 2 per
+`docs/superpowers/plans/2026-08-12-phase-2-xcode-migration.md`.
+
+## 2026-08-12 — Phase 2 planned: Xcode migration via XcodeGen, not by porting PR #1469
+
+**What:** Wrote `docs/superpowers/plans/2026-08-12-phase-2-xcode-migration.md` (8 tasks).
+
+**Approach decided by measurement, not preference.** PR #1469's committed `project.pbxproj` is
+6506 lines defining only **7 targets** at deployment target 10.11/12.4. It references the
+`license` and `updater` frameworks textmatelives deleted (25 references), expects
+`bl`/`CompareMate`/`QuickLookExtensions` we do not have, and omits `NewApplication` and
+`QuickLookGenerator` we do. 50+ edits before it would parse, and all 46 frameworks still
+unwired. Rejected.
+
+Instead: generate the project with **XcodeGen** (2.46.0, already installed) from a checked-in
+`project.yml`, itself derived from the `.rave` files by a converter we write. The `.rave`
+directives are mechanically readable (`sources` globs, `require` dep lists, `tests` globs).
+Both `project.yml` and the generated `.xcodeproj` get committed so contributors need only Xcode.
+
+**The load-bearing risk is `ExportHeader`** — 369 edges, no native Xcode equivalent. rave
+flattens every framework's public headers into one build-side include root, which is what makes
+`#include <buffer/buffer.h>` resolve across 46 frameworks. Task 3 decides the replacement by
+experiment (plain `-I` vs a symlink farm vs header maps) and records the evidence; every later
+task depends on that answer.
+
+Full rule inventory taken from the live `build.ninja` rather than guessed: CopyFile 1536,
+CompileClang 736, ExportHeader 369, Link 84, GenTest/RunTest 54 each, CompileMarkdown 32,
+Codesign 30, CompileXib 28, ExpandVariables 26, RunExecutable 18, RunApplication 12, PCH 8,
+ConvertToUTF16 8, CompileRagel 2, CompileIcon 2. Ragel is two files, not a pervasive dependency.
+
+**ninja stays authoritative until Task 7 proves parity.** Task 8 — deleting rave, switching CI,
+stripping Intel — is the only irreversible task and is gated on that proof.
+
+**Why:** Phase 2 unblocks Swift compilation, which Phase 6's SwiftUI islands and Liquid Glass
+require; the rave build has no Swift support.
+
+### If interrupted here
+
+Plan committed on `phase-2/xcode-migration`. Phase 1 is merged to master (`ef1db3f2`); a working
+build is installed at `/Applications/TextMate.app` as TextMate Revived 3.0.0-revived.1. Next:
+Phase 2 Task 1 (`bin/rave2yaml` inventory pass).
+
+
 ## 2026-08-12 — Visible identity: "TextMate Revived 3.0.0-revived.1" shipped to /Applications
 
 **What:** Pulled the *visible* half of Phase 4 forward so the installed build is identifiable

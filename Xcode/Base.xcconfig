@@ -1,0 +1,174 @@
+// Base build settings shared by every target in the generated Xcode project.
+//
+// Every value here was derived from the live `build.ninja` rather than chosen,
+// so the Xcode build starts from what rave actually does. Where a value
+// deliberately DIFFERS from rave, it is called out below.
+
+// ---- Build location ------------------------------------------------------
+// Keep ALL build output out of the source tree. xcodebuild otherwise defaults
+// SYMROOT to <project>/build, which puts a fully launchable TextMate.app inside
+// the working copy — Spotlight indexes it, and you end up with duplicate
+// binaries competing with the installed one.
+//
+// ~/build/textmate-revived also carries a .metadata_never_index marker, so
+// build output stays out of Spotlight entirely.
+SYMROOT = $(HOME)/build/textmate-revived/xcode
+OBJROOT = $(HOME)/build/textmate-revived/xcode/obj
+SHARED_PRECOMPS_DIR = $(HOME)/build/textmate-revived/xcode/pch
+
+// ---- Architecture --------------------------------------------------------
+// Apple Silicon only. macOS 26 does not run on Intel, so there is no reason to
+// carry a second slice.
+ARCHS = arm64
+ONLY_ACTIVE_ARCH = YES
+VALID_ARCHS = arm64
+
+// ---- Deployment target ---------------------------------------------------
+// CHANGED from rave. build.ninja still emits -mmacosx-version-min=10.12, a
+// leftover from upstream that survived the textmatelives merge: their macOS 26
+// target governed release packaging, not the compile flag. Phase 2 is where
+// the compiler is finally told the truth.
+MACOSX_DEPLOYMENT_TARGET = 26.0
+
+// ---- Language standards --------------------------------------------------
+// MATCHES rave: build.ninja compiles with -std=c++2a. The Phase 2 plan
+// originally specified C++23; that was wrong to do here. Raising the standard
+// across ~92K lines of C++ is a behavioural change that deserves its own
+// commit with the test suite behind it, not a silent rider on a build-system
+// migration. Keep parity now, raise it deliberately later.
+CLANG_CXX_LANGUAGE_STANDARD = c++20
+GCC_C_LANGUAGE_STANDARD = c99
+CLANG_ENABLE_OBJC_ARC = YES
+
+// ---- Clang modules — REQUIRED off, do not remove --------------------------
+// CHANGED from Xcode's default. XcodeGen's own base.yml preset sets
+// CLANG_ENABLE_MODULES = YES for every target unless overridden; rave never
+// passes -fmodules anywhere (grepped default.rave/bin/rave -- absent). Found
+// by an actual Task 5 build failure, not guessed: with modules on, compiling
+// vendor/xdiff/src/xpatience.c pulls in the `Darwin` module (for the prelude
+// header's system includes), and that module's own `search.h` declares an
+// unrelated `struct entry` (for POSIX hsearch) that collides with xpatience.c's
+// own same-named local struct -- "type 'struct entry' has incompatible
+// definitions in different translation units". Without modules (matching
+// rave), search.h is never implicitly pulled in and xpatience.c's local
+// struct is simply the only one that exists. This is a project-wide setting,
+// not an xdiff-only workaround: any other target could hit the same class of
+// collision against a different system module, silently or not.
+CLANG_ENABLE_MODULES = NO
+
+// Swift is not used yet. Phase 6's SwiftUI islands are the first consumer, and
+// unblocking them is a large part of why this migration exists.
+SWIFT_VERSION = 6.0
+
+// ---- Header search -------------------------------------------------------
+// The load-bearing setting. See docs/benchmarks/2026-08-12-header-strategy.md.
+//
+// rave's ExportHeader rule (369 edges) copies Frameworks/<name>/src/x.h to
+// _Include/<name>/<name>/x.h, then puts -I_Include/<dep> on a target's command
+// line ONLY for frameworks it declares in `require`. The double nesting is not
+// incidental: it means a framework's headers are reachable only by targets
+// that depend on it. That is compiler-enforced dependency isolation.
+//
+// A flat "-I$(SRCROOT)/Frameworks" would compile and silently destroy that
+// property, letting any framework include any other's headers while the
+// `require` graph quietly stopped meaning anything. Verified by experiment:
+// withholding one dependency's include directory produces
+// "'regexp/find.h' file not found", exactly as it should.
+//
+// So the per-target HEADER_SEARCH_PATHS is generated per framework from its
+// `require` list. Only the roots common to every target live here.
+HEADER_SEARCH_PATHS = $(SRCROOT)/Shared/include /opt/homebrew/include
+
+// ---- Prefix header -------------------------------------------------------
+// rave precompiles Shared/PCH/prelude.{c,cc,m,mm} per language and passes it
+// with -include. Verified: `-include Shared/PCH/prelude.cc` compiles the tree
+// clean, despite the file not being a .h — clang does not care about the
+// extension. The per-language split is applied per target by the generated
+// project, since Xcode carries one prefix header per target.
+//
+// Symptom if this is missing: "use of undeclared identifier 'std'". That means
+// the prefix header did not arrive, NOT that the code is broken.
+GCC_PRECOMPILE_PREFIX_HEADER = YES
+
+// ---- Char signedness — REQUIRED, do not remove ---------------------------
+// rave passes -funsigned-char. Without it, Frameworks/text/src/utf8.h fails to
+// compile at all:
+//   error: constant expression evaluates to 128 which cannot be narrowed to
+//   type 'char' [-Wc++11-narrowing]
+// because its UTF-8 lead-byte constants (128, 192, 224, 240) do not fit in a
+// signed char. This is not a warning preference; it is load-bearing, and every
+// framework that includes utf8.h inherits the failure.
+GCC_CHAR_IS_UNSIGNED_CHAR = YES
+
+// ---- Preprocessor --------------------------------------------------------
+// rave passes -D'NULL_STR="￿"' (default.rave:12). The 3-byte payload (EF BF
+// BF, U+FFFF in UTF-8) was verified byte-for-byte, but bare "..." in an
+// xcconfig value is grouping syntax that xcconfig strips before the value
+// ever reaches clang -- confirmed by reading the actual compiler response
+// file, which had `-DNULL_STR=<EF BF BF>` with NO quote bytes at all, i.e.
+// not a string literal. `\"` is the standard xcconfig escape to put a
+// literal quote character in a build setting value; re-verified in the
+// response file after this fix: `-DNULL_STR="<EF BF BF>"`, matching rave.
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) NULL_STR=\"￿\"
+
+// Release only, matching rave's `-DNDEBUG` (see build.ninja's release
+// CompileClang flags: `-Os -DNDEBUG -flto=thin -std=c++2a`). Missing this
+// is not cosmetic: Frameworks/OakDebug/src/OakAssert.h #ifdef NDEBUGs
+// ASSERT/ASSERT_EQ/etc. down to nothing; without it they expand to real
+// calls into OakBadAssertion/OakPrintBadAssertion/oak::to_s, which nothing
+// in this project links unless it also `require`s OakDebug -- confirmed by
+// an actual link failure (undefined symbols) building text_test without it.
+GCC_PREPROCESSOR_DEFINITIONS[config=Release] = $(inherited) NDEBUG
+
+// ---- Warning set, mirrored from build.ninja ------------------------------
+// Copied from rave's actual flags rather than chosen. The -Wno- entries are
+// deliberate suppressions the tree relies on; dropping one turns this into a
+// wall of pre-existing noise that hides real migration errors.
+WARNING_CFLAGS = -Wall -Wwrite-strings -Wformat -Winit-self -Wmissing-include-dirs -Wno-parentheses -Wno-sign-compare -Wno-switch -Wno-c99-designator
+
+// ---- Objective-C ---------------------------------------------------------
+OTHER_CFLAGS = $(inherited) -fobjc-call-cxx-cdtors
+
+// ---- Linking ---------------------------------------------------------
+// rave's root LN_FLAGS (default.rave:16) is
+// "-mmacosx-version-min=${APP_MIN_OS} -fobjc-link-runtime", applied to
+// EVERY link step unconditionally. -mmacosx-version-min's Xcode equivalent
+// is MACOSX_DEPLOYMENT_TARGET, already set above (deliberately 26.0, not
+// rave's 10.12 -- see that setting's own comment); -fobjc-link-runtime has
+// no dedicated Xcode build setting and was missing here entirely until a
+// real Task 5 build failure surfaced it: clang's -fobjc-link-runtime
+// implicitly links CoreFoundation.framework (needed by every generated
+// CxxTest runner's main(), which unconditionally calls
+// CFRunLoopRun/CFRunLoopStop/CFRunLoopGetMain -- bin/gen_test:281-285 --
+// regardless of which framework it's testing). Most _test targets never
+// showed a symptom because something else in their closure happens to
+// `require` text, which separately declares `frameworks CoreFoundation`
+// (Frameworks/text/default.rave) -- Onigmo_test is the one target with no
+// requires at all, so it was the one where the missing flag produced an
+// actual link error ("Undefined symbols ... _CFRunLoopRun") instead of
+// silently working by accident. library.static targets never link, so
+// this is inert for them regardless of scope.
+OTHER_LDFLAGS = $(inherited) -fobjc-link-runtime
+
+// ---- Optimisation, release config ----------------------------------------
+// rave release: -Os -flto=thin -DNDEBUG plus dead stripping. (NDEBUG itself
+// is above, in Preprocessor, config-scoped to Release only.)
+GCC_OPTIMIZATION_LEVEL = s
+LLVM_LTO = YES_THIN
+DEAD_CODE_STRIPPING = YES
+
+// ---- Warnings ------------------------------------------------------------
+// The inherited tree is from 2021 and compiles clean-ish under clang 2100 with
+// deprecation warnings. Do not turn warnings into errors during the migration:
+// a build-system change that also fails on pre-existing warnings makes it
+// impossible to tell which problem you are looking at.
+GCC_TREAT_WARNINGS_AS_ERRORS = NO
+GCC_WARN_ABOUT_RETURN_TYPE = YES
+CLANG_WARN_DOCUMENTATION_COMMENTS = NO
+
+// ---- Signing -------------------------------------------------------------
+// Ad-hoc, matching rave's `set CS_IDENTITY "-"`. Real Developer ID signing and
+// notarization are Phase 5.
+CODE_SIGN_IDENTITY = -
+CODE_SIGN_STYLE = Manual
+ENABLE_HARDENED_RUNTIME = YES

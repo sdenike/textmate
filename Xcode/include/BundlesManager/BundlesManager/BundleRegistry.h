@@ -1,0 +1,1 @@
+../../../../Frameworks/BundlesManager/src/BundleRegistry.h

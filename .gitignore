@@ -1,14 +1,26 @@
 # ---- Build output ----
 build/
-build.ninja
-.ninja_deps
-.ninja_log
 DerivedData/
 *.o
 *.dSYM/
 
-# ---- Machine-local build config ----
-local.rave
+# ---- Xcode project ----
+# TextMate.xcodeproj is COMMITTED (Phase 2 Task 7): project.yml stays the
+# source of truth, but contributors need only Xcode, not XcodeGen, to build.
+# Regenerate on demand with `xcodegen generate --spec project.yml` after
+# editing project.yml. xcuserdata/*.xcuserstate below still ignore the
+# per-user state XcodeGen writes on every `xcodegen generate` and every
+# `open TextMate.xcodeproj`.
+#
+# Xcode/generated/TextMate.entitlements (XcodeGen's `entitlements:` plist
+# output, from project.yml's static `properties:` block) is COMMITTED too,
+# for the same reason as the .xcodeproj itself: the TextMate target's
+# CODE_SIGN_ENTITLEMENTS build setting points at this exact path, so a
+# fresh clone that never runs `xcodegen generate` -- which every doc now
+# says is optional -- would otherwise fail ProcessProductPackaging with a
+# missing file (found by testing an actual clean build, Phase 2 Task 8).
+# Its content is fully deterministic from project.yml; regenerate and
+# re-commit it alongside the .xcodeproj if `entitlements:` ever changes.
 
 # ---- Legacy upstream artifact ----
 Frameworks/license/src/revoked_serials.cc

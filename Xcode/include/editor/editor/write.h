@@ -1,0 +1,1 @@
+../../../../Frameworks/editor/src/write.h

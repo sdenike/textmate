@@ -96,4 +96,18 @@ fi
 echo "deploy-local: installing to $DEST"
 cp -R "$SRC" "$DEST"
 
-echo "deploy-local: installed $(bundle_id "$DEST") $(bundle_version "$DEST") at $DEST"
+# Verify the install landed and is the bundle we meant to install, BEFORE
+# removing the source. Never delete the only copy on an unverified install.
+INSTALLED_ID=$(bundle_id "$DEST")
+if [ "$INSTALLED_ID" != "$SRC_ID" ]; then
+	echo "deploy-local: install verification FAILED -- $DEST reports '$INSTALLED_ID', expected '$SRC_ID'. Leaving the build output in place." >&2
+	exit 1
+fi
+
+echo "deploy-local: installed $INSTALLED_ID $(bundle_version "$DEST") at $DEST"
+
+# Move, don't copy: a launchable .app left in the build tree is indexed by
+# Spotlight and shows up as a duplicate competing with the installed one.
+# Removing it costs a relink on the next build, not a full rebuild.
+rm -rf "$SRC"
+echo "deploy-local: removed the build copy at $SRC (rebuild to regenerate)"

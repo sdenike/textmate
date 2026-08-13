@@ -2,6 +2,113 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.5)
+
+**The Xcode migration is complete.** TextMate now builds with Xcode and nothing
+else — the 2012-era `configure` + `ninja` build has been removed.
+
+### Build
+
+* Open `TextMate.xcodeproj` and press ⌘B, or run
+  `xcodebuild -scheme TextMate -configuration Release build`.
+* `configure`, `bin/rave`, and all 60 `.rave` build files are gone.
+* Continuous integration builds and tests with `xcodebuild`.
+* Apple Silicon only — verified no Intel slices remain outside vendored code.
+
+This was gated on proving the new build produces the same 41 artifacts and
+passes the same 26 test suites as the old one, so nothing was lost in the move.
+
+### Fixed
+
+* A missing entitlements file meant a fresh clone could not build.
+* Test parallelism now matches the old build exactly: the seven suites that
+  call Cocoa APIs run serially, the rest run in parallel. Forcing serial
+  execution everywhere broke a timing-sensitive settings test.
+
+## 2026-08-13 (v3.0.0-revived.4)
+
+Build parity proven. The Xcode build now produces the same artifacts and passes
+the same tests as the old build system, which clears the way to remove it.
+
+### Fixed
+
+* **Unicode word matching in regular expressions.** Patterns using `\w`,
+  `\p{Upper}`, or `\p{Lower}` silently fell back to ASCII-only in the Xcode
+  build, so non-ASCII text capitalized incorrectly — "æblegrød" became
+  "æBlegrød". The regex engine enables its Unicode ranges from a startup routine
+  that the new build was discarding at link time because nothing referenced it.
+* **A missing helper tool.** `CommitWindowTool` was absent from the application
+  bundle under the Xcode build (29 executables where the old build shipped 30).
+
+### Verified
+
+* 41 of 41 artifacts present, matched by identity rather than path.
+* All 26 test targets run and match the previous build exactly — same passes,
+  same failures, same assertion counts.
+
+## 2026-08-13 (v3.0.0-revived.3)
+
+**First build produced by the new Xcode project.** Functionally identical to the
+previous release — this is the build system changing underneath, not the app.
+
+### Xcode migration (Phase 2, 6 of 8 tasks)
+
+* `TextMate.app` now builds from `TextMate.xcodeproj` with Cmd-B, or
+  `xcodebuild -scheme TextMate`. 86 targets total.
+* All six embedded helpers build and land in the bundle at the right paths:
+  the privileged tool, the `mate` and `tm_query` command-line tools, both
+  Dialog plug-ins, and the QuickLook generator.
+* Bundle identity verified byte-for-byte against the old build — same name,
+  same version, same identifier — so this replaces the previous install
+  cleanly and keeps your settings and bundles.
+
+The old `configure` + `ninja` build still works and remains the reference until
+artifact and test parity is proven; only then does it get removed.
+
+### Known
+
+* One `regexp` test assertion differs between the two builds (a Unicode casing
+  case). Real and reproducible, and it must be resolved before the old build
+  system is retired.
+* Debug-configuration entitlements are simplified relative to the old build;
+  the Release path is unaffected.
+
+## 2026-08-13 (v3.0.0-revived.2)
+
+Build-system progress. **No user-visible change** — this release exists so each
+completed migration task is compiled, versioned, and testable rather than
+accumulating unverified.
+
+### Xcode migration (Phase 2, 5 of 8 tasks)
+
+* **All 46 frameworks and 3 vendor targets now build under Xcode** — 76 targets
+  total, `xcodebuild -alltargets` clean from a fresh tree. The app target itself
+  is the next task, so this app is still produced by the existing ninja build.
+* **Header isolation preserved.** TextMate's build makes a framework's headers
+  reachable only by targets that declare a dependency on it, which means the
+  dependency graph is enforced by the compiler rather than merely documented.
+  The Xcode project reproduces that exactly instead of taking the easy route of
+  exposing everything.
+* Five build-fidelity bugs surfaced only by building all 46 at once: C++ modules
+  colliding with a vendored `struct entry`, a missing Objective-C runtime link,
+  a source-tree symlink silently duplicating files, prefix-header handling in
+  mixed C++/Objective-C++ frameworks, and a genuine dependency cycle
+  (`plist → io → ns → plist`).
+
+### Cleanup
+
+* Removed `.travis.yml` (dead since 2016), `local-orig.rave`, and the unused
+  `SyntaxMate` XPC service.
+* Repaired the git merge base with `textmatelives`, which an earlier squash
+  merge had discarded — future syncs from that fork will no longer re-conflict
+  on work already merged.
+
+### Known
+
+* One test assertion differs between the ninja and Xcode builds: a Unicode
+  casing case in `regexp`. Real and reproducible; being resolved as part of the
+  build-parity gate before the old build system is removed.
+
 ## 2026-08-12 (v3.0.0-revived.1)
 
 First build of **TextMate Revived**, the `sdenike/textmate` fork. Apple Silicon only,
