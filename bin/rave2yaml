@@ -829,11 +829,18 @@ def emit_bundle_target(io, target, deps, header_deps, by_name)
   io.puts '      base:'
   io.puts "        GCC_PREFIX_HEADER: #{yq(prefix_header)}" if prefix_header
   io.puts "        WRAPPER_EXTENSION: #{WRAPPER_EXTENSION_FOR_KIND.fetch(kind_of(target))}"
+  # Real (CODE_SIGNING_ALLOWED not =NO) codesigning refuses to sign a bundle
+  # target with no known Info.plist source at all -- "Cannot code sign
+  # because the target does not have an Info.plist file" -- a real Task 6
+  # build failure that individual per-target `CODE_SIGNING_ALLOWED=NO` test
+  # builds never exercise (only a full, actually-signing `-scheme TextMate`
+  # build does). Same INFOPLIST_FILE-points-at-the-real-unexpanded-file +
+  # postBuildScripts-overwrites-it approach as emit_app_target, derived from
+  # the target's own .rave location rather than a second hardcoded table.
+  io.puts "        INFOPLIST_FILE: #{yq(File.join(File.dirname(target.file), 'Info.plist'))}"
   io.puts header_search_paths_line(header_deps) unless header_deps.empty?
 
-  io.puts '    postBuildScripts:'
-  io.puts "      - script: #{yq(%("$SRCROOT/Xcode/scripts/assemble_resources.sh" #{name}))}"
-  io.puts "        name: #{yq("Assemble resources (#{name})")}"
+  emit_assemble_resources_script(io, name)
 
   io.puts '    dependencies:'
   # `link: true` is explicit, not relied on as a default: XcodeGen's own
@@ -847,6 +854,129 @@ def emit_bundle_target(io, target, deps, header_deps, by_name)
   deps.each { |d| io.puts "      - target: #{d}\n        link: true" }
   linked_sdks(name, deps, by_name).each { |sdk| io.puts "      - sdk: #{sdk}" }
   emit_embed_dependencies(io, name)
+end
+
+# `app`-kind: TextMate itself, the one target of this kind in the tree
+# (Applications/TextMate/default.rave:1-37). Same sources/linking/embed
+# shape as emit_bundle_target, minus WRAPPER_EXTENSION (type: application's
+# default -- ".app" -- is already right) plus two things only the app needs:
+#
+# - INFOPLIST_FILE points at the REAL, UNEXPANDED
+#   Applications/TextMate/Info.plist so Xcode always has a real file to
+#   process (it only substitutes its OWN $(VAR) syntax, so rave's ${VAR}
+#   tokens just pass through inertly) -- assemble_resources.sh's
+#   postBuildScripts phase then overwrites $TARGET_BUILD_DIR/
+#   $CONTENTS_FOLDER_PATH/Info.plist with the properly-expanded version
+#   (APP_VERSION from CHANGELOG.md, TARGET_NAME from Xcode's own env,
+#   CS_GET_TASK_ALLOW from $CONFIGURATION) before Xcode's implicit final
+#   codesign step runs (postBuildScripts are documented to run "after any
+#   other build phase", i.e. always before that).
+# - CODE_SIGN_ENTITLEMENTS points at a $(DERIVED_FILE_DIR) path the same
+#   postBuildScripts phase writes, for the same reason: rave's
+#   `expand CS_ENTITLEMENTS` (default.rave:18) needs the same ${VAR}
+#   substitution, which CODE_SIGN_ENTITLEMENTS's native handling can't do
+#   either.
+# Frameworks/network case-collides with Apple's real Network.framework on
+# APFS (case-insensitive) -- the SAME class of risk header-strategy.md's
+# Task 5 addendum already documents for Xcode's automatic Headers-phase
+# copy, but a different mechanism: rave precompiles Shared/PCH/prelude.*
+# ONCE, globally, with a fixed, dependency-independent flag set (`prelude
+# Shared/PCH/prelude.*` at the ROOT default.rave, never inside any
+# target's own `require`-derived flags), so its own `#import <WebKit/
+# WebKit.h>` (prelude.m) always resolves against Apple's real
+# Network.framework, full stop. Xcode's GCC_PRECOMPILE_PREFIX_HEADER is
+# inherently PER-TARGET -- it precompiles prelude.mm fresh for every
+# target using that target's OWN HEADER_SEARCH_PATHS -- so the first
+# target whose closure both requires `network` AND forces prelude.mm
+# (TextMate: `require ... network ...` alongside its mixed .cc+.mm
+# sources) hits a real, reproduced build failure: `#import <Network/
+# Network.h>` (from WebKit.h) resolves through
+# $(SRCROOT)/Xcode/include/network -- APFS treats that path's own
+# `network/` subdirectory as equal to `Network/` -- shadowing Apple's
+# framework with ours ("no template named 'map' in namespace 'std'",
+# since our network/constants.h compiles with no PCH context). Excluded
+# here rather than fixed at the farm level (a bigger, riskier change
+# touching all 76 already-verified targets): TextMate's own sources
+# (Applications/TextMate/src/*.mm) never `#include <network/...>`
+# directly (grepped, zero matches) -- `network` is only in TextMate's
+# `require` for LINKING (BundlesManager/SoftwareUpdate need it), which
+# `dependencies:` (unaffected by this) already provides.
+APP_HEADER_SEARCH_EXCLUDE = %w[network].freeze
+
+def emit_app_target(io, target, deps, header_deps, by_name)
+  name = target.name
+  header_deps = header_deps - APP_HEADER_SEARCH_EXCLUDE
+
+  io.puts "  #{name}:"
+  io.puts '    type: application'
+  io.puts '    platform: macOS'
+  prefix_header = emit_sources(io, resolved(target.lists['sources']))
+
+  io.puts '    settings:'
+  io.puts '      base:'
+  io.puts "        GCC_PREFIX_HEADER: #{yq(prefix_header)}" if prefix_header
+  io.puts "        INFOPLIST_FILE: #{yq('Applications/TextMate/Info.plist')}"
+  io.puts header_search_paths_line(header_deps) unless header_deps.empty?
+
+  # Entitlements.plist (default.rave:18 `expand CS_ENTITLEMENTS`) needs the
+  # same ${VAR} substitution as Info.plist, but CANNOT be generated by a
+  # build-time script the way Info.plist is (emit_assemble_resources_script,
+  # postBuildScripts): CODE_SIGN_ENTITLEMENTS feeds Xcode's
+  # ProcessProductPackaging step, which participates in the dependency graph
+  # far earlier than a bundle's Resources. Three real, distinct build
+  # failures came out of trying anyway (in order): "Entitlements file ...
+  # was modified during the build" (postBuildScripts -- too late);
+  # "Multiple commands produce ... Entitlements.plist" (preBuildScripts
+  # writing under $(DERIVED_FILE_DIR), same filename Xcode stages
+  # internally); "Cycle inside TextMate" (preBuildScripts writing under
+  # $(DERIVED_FILE_DIR) even with a different filename -- Xcode treats
+  # anything CODE_SIGN_ENTITLEMENTS points to THERE as a node it's also
+  # responsible for producing). Fixed by not generating it at Xcode BUILD
+  # time at all: XcodeGen's own native `entitlements:` key (ProjectSpec.md's
+  # Plist section, verified against the installed 2.46.0's actual behaviour)
+  # writes the file at `xcodegen generate` time -- the same point project.yml
+  # itself gets turned into TextMate.xcodeproj -- so by the time xcodebuild
+  # ever runs, it is just an ordinary, already-existing file, with no
+  # build-graph timing question at all. This DOES mean CS_GET_TASK_ALLOW is
+  # fixed at generation time rather than reading $CONFIGURATION at build
+  # time (rave's own config debug/release split, default.rave:10-16) --
+  # hardcoded to Release's value (false) here, since Release is this task's
+  # verification target and Xcode's own ad-hoc local-signing already adds
+  # get-task-allow=1 unconditionally regardless (observed on `mate`, which
+  # has no entitlements wired at all), making the Debug value moot in
+  # practice for a local, non-distribution build either way.
+  io.puts '    entitlements:'
+  io.puts "      path: #{yq('Xcode/generated/TextMate.entitlements')}"
+  io.puts '      properties:'
+  io.puts '        com.apple.security.automation.apple-events: true'
+  io.puts '        com.apple.security.personal-information.addressbook: true'
+  io.puts '        com.apple.security.cs.disable-library-validation: true'
+  io.puts '        com.apple.security.get-task-allow: false'
+
+  emit_assemble_resources_script(io, name)
+
+  io.puts '    dependencies:'
+  deps.each { |d| io.puts "      - target: #{d}\n        link: true" }
+  linked_sdks(name, deps, by_name).each { |sdk| io.puts "      - sdk: #{sdk}" }
+  emit_embed_dependencies(io, name)
+end
+
+# assemble_resources.sh (re)writes hundreds of files under Resources/About/
+# SharedSupport for TextMate and touches Info.plist/Entitlements for all
+# four bundle-like targets -- declaring an accurate `outputFiles:` list
+# isn't practical (support/* alone is 246 files that can each change
+# independently), so this is explicitly "always run" rather than XcodeGen's
+# default dependency-analysed script phase, which would otherwise print
+# "will be run during every build because it does not specify any outputs"
+# on every invocation -- accurate as a description, not useful as a warning
+# once the reason is understood, so it's silenced by stating the true
+# intent (`basedOnDependencyAnalysis: false`) instead of inventing an
+# output-file list that wouldn't actually gate anything correctly.
+def emit_assemble_resources_script(io, name)
+  io.puts '    postBuildScripts:'
+  io.puts "      - script: #{yq(%("$SRCROOT/Xcode/scripts/assemble_resources.sh" #{name}))}"
+  io.puts "        name: #{yq("Assemble resources (#{name})")}"
+  io.puts '        basedOnDependencyAnalysis: false'
 end
 
 # The generated CxxTest runner's own extension must match bin/rave's choice
@@ -919,19 +1049,26 @@ EMBED = {
 # (destination + subpath -- see the Dependency section of XcodeGen's own
 # ProjectSpec.md, verified against the installed 2.46.0 empirically since
 # this tree has no cached copy of that doc). `destination:` values are
-# XcodeGen's fixed enum (dstSubfolderSpec names); `wrapper` means
-# Contents/ itself, so a subpath is how "Library/QuickLook" (not one of
-# the named destinations) is reached. Matches each `files`/`copy`
-# destination string in EMBED's own comment exactly: "MacOS" ->
-# executables, "Resources" -> resources, "PlugIns" -> plugins,
-# "Library/QuickLook" -> wrapper + subpath.
+# XcodeGen's fixed enum (dstSubfolderSpec names), matching each `files`/
+# `copy` destination string in EMBED's own comment: "MacOS" -> executables,
+# "Resources" -> resources, "PlugIns" -> plugins.
+#
+# `wrapper` means the PRODUCT ROOT (TextMate.app/ itself), NOT Contents/ --
+# a real build failure ("unsealed contents present in the bundle root")
+# caught this the first time: `subpath: 'Library/QuickLook'` alone put
+# TextMateQL.qlgenerator at TextMate.app/Library/QuickLook/, a stray
+# top-level entry outside Contents/ that codesign refuses to seal. `wrapper`
+# is still the right destination (none of the other named enum values reach
+# Library/QuickLook, and Contents/ is just an ordinary subdirectory of the
+# wrapper from the build system's point of view even though the OS treats it
+# specially) -- the subpath just needs "Contents/" spelled out explicitly.
 EMBED_DESTINATION = {
   'PrivilegedTool' => { destination: 'resources', subpath: nil },
   'mate'           => { destination: 'executables', subpath: nil },
   'tm_query'       => { destination: 'executables', subpath: nil },
   'Dialog'         => { destination: 'plugins', subpath: nil },
   'Dialog2'        => { destination: 'plugins', subpath: nil },
-  'TextMateQL'     => { destination: 'wrapper', subpath: 'Library/QuickLook' },
+  'TextMateQL'     => { destination: 'wrapper', subpath: 'Contents/Library/QuickLook' },
   'tm_dialog'      => { destination: 'resources', subpath: nil },
   'tm_dialog2'     => { destination: 'resources', subpath: nil },
 }.freeze
@@ -1012,6 +1149,8 @@ def run_emit_yaml(target_names, io)
       emit_tool_target(io, target, deps, header_deps, by_name)
     elsif %w[bundle qlgenerator].include?(kind_of(target))
       emit_bundle_target(io, target, deps, header_deps, by_name)
+    elsif kind_of(target) == 'app'
+      emit_app_target(io, target, deps, header_deps, by_name)
     else
       raise RaveError, "--emit-yaml: #{name}: kind '#{kind_of(target)}' reached the emission " \
                         'dispatch with no emitter wired yet'

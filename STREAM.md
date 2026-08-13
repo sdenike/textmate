@@ -4,6 +4,145 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 2 Task 6: TextMate.app builds and runs from Xcode
+
+**What:** `xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release
+build` now produces a working `TextMate.app`, with real (non-`CODE_SIGNING_ALLOWED=NO`)
+ad-hoc codesigning, matching the ninja build's identity exactly: `CFBundleName` TextMate,
+`CFBundleShortVersionString` 3.0.0-revived.2, `CFBundleIdentifier` com.macromates.TextMate
+(PlistBuddy-verified against both builds). All six embedded products
+(`PrivilegedTool`, `mate`, `tm_query`, `Dialog.tmplugin`, `Dialog2.tmplugin`,
+`TextMateQL.qlgenerator`) are present at their correct bundle paths. `./bin/deploy-local`
+succeeded against the Xcode-built app — identifier guard passed, installed to
+`/Applications/TextMate.app`. `xcodebuild -alltargets ... CODE_SIGNING_ALLOWED=NO` still
+succeeds for the full 86-target project (Task 5's 76 + mate/tm_query/PrivilegedTool/
+tm_dialog/tm_dialog2/Dialog/Dialog2/TextMateQL/TextMate); `text_test -v` still `34 tests
+passed`, exit 0.
+
+**Scope discoveries confirmed and closed, in order:**
+
+1. **PlugIns widened into rave2yaml's walk.** `all_targets_by_name`/`run_inventory` now
+   glob `PlugIns/*/default.rave` too (60 targets, was 56). `run_header_farm` deliberately
+   NOT widened — Dialog/Dialog2 never export headers to anything.
+2. **`checked_target` accepts non-framework kinds, but only at the walk's own root.**
+   `TOP_LEVEL_KINDS` (framework/tool/bundle/qlgenerator/app) applies only when
+   `name == root` (threaded through `transitive_requires`/`transitive_header_deps`);
+   anything reached via an ordinary `require` edge still must be `framework` — matches
+   rave's real graph, where nothing ever requires a tool/bundle/app/qlgenerator target.
+3. **`EMBED`/`EMBED_DESTINATION` tables** (hand-verified against each `files`/`copy` line,
+   same VENDOR_EXTRA rationale: `files`/`copy` content isn't parsed generically) translate
+   `files @X`/`copy @X` into native XcodeGen `dependencies: embed: true, copy:
+   {destination, subpath}` Copy Files phases — a real Xcode build phase Xcode itself
+   orders and re-signs on copy, not a raw `cp -R` racing the rest of the build.
+   `add_to_closure` recurses through EMBED so requesting just `TextMate` transitively
+   pulls in all eight embedded/nested targets and their own `require` closures.
+4. **Four new kind emitters** in `bin/rave2yaml`: `emit_tool_target` (mate, tm_query,
+   PrivilegedTool, tm_dialog, tm_dialog2 — generalizes the frameworks/libraries
+   aggregation Task 5 flagged as `_test`-only), `emit_bundle_target` (Dialog, Dialog2,
+   TextMateQL — `type: bundle` + `WRAPPER_EXTENSION`), `emit_app_target` (TextMate).
+   `choose_prefix_header`/`emit_sources` generalized from a hardcoded `.cc`+`.mm` mix to
+   any N-extension combination (TextMateQL is the first `.c`+`.mm` user).
+5. **Four new `Xcode/scripts/*.sh`**: `expand_plist.sh`/`markdown.sh`/`utf16.sh` (one per
+   non-native rule — ExpandVariables/CompileMarkdown/ConvertToUTF16 — mirroring
+   `build.ninja`'s actual command lines), `assemble_resources.sh` (postBuildScripts
+   orchestrator interpreting each bundle-like target's `files`/`copy` manifest by hand,
+   verified line-by-line against its `default.rave`). CompileIcon reuses the pre-existing
+   `bin/build_app_icon.sh` directly. `RunExecutable`/`RunApplication` deliberately NOT
+   ported — dev-only `ninja <target>/run` conveniences superseded by Xcode's native Run
+   scheme action; out of scope for a `build` action.
+
+**Seven real, distinct build failures, each traced to its actual cause, not guessed:**
+
+1. **Onigmo_test regression, caught before commit.** First kind-dispatch draft nested
+   `emit_test_target` inside the `'framework'` branch only; a vendor target with tests
+   (Onigmo) would have silently lost its `_test` block. Caught by diffing the regenerated
+   project.yml against the prior commit before building, not by a failed build.
+2. **`type: bundle` doesn't get XcodeGen's default "link static libs to executables"
+   treatment `type: tool` does** — TextMateQL linked with every `-framework` flag present
+   but every `-l<static-lib>` flag silently missing ("Undefined symbols" for
+   `buffer_t`/`settings_for_path`/etc). Fixed with explicit `link: true` on every
+   framework/vendor dependency `emit_bundle_target`/`emit_app_target` emit.
+3. **Real codesigning (no `CODE_SIGNING_ALLOWED=NO`) refuses to sign a bundle target with
+   no `INFOPLIST_FILE`** — invisible under the `CODE_SIGNING_ALLOWED=NO` per-target test
+   builds used through the rest of this task; only a full, actually-signing `-scheme`
+   build exercises it. Fixed by adding `INFOPLIST_FILE` (pointing at the real,
+   unexpanded plist) to `emit_bundle_target` too, derived from `target.file`'s own
+   directory rather than a second hand-built table.
+4. **Entitlements: three consecutive build-graph failures**, in order — "Entitlements
+   file ... was modified during the build" (generating it from the same late
+   `postBuildScripts` phase as everything else — ProcessProductPackaging reads
+   `CODE_SIGN_ENTITLEMENTS` far earlier than Resources); "Multiple commands produce ...
+   Entitlements.plist" (moved to `preBuildScripts`, but under `$(DERIVED_FILE_DIR)` with
+   the same filename Xcode stages internally); "Cycle inside TextMate" (renamed, still
+   under `$(DERIVED_FILE_DIR)` — ANY `CODE_SIGN_ENTITLEMENTS` path there makes Xcode treat
+   it as a node it's also responsible for producing). Resolved by abandoning build-time
+   generation entirely: XcodeGen's native `entitlements: path:/properties:` key (verified
+   against the installed 2.46.0's actual output, not assumed) writes the file at
+   `xcodegen generate` time, so by the time `xcodebuild` runs it's just an ordinary
+   pre-existing file. Trade-off recorded: `CS_GET_TASK_ALLOW` is fixed at generation time
+   (hardcoded to Release's `false`) rather than reading `$CONFIGURATION` at build time —
+   acceptable since Release is this task's verification target and Xcode's own local
+   ad-hoc signing already adds `get-task-allow=1` unconditionally regardless (observed
+   directly on `mate`, which has no entitlements wired at all).
+5. **`Frameworks/network` case-collides with Apple's real `Network.framework` on APFS** —
+   a NEW instance of the same class of risk header-strategy.md's Task 5 addendum already
+   flagged, via a different mechanism: rave precompiles `Shared/PCH/prelude.*` ONCE,
+   globally, with a fixed dependency-independent flag set, so its `#import <WebKit/
+   WebKit.h>` always resolves against Apple's real framework; Xcode's
+   `GCC_PRECOMPILE_PREFIX_HEADER` is inherently per-target, so TextMate — the first target
+   whose closure both requires `network` and forces `prelude.mm` — precompiled its PCH
+   with `$(SRCROOT)/Xcode/include/network` on the search path, and APFS treats that path's
+   own `network/` subdirectory as equal to `Network/`, shadowing Apple's framework
+   ("no template named 'map' in namespace 'std'"). Fixed narrowly: TextMate's own sources
+   never `#include <network/...>` directly (grepped, zero matches) — `network` is only in
+   its `require` for linking, unaffected by excluding it from `HEADER_SEARCH_PATHS`
+   specifically (`APP_HEADER_SEARCH_EXCLUDE`) rather than restructuring the farm itself
+   (a bigger, riskier change touching all 76 already-verified targets).
+6. **`destination: wrapper` means the product ROOT, not `Contents/`** — misread from the
+   ProjectSpec.md text on first pass; `TextMateQL`'s `subpath: 'Library/QuickLook'` alone
+   landed at `TextMate.app/Library/QuickLook/`, a stray top-level entry codesign refuses
+   to seal ("unsealed contents present in the bundle root"). Fixed by spelling out
+   `Contents/` in the subpath explicitly.
+7. **Leaked rbenv `GEM_HOME`/`GEM_PATH`** (the exact hazard CLAUDE.md documents for
+   `bin/build`) broke `markdown.sh`'s `bin/gen_html` call via `gen_credits.rb`'s ERB
+   template requiring `net/https` → `openssl` (system Ruby 2.6 dlopening a gem built for
+   Ruby 3.3.6). `xcodebuild` inherits the invoking shell's environment; `bin/build`'s own
+   `env -u GEM_HOME -u GEM_PATH -u RUBYLIB -u RUBYOPT -u BUNDLE_GEMFILE` sanitization
+   doesn't run in this path, so it's mirrored directly in `markdown.sh` instead of
+   depending on every future invoker remembering it.
+
+**Deliberately out of scope, recorded honestly rather than silently skipped:**
+`RunExecutable`/`RunApplication` (dev-only relaunch convenience, Xcode's Run scheme action
+already replaces it); `mate`'s own `expand CS_ENTITLEMENTS` (only the app's entitlements
+are load-bearing per the task brief's explicit rules; `mate` still builds and embeds fine
+without its two extra automation/library-validation grants). Neither affects the
+verification bar.
+
+**Why:** Task 6 is the last major translation gap before Task 7's parity proof — the app
+target is what actually ships, and it's the first target exercising nearly every
+mechanism this migration built (embedding, non-native resource rules, real codesigning,
+per-target PCH) at once, which is exactly why it surfaced seven real bugs six frameworks
+combined never did.
+
+### If interrupted here
+
+Task 6 is functionally complete: `TextMate.app` builds clean from Xcode with real
+codesigning, matches ninja's identity exactly, all six embedded products present,
+`bin/deploy-local` succeeded (currently installed at `/Applications/TextMate.app`).
+`TextMate.xcodeproj` and `build/`/`Xcode/generated/` are gitignored and regenerable
+(`xcodegen generate --spec project.yml`), not committed. Not yet done: updating
+`docs/superpowers/plans/2026-08-12-phase-2-xcode-migration.md`'s Task 6 checkboxes (left
+for the coordinating agent), and `docs/benchmarks/2026-08-12-header-strategy.md` could use
+a short addendum for the `network`/`Network.framework` per-target-PCH finding (a second,
+distinct instance of the same case-insensitivity risk class, found by a different
+mechanism than the first one). Task 7 (prove full parity against Task 2's ninja baseline,
+then commit the generated `.xcodeproj`) is next — it inherits one open item from Task 5
+(`regexp_test`'s Unicode `capitalize()` finding) and should re-check `text_test`'s 34/34
+against ninja's own count as part of its systematic pass, not just the pilot spot-check
+this task repeated.
+
+---
+
 ## 2026-08-13 — Phase 2 Task 5 (2/2): build-recipe fixes found by actually building all 46+3, full project.yml
 
 **What:** With `bin/rave2yaml` translating every gap (previous entry), generated

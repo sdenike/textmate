@@ -2,22 +2,24 @@
 # Xcode Run Script build-phase interpreter for the `files`/`copy` directives
 # on Task 6's four bundle-like targets (TextMate.app, Dialog.tmplugin,
 # Dialog2.tmplugin, TextMateQL.qlgenerator) -- the resource-assembly half of
-# what rave2yaml's emit_app_target/emit_bundle_target/emit_qlgenerator_target
-# can't express as a native Xcode build phase (there is no XcodeGen
-# equivalent of rave's per-extension `files` transform dispatch over an
-# arbitrary directory glob). Each target's manifest below is a line-by-line
-# transcription of its own default.rave `files`/`copy` directives, verified
-# by hand against the source file (same rationale as bin/rave2yaml's
-# VENDOR_EXTRA/EMBED tables: this shape is a one-off for four targets, not
-# worth teaching the generic parser).
+# what rave2yaml's emit_app_target/emit_bundle_target can't express as a
+# native Xcode build phase (there is no XcodeGen equivalent of rave's
+# per-extension `files` transform dispatch over an arbitrary directory
+# glob). Each target's manifest below is a line-by-line transcription of its
+# own default.rave `files`/`copy` directives, verified by hand against the
+# source file (same rationale as bin/rave2yaml's VENDOR_EXTRA/EMBED tables:
+# this shape is a one-off for four targets, not worth teaching the generic
+# parser).
 #
 # NOT this script's job: embedding another target's OWN build product
 # (@PrivilegedTool, @mate, @tm_query, @Dialog, @Dialog2, @TextMateQL,
-# @tm_dialog, @tm_dialog2). Those go through XcodeGen's native `dependencies:
-# ... embed: true, copy: {destination, subpath}` Copy Files phase instead
-# (see project.yml) -- a real Xcode build phase, ordered and codesign-on-copy
-# handled by Xcode itself, rather than a raw `cp -R` racing the rest of the
-# build.
+# @tm_dialog, @tm_dialog2) -- native `dependencies: embed: true, copy:
+# {destination, subpath}` (project.yml) -- or Entitlements.plist (rave2yaml's
+# native `entitlements:` key writes that one at `xcodegen generate` time, not
+# build time; see emit_app_target's own comment for why: a build-time script
+# here created an unresolvable Xcode dependency-graph cycle with
+# ProcessProductPackaging, three different ways, before that was abandoned
+# for the native mechanism).
 #
 # Three of rave's six non-native rules are real per-extension transforms,
 # each with its own wrapper script alongside this one (ExpandVariables ->
@@ -39,7 +41,6 @@ name="${1:?usage: assemble_resources.sh <TextMate|Dialog|Dialog2|TextMateQL>}"
 : "${SRCROOT:?assemble_resources.sh must run as an Xcode build-phase script}"
 : "${TARGET_BUILD_DIR:?assemble_resources.sh must run as an Xcode build-phase script}"
 : "${CONTENTS_FOLDER_PATH:?assemble_resources.sh must run as an Xcode build-phase script}"
-: "${CONFIGURATION:?assemble_resources.sh must run as an Xcode build-phase script}"
 
 scripts="$SRCROOT/Xcode/scripts"
 contents="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH"
@@ -48,6 +49,11 @@ mkdir -p "$contents"
 expand_plist() { "$scripts/expand_plist.sh" "$@"; }
 markdown()     { "$scripts/markdown.sh" "$@"; }
 utf16()        { "$scripts/utf16.sh" "$@"; }
+
+# capture TEXTMATE_VERSION -- same grep/sed one-liner as default.rave:8.
+app_version() {
+	grep -om1 '^## .* (v.*)$' "$SRCROOT/CHANGELOG.md" | sed 's/.*(v\(.*\))/\1/'
+}
 
 # Dialog (PlugIns/dialog-1.x/default.rave:7-19) and Dialog2
 # (PlugIns/dialog/default.rave:7-20) have an identical resource shape --
@@ -65,7 +71,8 @@ assemble_textmateql() {
 	expand_plist "$SRCROOT/Applications/QuickLookGenerator/Info.plist" "$contents/Info.plist"
 }
 
-# Applications/TextMate/default.rave:26-32, in order:
+# Applications/TextMate/default.rave:26-32, in order (minus Entitlements.plist
+# -- not a files/copy line, and not this script's job, see the file header):
 #   files resources/* icons/*.icns @PrivilegedTool "Resources"
 #   files @mate @tm_query    "MacOS"                        (native embed)
 #   files about/* ../../CHANGELOG.md "Resources/About"
@@ -78,23 +85,10 @@ assemble_textmate() {
 	local header="$app/templates/header.html" footer="$app/templates/footer.html"
 	local changelog="$SRCROOT/CHANGELOG.md"
 
-	# capture TEXTMATE_VERSION -- same grep/sed one-liner as default.rave:8.
-	local app_version
-	app_version=$(grep -om1 '^## .* (v.*)$' "$changelog" | sed 's/.*(v\(.*\))/\1/')
-
-	local get_task_allow=false
-	[[ "$CONFIGURATION" == Debug ]] && get_task_allow=true
-
-	# Info.plist (files) + Entitlements.plist (expand -- both carry the
-	# target's PLIST_FLAGS: TARGET_NAME via env, YEAR from expand_plist.sh,
-	# APP_MIN_OS/APP_VERSION/CS_GET_TASK_ALLOW here, matching
-	# default.rave:20 `add PLIST_FLAGS "-dAPP_VERSION=..."` and the
-	# config debug/release CS_GET_TASK_ALLOW blocks). CODE_SIGN_ENTITLEMENTS
-	# (Base.xcconfig) points at this same DERIVED_FILE_DIR path.
+	# Info.plist (files) -- carries the target's PLIST_FLAGS: TARGET_NAME via
+	# env, YEAR from expand_plist.sh, APP_MIN_OS/APP_VERSION here.
 	expand_plist "$app/Info.plist" "$contents/Info.plist" \
-		-dAPP_MIN_OS='10.12' -dAPP_VERSION="$app_version"
-	expand_plist "$app/Entitlements.plist" "$DERIVED_FILE_DIR/Entitlements.plist" \
-		-dAPP_MIN_OS='10.12' -dAPP_VERSION="$app_version" -d"CS_GET_TASK_ALLOW=$get_task_allow"
+		-dAPP_MIN_OS='10.12' -dAPP_VERSION="$(app_version)"
 
 	# resources/* -- files, non-recursive top-level glob; each entry's own
 	# extension picks its transform, same as rave's per-file dispatch.

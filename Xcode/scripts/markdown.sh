@@ -25,5 +25,14 @@ footer="${4:?usage: markdown.sh <src.md> <dst.html> <header.html> <footer.html>}
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 
 mkdir -p "$(dirname -- "$dst")"
-"$repo_root/bin/gen_html" -h "$header" -f "$footer" "$src" > "$dst~"
+# The Contributions.md ERB template requires bin/gen_credits.rb, which pulls
+# in net/https -> openssl -- a real, reproduced failure under a leaked
+# rbenv/chruby GEM_HOME/GEM_PATH (system Ruby 2.6 dlopens a gem built for a
+# different Ruby: "Symbol not found: _rb_cArray"), the exact hazard
+# CLAUDE.md documents for bin/build. xcodebuild inherits the invoking
+# shell's environment, which bin/build's own `env -u ...` sanitizes before
+# ninja ever runs -- mirrored here so this script phase doesn't depend on
+# the invoker having remembered the same thing.
+env -u GEM_HOME -u GEM_PATH -u RUBYLIB -u RUBYOPT -u BUNDLE_GEMFILE \
+	"$repo_root/bin/gen_html" -h "$header" -f "$footer" "$src" > "$dst~"
 mv "$dst~" "$dst"
