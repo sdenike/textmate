@@ -398,7 +398,19 @@ def all_targets_by_name
   by_name
 end
 
-def checked_target(name, by_name)
+# Kinds --emit-yaml can translate when they appear as the WALK'S OWN
+# starting point (a CLI-given name, or an EMBED entry -- see below): the
+# app itself, its two plugin bundles, its QuickLook generator, and the
+# plain-executable tools it embeds or that embed each other. Anything
+# reached via an ordinary `require`/`require_headers` EDGE must still be
+# 'framework' (rave's own require graph never points at a non-framework --
+# nothing in this tree requires a tool/bundle/app/qlgenerator target -- so
+# this is enforcement, not a hypothetical), which is why this set is only
+# consulted when `top_level:` is true rather than folded into `kind_of`
+# itself.
+TOP_LEVEL_KINDS = %w[framework tool bundle qlgenerator app].freeze
+
+def checked_target(name, by_name, top_level: false)
   target = by_name.fetch(name) { raise RaveError, "--emit-yaml: unknown target '#{name}'" }
   # vendor/*/default.rave targets (kvdb, Onigmo, xdiff) declare no
   # `executable`, so kind_of returns 'framework' and they'd otherwise sail
@@ -414,9 +426,10 @@ def checked_target(name, by_name)
                       "the comment above VENDOR_EXTRA), so each one is translated by hand. Add " \
                       "#{name} to VENDOR_EXTRA once its .rave file's exact shape has been read."
   end
-  unless kind_of(target) == 'framework'
+  allowed = top_level ? TOP_LEVEL_KINDS : %w[framework]
+  unless allowed.include?(kind_of(target))
     raise RaveError, "--emit-yaml: #{name}: kind '#{kind_of(target)}' is not yet " \
-                      "translated (only 'framework' targets are)"
+                      "translated (#{allowed.join('/')} #{allowed.length == 1 ? 'is' : 'are'})"
   end
   UNTRANSLATED_DIRECTIVES.each do |directive|
     next if target.lists[directive].empty?
@@ -444,8 +457,15 @@ end
 # threaded unchanged through every recursive call, so the one name that
 # must never appear in the result is fixed for the whole walk regardless of
 # how many cycles route back to it.
+#
+# `top_level:` is threaded through as `name == root`: true on exactly the
+# one call in a given walk where `name` is the walk's own starting point
+# (every recursive call's `dep` was already checked `!= root` before the
+# call, per the cycle guard above), which is the only point a non-framework
+# kind (tool/bundle/app/qlgenerator) may legally appear -- see
+# checked_target's TOP_LEVEL_KINDS comment.
 def transitive_requires(name, by_name, seen = {}, root: name)
-  checked_target(name, by_name).lists['require'].each do |dep|
+  checked_target(name, by_name, top_level: name == root).lists['require'].each do |dep|
     next if dep == root || seen.key?(dep)
     seen[dep] = true
     transitive_requires(dep, by_name, seen, root: root)
@@ -477,7 +497,7 @@ end
 # its comment) -- it reaches transitive_header_deps too, since every
 # require edge is also a header edge.
 def transitive_header_deps(name, by_name, seen = {}, root: name)
-  target = checked_target(name, by_name)
+  target = checked_target(name, by_name, top_level: name == root)
   (target.lists['require'] + target.lists['require_headers']).each do |dep|
     next if dep == root || seen.key?(dep)
     seen[dep] = true
@@ -575,14 +595,22 @@ end
 # and no target-level GCC_PREFIX_HEADER at all, both compiled with the
 # correct macro visible and neither warning/erroring.
 def choose_prefix_header(exts, context)
-  case exts
-  when [], ['.cc'], ['.mm'], ['.m'], ['.c']
+  case exts.length
+  when 0, 1
     "$(SRCROOT)/Shared/PCH/#{PRELUDE_FOR_EXT.fetch(exts.first, 'prelude.cc')}"
-  when ['.cc', '.mm']
-    nil # mixed: no target-level prefix header; both sources: groups force their own via compilerFlags
   else
-    raise RaveError, "--emit-yaml: #{context}: source extensions #{exts.inspect} have no prelude " \
-                      'mapping (only .c/.m/.cc/.mm, or mixed .cc+.mm, are handled)'
+    # Mixed: no target-level prefix header; every sources: group forces its
+    # own via compilerFlags (see the long comment above). Generalised from
+    # the original .cc+.mm-only case (7 frameworks) to any 2+ combination of
+    # known extensions -- Task 6's TextMateQL (`src/*.{c,mm}`) is the first
+    # .c+.mm user, and the per-file mechanism doesn't care how many groups
+    # there are, only that each file's OWN extension picks its OWN prelude.
+    unknown = exts - PRELUDE_FOR_EXT.keys
+    if unknown.any?
+      raise RaveError, "--emit-yaml: #{context}: source extensions #{unknown.inspect} have no " \
+                        'prelude mapping (only .c/.m/.cc/.mm are handled)'
+    end
+    nil
   end
 end
 
@@ -604,10 +632,13 @@ def emit_sources(io, files)
   exts          = files.map { |f| File.extname(f) }.uniq.sort
   prefix_header = choose_prefix_header(exts, files.first)
   io.puts '    sources:'
-  if exts == ['.cc', '.mm']
-    mm_files, cc_files = files.partition { |f| f.end_with?('.mm') }
-    emit_source_file_group(io, cc_files, compiler_flags: '-include $(SRCROOT)/Shared/PCH/prelude.cc')
-    emit_source_file_group(io, mm_files, compiler_flags: '-include $(SRCROOT)/Shared/PCH/prelude.mm')
+  if exts.length > 1
+    # One group per extension actually present (was hardcoded to exactly
+    # .cc+.mm; generalised for TextMateQL's .c+.mm -- see choose_prefix_header).
+    exts.each do |ext|
+      group = files.select { |f| f.end_with?(ext) }
+      emit_source_file_group(io, group, compiler_flags: "-include $(SRCROOT)/Shared/PCH/#{PRELUDE_FOR_EXT.fetch(ext)}")
+    end
   else
     emit_source_file_group(io, files)
   end
