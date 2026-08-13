@@ -59,7 +59,10 @@ jobs:
             echo "::group::$t"
             xcodebuild -project TextMate.xcodeproj -target "$t" -configuration Release build CODE_SIGNING_ALLOWED=NO
             BIN="$(xcodebuild -project TextMate.xcodeproj -target "$t" -configuration Release -showBuildSettings | awk -F' = ' '/ BUILT_PRODUCTS_DIR/{print $2; exit}')/$t"
-            "$BIN" || { echo "FAILED: $t"; FAIL=1; }
+            # --no-parallel: some .mm runners call Cocoa APIs that assert NSThread.isMainThread;
+            # ninja's RunTest rule forced this for every .mm runner. Forcing it for every
+            # runner, not just .mm ones, is always safe and matches bin/build's own test path.
+            "$BIN" --no-parallel || { echo "FAILED: $t"; FAIL=1; }
             echo "::endgroup::"
           done
           exit "$FAIL"
