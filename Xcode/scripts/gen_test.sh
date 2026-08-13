@@ -23,9 +23,12 @@ name="${1:?usage: gen_test.sh <framework-name>}"
 # vendor/<name>/tests/, not Frameworks/<name>/tests/ -- Frameworks/<name>
 # doesn't exist for them at all, so fall back the same way rave2yaml's own
 # `resolved`/glob logic effectively does (it reads the real .rave-declared
-# path, whichever tree the target lives under).
+# path, whichever tree the target lives under). Applications/<name> is the
+# same fallback one level further: TextMate's own tests/ (e.g. preferences
+# migration) live under Applications/TextMate, not a Frameworks/ subtree.
 base="Frameworks/$name"
 [ -d "$SRCROOT/$base" ] || base="vendor/$name"
+[ -d "$SRCROOT/$base" ] || base="Applications/$name"
 
 # Seven frameworks (buffer, document, BundlesManager, FileBrowser, ns,
 # encoding, SoftwareUpdate) have .mm test sources alongside .cc; nullglob

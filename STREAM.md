@@ -4,6 +4,49 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 4 Task 1: preferences migration (pre-rename release)
+
+**What:** Added `Applications/TextMate/src/PreferencesMigration.{h,mm}`:
+`MigratePreferencesDomain(source, destination)` copies every key persisted under `source` into
+`destination` that `destination` doesn't already have (per-key, never clobbers), then writes a
+`MigratedFromMacromates` marker into `destination` so later calls no-op immediately. Source is
+only ever read, never deleted. `MigrateLegacyPreferencesIfNeeded()` calls it with
+`source = "com.macromates.TextMate"` (hardcoded) and `destination = NSBundle.mainBundle.bundleIdentifier`
+(read at runtime, not hardcoded) — so today, before Task 2 changes `CFBundleIdentifier`, source
+and destination resolve to the literal same domain and the call is a true, verified no-op; once
+Task 2 lands, destination will resolve to `com.shelbydenike.TextMate` and the same code performs
+the real migration, with no changes needed to this file. Wired as the very first statement in
+`main()` (`Applications/TextMate/src/main.mm`), before `oak::application_t::set_support(...)` —
+earlier than the plan's suggested neighbourhood, deliberately, so no code path anywhere (app
+init, AppController, RegisterDefaults) can read a default before migration runs.
+
+New `Applications/TextMate/tests/t_preferences_migration.mm`, 5 tests, all against throwaway
+`*.PreferencesMigrationTest.*` domains (never the real `com.macromates.TextMate` domain):
+copies-into-empty-destination, never-clobbers-but-still-fills-gaps, marker-makes-second-run-a-true-noop,
+absent-source-is-clean-noop, and source-equals-destination-is-a-safe-noop (today's actual shipping
+state). Build wiring: new `PreferencesMigration` library.static target and `TextMate_test` tool
+target in `project.yml` (mirrors the existing `<framework>_test` pattern one level up, since this
+is the first test target for something under `Applications/` rather than `Frameworks/`);
+`Xcode/scripts/gen_test.sh` gained an `Applications/$name` fallback alongside its existing
+`Frameworks/$name` / `vendor/$name` search, needed for `gen_test.sh TextMate` to find
+`Applications/TextMate/tests/`. `TextMate.xcodeproj` regenerated via `xcodegen generate`.
+
+**Why:** `NSUserDefaults.standardUserDefaults` is keyed on `CFBundleIdentifier`. Task 2 will change
+it from `com.macromates.TextMate` to `com.shelbydenike.TextMate`; without this migration, every
+setting a user has would silently revert to defaults the moment that ships. This lands first, in
+its own release, so the code has actually run against a real old domain on a real machine before
+anything depends on it — verification (backup real plist, run, compare, restore) is next.
+
+### If interrupted here
+
+Code committed and unit-tested (5/5 pass, `./bin/build TextMate/test`). Full `TextMate` app also
+builds clean with the new dependency. Not yet done: (1) verify against the real
+`~/Library/Preferences/com.macromates.TextMate.plist` (back up first, restore after — do not
+leave it modified), (2) re-run all 25 baseline test targets against
+`docs/benchmarks/2026-08-12-ninja-parity.md` to confirm no regression. Task 2 (the actual
+`CFBundleIdentifier` rename) must not start until both are done and reported.
+
+
 ## 2026-08-13 — Phase 3 merged; Phase 4 planned around a data-loss trap
 
 **What:** PR #5 merged to master (`851bec7c`) with a real merge commit. Phase 4 planned at

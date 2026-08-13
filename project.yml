@@ -1881,6 +1881,8 @@ targets:
         link: true
       - target: kvdb
         link: true
+      - target: PreferencesMigration
+        link: true
       - sdk: Cocoa.framework
       - sdk: AddressBook.framework
       - sdk: Foundation.framework
@@ -1941,6 +1943,32 @@ targets:
         link: false
         copy:
           destination: executables
+  PreferencesMigration:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: "Applications/TextMate/src/PreferencesMigration.mm"
+    settings:
+      base:
+        GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
+  TextMate_test:
+    type: tool
+    platform: macOS
+    sources:
+      - path: "$(DERIVED_FILE_DIR)/_TTextMate.mm"
+        optional: true
+        buildPhase: sources
+    preBuildScripts:
+      - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" TextMate"
+        name: "Generate CxxTest runner (TextMate)"
+        outputFiles:
+          - "$(DERIVED_FILE_DIR)/_TTextMate.mm"
+    settings:
+      base:
+        GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
+    dependencies:
+      - target: PreferencesMigration
+      - sdk: Foundation.framework
   PrivilegedTool:
     type: tool
     platform: macOS
