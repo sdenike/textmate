@@ -4,6 +4,53 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Task 8, step 1: CI workflows switched from ninja to xcodebuild
+
+**What:** `.github/workflows/build-and-test.yml`: both jobs' `Configure`
+step (`./configure`) and `ninja` invocation replaced with `xcodebuild
+-project TextMate.xcodeproj -scheme TextMate -configuration Release build`;
+`ninja` dropped from both `brew install` lines. The test job's dynamic
+`.rave`-file discovery (`grep ... Frameworks/*/default.rave`) replaced with
+a fixed, hand-maintained list of the 20 CI-included `<name>_test` Xcode
+targets (the same 20 from the 26-target parity baseline) — dynamic
+discovery has no source left to discover from once `.rave` files are gone.
+Each target is now built with `xcodebuild -target <name>_test ...
+CODE_SIGNING_ALLOWED=NO` and then its compiled binary is executed directly
+(mirrors Task 7's proven per-target method exactly), since there is no
+native `xcodebuild` action equivalent to ninja's build+run `RunTest` rule
+for these CxxTest binaries. Verified locally against the real
+`TextMate.xcodeproj` before writing this: `text_test` builds and runs exit
+0 via this exact pattern. `.github/workflows/release.yml`: `ninja` dropped
+from its `brew install` line; the `Pre-seed local.rave` + `Configure` +
+`ninja TextMate` steps collapsed into one `xcodebuild ... CODE_SIGN_IDENTITY=
+"$CS_IDENTITY" OTHER_CODE_SIGN_FLAGS="--timestamp" build` step; `Locate built
+app` now points at the fixed, xcconfig-pinned `~/build/textmate-revived/xcode/
+Release/TextMate.app` instead of a generic `$HOME/build` search. The
+inside-out manual re-sign/re-seal/re-sign-outer-app steps that follow are
+left structurally unchanged (still correct and still needed: `assemble_resources.sh`
+copies some embedded binaries with plain `cp`, which Xcode's native
+Embed-and-sign machinery never touches, unlike the real Xcode targets
+Task 7 confirmed are auto re-signed on embed). `.github/workflows/ci.yml`
+needed no change — it only delegates to `build-and-test.yml` and never
+mentions ninja itself. `gitleaks.yml` untouched, as instructed.
+
+**Why:** Task 8 item 1: switch CI to `xcodebuild` before deleting the files
+CI used to depend on, so CI is never broken mid-migration. The
+`github.repository == 'sdenike/textmate'` guard and the six headless-hostile
+test exclusions (buffer, cf, layout, command, editor, file) are preserved
+verbatim per the task brief. `hg`/`svn` installation for `scm`'s tests is
+untouched.
+
+### If interrupted here
+
+CI conversion is committed and complete. Task 8's remaining, irreversible
+step — deleting `configure`, `bin/rave`, all `.rave` files, and the
+now-dead rave-only helpers (`bin/rave2yaml`, `bin/gen_build`,
+`tests/rave2yaml_test.sh`), rewriting `bin/build` to drive `xcodebuild`,
+and rewriting `README.md`/`CLAUDE.md` in the same commit — has not started
+yet. `CONTRIBUTING.md` was checked and needs no change (it never described
+the build system). Nothing pushed.
+
 ## 2026-08-13 — Task 7 complete: Xcode/ninja parity measured and proven
 
 **What:** `docs/benchmarks/2026-08-12-ninja-parity.md` now has the full Xcode-side
