@@ -4,6 +4,40 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Merge-base repaired; dead build files and SyntaxMate removed
+
+**What (merge base):** Phase 1 (#3) was squash-merged, which landed all 130 textmatelives commits'
+content but left **no merge relationship in git topology** — `git merge-base --is-ancestor` said
+NO, so a future sync from textmatelives would have re-conflicted on all 130 commits it no longer
+knew we had. Fixed with `git merge -s ours textmatelives/main` (`ad8f2cd8`): changes no file, only
+records the discarded ancestry. Verified the tree hash was byte-identical before and after, and
+`--is-ancestor` now reports YES with 0 behind.
+
+**Lesson:** whole-fork integrations get a real merge commit. Squash is for single units of work.
+This matters again in Phase 3, which ports tectiv3's dependency purge the same way.
+
+**What (cleanup, `87de6763`):**
+- `.travis.yml` — targets xcode7.2, dead since 2016
+- `local-orig.rave` — stale local build-config copy, referenced by nothing
+- `Applications/SyntaxMate` — XPC service nothing in the tree requires; tectiv3 already deleted
+  it and upstream PR #1462 exists to do the same. It carried a submodule
+  (`SyntaxMate.tmBundle`), removed cleanly from `.gitmodules`.
+
+Verified before deleting that nothing outside `Applications/SyntaxMate/` referenced it, then
+reconfigured and rebuilt: `ninja TextMate` still succeeds and signs. Target count 57 to 56;
+`tests/rave2yaml_test.sh` derives the count rather than hardcoding it, so it self-adjusted.
+
+**Why:** The tree had been growing, not shrinking — two build systems now coexist by design until
+Task 7 proves parity, but these three were dead regardless of which one wins, so there was no
+reason to wait for Task 8.
+
+### If interrupted here
+
+Phase 2 Tasks 1-4 complete. `master` carries the merge-base fix and cleanup; `phase-2/xcode-migration`
+has merged master and is 15 commits ahead. Next: Task 4 review, then the vendor-target gap
+(`kvdb` passes the kind check without erroring — a silent gap) before Task 5 scales to 46 frameworks.
+
+
 ## 2026-08-13 — Phase 2 Task 4c: gen_test.sh, a second real xcconfig bug (NDEBUG), text_test green
 
 **What:** `Xcode/scripts/gen_test.sh <name>` wraps `bin/gen_test`, writing the generated CxxTest

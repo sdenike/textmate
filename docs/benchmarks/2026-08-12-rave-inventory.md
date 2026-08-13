@@ -55,7 +55,7 @@ no dedicated `resources`/`entitlements` directive exists to implement.
 
 ## Target count: 57, not 56
 
-`bin/rave2yaml --inventory` finds **57** targets across the 56 `Frameworks/*/default.rave`
+`bin/rave2yaml --inventory` finds **56** targets across the 56 `Frameworks/*/default.rave`
 + `Applications/*/default.rave` files (46 + 10), plus 3 more in `vendor/*/default.rave`
 (60 total). 57 ≠ 56 because `Frameworks/CommitWindow/default.rave` declares **two**
 `target` blocks in one file — `CommitWindow` (the framework) and `CommitWindowTool` (a
@@ -93,6 +93,13 @@ with the file's own directory (`vendor/kvdb` + `vendor/kvdb/*.m`). It isn't a bu
 internal layout is `vendor/kvdb/kvdb.h` etc. The doubled-looking path is real and
 resolves to real files (verified: `vendor/kvdb/vendor/kvdb/kvdb.h`,
 `vendor/kvdb/vendor/kvdb/kvdb.m`, `vendor/kvdb/vendor/kvdb/KVDBFunctions.m`).
+
+## Removed after this inventory was taken
+
+`Applications/SyntaxMate` (an `xpc` target requiring `file` and `theme`) was deleted in
+`87de6763` — nothing in the tree referenced it, tectiv3 had already removed it, and upstream
+PR #1462 exists to do the same. The target count therefore dropped from 57 to 56. The test
+derives the count rather than hardcoding it, so it self-adjusted.
 
 ## Out of scope for this task (not walked)
 
@@ -145,7 +152,6 @@ from `default.rave` directly, not from this inventory.
 | Preferences | framework | BundlesManager, OakAppKit, OakFoundation, MenuBuilder, SoftwareUpdate, bundles, io, ns, regexp, settings, text, OakTabBarView (headers) | no |
 | PrivilegedTool | tool | authorization, io, text | no |
 | SoftwareUpdate | framework | OakAppKit | 3 |
-| SyntaxMate | xpc | file, theme | no |
 | TMFileReference | framework | scm (headers) | no |
 | TextMate | app | BundleEditor, BundleMenu, BundlesManager, CommitWindow, CrashReporter, DocumentWindow, Find, HTMLOutputWindow, MenuBuilder, OakAppKit, OakCommand, OakFilterList, OakFoundation, OakSystem, OakTextView, Preferences, SoftwareUpdate, authorization, bundles, cf, command, crash, document, io, kvdb, network, ns, plist, regexp, scm, settings, text, theme | no |
 | TextMateQL | qlgenerator | OakFoundation, buffer, bundles, cf, file, io, ns, plist, scope, settings, theme | no |
@@ -195,5 +201,5 @@ from `default.rave` directly, not from this inventory.
 
 ```
 $ bash tests/rave2yaml_test.sh
-PASS: 57 targets, all dependencies resolve
+PASS: 56 targets, all dependencies resolve
 ```
