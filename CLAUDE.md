@@ -98,7 +98,7 @@ Each framework's `<name>_test` Xcode target generates its runner via an `Xcode/s
 Runner flags (parsed by the generated runner via `getopt_long`, `bin/gen_test:155-189`):
 - `-v` verbose, `-m` measure, `-r N` repeat, `-b` benchmarks, `-p`/`--parallel`, `--no-parallel` (`-P` is not actually wired despite the runner's own usage text — its getopt string is `"bmpr:vhV"`)
 
-Some `.mm` test runners call Cocoa APIs that assert `NSThread.isMainThread` (e.g. `TMFileReference`) and need `--no-parallel`; `bin/build` and CI now pass it for every runner, not just `.mm` ones (always safe — `.cc` runners have no such requirement — and avoids re-deriving `gen_test.sh`'s own per-framework `.cc`/`.mm` classification a third place).
+Seven frameworks' test runners are `.mm` (buffer, document, BundlesManager, FileBrowser, ns, encoding, SoftwareUpdate — `gen_test.sh`'s own comment names them) and call Cocoa APIs that assert `NSThread.isMainThread`; `bin/build` and CI pass `--no-parallel` for exactly those seven, matching what ninja's `RunTest` rule did. **Do not force it universally** — `settings_test`'s `t_track_paths.cc` depends on real wall-clock time passing between filesystem operations across concurrently running tests and reliably fails 1/9 under forced serial execution despite passing under the (parallel) default; found by testing, not assumed.
 
 There is no name-based test filter. To run a subset, either run the test binary directly (`~/build/textmate-revived/xcode/Release/<name>_test -v`) or temporarily edit the test source.
 
