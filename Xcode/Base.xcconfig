@@ -148,7 +148,14 @@ OTHER_CFLAGS = $(inherited) -fobjc-call-cxx-cdtors
 // actual link error ("Undefined symbols ... _CFRunLoopRun") instead of
 // silently working by accident. library.static targets never link, so
 // this is inert for them regardless of scope.
-OTHER_LDFLAGS = $(inherited) -fobjc-link-runtime
+//
+// -lz: Phase 3 Task 1 replaced boost::crc_32_type with zlib's crc32() (only
+// io::bytes_t and OakDocument call it). Same reasoning as -fobjc-link-runtime
+// above applies -- rather than hunting down every final target whose
+// dependency closure reaches those two translation units, link libz
+// everywhere; it is a no-op for the library.static targets that don't need it
+// and for the final links that already pull it in transitively.
+OTHER_LDFLAGS = $(inherited) -fobjc-link-runtime -lz
 
 // ---- Optimisation, release config ----------------------------------------
 // rave release: -Os -flto=thin -DNDEBUG plus dead stripping. (NDEBUG itself

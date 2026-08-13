@@ -4,6 +4,50 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 3 Task 1 (2/4): boost::crc_32_type → zlib crc32()
+
+**What:** The two call sites (`io::bytes_t::crc32()` in `Frameworks/file/src/bytes.cc`, and four
+inline uses in `Frameworks/document/src/OakDocument.mm` — folded-region xattr, in-flight search
+double-check, and a disk re-read checksum) now call zlib's `crc32()` directly
+(`#include <zlib.h>`, no prelude change — only these two files need it). Streaming accumulation
+(`boost::crc_32_type::process_bytes()` called repeatedly, `.checksum()` read once at the end)
+becomes `crc = ::crc32(crc, bytes, len)` chained across calls, seeded via `::crc32(0, nullptr, 0)`
+— the documented zlib idiom, and algebraically just 0. `Xcode/Base.xcconfig`'s `OTHER_LDFLAGS`
+gains `-lz`, applied to every target (mirroring the existing `-fobjc-link-runtime` precedent and
+its own comment's reasoning: harmless/inert on `library.static` targets, cheaper than hunting down
+every final target whose dependency closure reaches these two translation units).
+
+**Byte-for-byte equivalence proof (required before deleting the boost code, done — verifiable at
+`/tmp/crc_probe/probe.cc`, not part of the repo):** a standalone program linking both
+`boost::crc_32_type` and zlib's `crc32()` against the same inputs — empty string, ASCII text, a
+single byte, all 256 possible byte values, the 0x80-0xFF high-byte-only range, an 8KB
+pseudo-random buffer, and the published CRC-32 check vector `"123456789"` → `0xCBF43926`.
+**All seven matched exactly**, including the standard check vector, confirming both compute the
+same well-known CRC-32 variant rather than merely agreeing with each other by chance.
+
+**What the CRC is actually used for (checked, not assumed):** two real uses. (1)
+`com.macromates.crc32` is written as a **persisted extended attribute** alongside
+`com.macromates.folded` on saved files, and read back on next open to decide whether saved fold
+state still applies to the file's current content (`OakDocument.mm` around line 848) — this is
+exactly the "persisted and keyed on checksum" risk the task called out, since a file saved by an
+older (boost-based) build could be reopened by this one. The equivalence proof directly
+de-risks it: a boost-computed xattr and a zlib-computed fresh checksum agree, so fold-state
+restoration keeps working across the migration. (2) `OakDocumentMatch.checksum` /
+`performReplacements:checksum:` is an in-memory-only same-run guard (computed during a search,
+consumed moments later during "Replace All", never serialized) — no cross-version risk regardless
+of which algorithm computes it, since both sides of that comparison always run under the same
+build.
+
+**Why:** Phase 3 Task 1.
+
+### If interrupted here
+
+`file` and `document` frameworks not yet individually rebuilt in isolation after this commit
+(will be, along with everything else, in the full-tree verification once `dense_hash_map` and
+the prelude/header-path cleanup land too — next two commits). `google::dense_hash_map` (1 file)
+still untouched; `Shared/PCH/prelude.cc` still includes `boost/crc.hpp` (now unused) on purpose —
+cleaned up in the dense_hash_map commit, once nothing needs any of the three original includes.
+
 ## 2026-08-13 — Phase 3 Task 1 (1/4): boost::variant → std::variant
 
 **What:** `plist::any_t` and `parser::node_t` (regexp) were `typedef`s for
