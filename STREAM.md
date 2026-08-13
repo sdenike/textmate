@@ -4,6 +4,59 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Task 6 complete: TextMate.app builds from Xcode; duplicate binaries eliminated
+
+**What:** `TextMate.app` now builds from `TextMate.xcodeproj` (`fb8c3e61`..`9346f20b`, five
+incremental commits). 86 targets. All six embedded products land at their correct bundle paths:
+PrivilegedTool, `mate`, `tm_query`, Dialog.tmplugin, Dialog2.tmplugin, TextMateQL.qlgenerator.
+Bundle identity verified byte-for-byte against the ninja build — same `CFBundleName`,
+`CFBundleShortVersionString`, `CFBundleIdentifier`. Released as **v3.0.0-revived.3**, the first
+build the Xcode project produced rather than ninja.
+
+Scope discoveries handled: the app embeds six other built products via `@target` references, and
+two of them (`Dialog`, `Dialog2`) live under `PlugIns/`, which `bin/rave2yaml`'s walk scope had
+deliberately excluded since Task 1. The walk was widened.
+
+**Duplicate binaries — three distinct causes, all closed** (user reported two launchable copies
+in Spotlight):
+
+1. `xcodebuild` defaults `SYMROOT` to `<project>/build`, writing a fully launchable
+   `TextMate.app` **inside the working copy** where Spotlight indexes it. `SYMROOT`, `OBJROOT`,
+   and `SHARED_PRECOMPS_DIR` now point at `~/build/textmate-revived/xcode` (`b72c2d22`).
+2. `bin/deploy-local` copied rather than moved, leaving a launchable app in the build tree. It
+   now verifies the installed bundle's identifier matches what it built, **then** removes the
+   build copy (`1901536f`). The verification runs before the removal on purpose — never delete
+   the only copy on an unverified install.
+3. Stale copies in `DerivedData` and both build trees, plus the root-owned `~/build/textmate`
+   from an old sudo run (removed by the user), deleted.
+
+Result: `mdfind` for launchable `TextMate.app` returns exactly one path, `/Applications`.
+
+`.metadata_never_index` in `~/build` suppresses future indexing but does not retract existing
+index entries, which is why deleting the stray copies was necessary rather than optional.
+
+**Also:** `CFBundleName` reverted to `TextMate` at the user's request — the version string
+(`3.0.0-revived.N`) is what identifies this as the Revived build, so the menu bar does not need
+to carry it.
+
+**Carried into Task 7, not resolved:**
+- The `regexp` Unicode casing assertion still differs between the ninja and Xcode builds. Real,
+  reproducible, and it blocks retiring ninja.
+- `CS_GET_TASK_ALLOW` is fixed at project-generation time rather than read per-configuration at
+  build time, after three entitlements build-graph failures. Release unaffected; Debug
+  entitlements are a documented simplification.
+
+**Why:** Task 6's gate was a bundle Xcode produces that is identical to ninja's. It is, and it is
+installed and running.
+
+### If interrupted here
+
+Phase 2 is 6 of 8. `/Applications/TextMate.app` is v3.0.0-revived.3, built by Xcode. Next: Task 7
+proves parity against Task 2's recorded baseline (41 artifacts, 26 test targets) and must resolve
+the `regexp` discrepancy; Task 8 is the irreversible one that deletes `configure`, `bin/rave`, all
+60 `.rave` files, and switches CI to `xcodebuild`. Nothing pushed; Phase 2 has no PR yet.
+
+
 ## 2026-08-13 — Phase 2 Task 6: TextMate.app builds and runs from Xcode
 
 **What:** `xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release
