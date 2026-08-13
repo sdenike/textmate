@@ -2,6 +2,25 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.6)
+
+Two of the four remaining build dependencies are gone. Building the app no longer
+needs Boost or Google's sparsehash installed.
+
+### Changed
+
+* Replaced Boost's `variant` with the C++ standard library equivalent across 153
+  call sites, and Boost's CRC-32 with zlib's.
+* Replaced `dense_hash_map` with the standard `unordered_map`.
+
+The CRC change was verified byte-for-byte against the previous implementation
+before the old code was removed, including the published CRC-32 check vector.
+That mattered: the checksum is stored in a file attribute that decides whether
+code-folding state is restored when you reopen a document, so a subtly different
+result would have silently discarded fold state on every existing file.
+
+`ragel` is still needed to build; removing it is next.
+
 ## 2026-08-13 (v3.0.0-revived.5)
 
 **The Xcode migration is complete.** TextMate now builds with Xcode and nothing

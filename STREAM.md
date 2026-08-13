@@ -4,6 +4,42 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 3 Task 1: boost and sparsehash removed
+
+**What:** `boost::variant` → `std::variant` (153 call sites), `boost::crc_32_type` → zlib
+`crc32()`, `dense_hash_map` → `std::unordered_map` (1 site). `/opt/homebrew/include` dropped from
+`HEADER_SEARCH_PATHS`. CI's `brew install` trimmed to `ragel mercurial subversion` — boost,
+google-sparsehash, and multimarkdown all removed (multimarkdown was already unused).
+Commits `3bf1efe8`, `e767e4e0`, `2cf30c91`, `3c74199f`. Released v3.0.0-revived.6.
+
+**The CRC equivalence proof mattered more than expected.** `boost::crc_32_type` and zlib's
+`crc32()` both claim "CRC-32", but CRC variants differ in polynomial, initial value, reflection,
+and final XOR — a mismatch would not surface as a compile error or necessarily as a test failure.
+Verified byte-for-byte over empty/ASCII/single-byte/all-256-values/high-bytes-only/8KB-random
+inputs, plus the published check vector `"123456789"` → `0xCBF43926`, which confirms both compute
+the *standard* variant rather than merely agreeing with each other.
+
+It is used for `com.macromates.crc32`, a **persisted xattr** gating code-fold-state restore on
+reopen. A silently different checksum would have discarded fold state on every existing file, with
+nothing failing to report it.
+
+**Two incidental finds:** `any_t` becoming a real `plist` type rather than a boost alias made an
+unqualified `equal()` in `delta.cc` ADL-ambiguous against the now-visible `plist::equal` — fixed by
+qualifying. And `ascii.rl` (ragel source) used `boost::get`, missed by a `.cc/.h/.mm` grep and
+caught by the build.
+
+All 26 test targets match `docs/benchmarks/2026-08-12-ninja-parity.md` with zero deltas.
+
+**Why:** Phase 3 targets zero Homebrew dependencies to build. Two of four are gone.
+
+### If interrupted here
+
+`/Applications/TextMate.app` is v3.0.0-revived.6. Branch `phase-3/dependency-purge`, unpushed, no
+PR. Next: Task 2 removes `ragel` — one file (`Frameworks/plist/src/ascii.rl`, 191 lines), decide
+between committing the generated output or porting tectiv3's hand-written parser (`34e166b9`).
+Then Task 3 (replace `network` with URLSession, KEEPING the updater) and Task 4 (crash/CrashReporter).
+
+
 ## 2026-08-13 — Phase 3 Task 1 (4/4) complete: /opt/homebrew/include dropped, full verification
 
 **What:** `Xcode/Base.xcconfig`'s `HEADER_SEARCH_PATHS` loses `/opt/homebrew/include` — the last
