@@ -798,6 +798,57 @@ def emit_tool_target(io, target, deps, header_deps, by_name)
   linked_sdks(name, deps, by_name).each { |sdk| io.puts "      - sdk: #{sdk}" }
 end
 
+# `bundle`/`qlgenerator`-kind targets: rave's `add LN_FLAGS "-bundle"` +
+# `prefix "${target}.EXT/Contents"` -- Dialog, Dialog2 (.tmplugin) and
+# TextMateQL (.qlgenerator). XcodeGen's `type: bundle` produces a generic
+# loadable bundle; WRAPPER_EXTENSION is what turns it into the specific
+# kind, keyed off kind_of exactly like the dispatch in run_emit_yaml.
+#
+# Beyond sources/linking (same shape as emit_tool_target), a bundle needs
+# what rave's `files`/`copy` directives do that this parser doesn't record
+# (see the EMBED comment): expanding Info.plist, converting
+# English.lproj/InfoPlist.strings, and -- app only -- everything else under
+# Resources/About/SharedSupport. All of that lives in ONE postBuildScripts
+# phase, Xcode/scripts/assemble_resources.sh, dispatching on the target
+# name; embedding another target's OWN build product (tm_dialog into
+# Dialog, TextMateQL into TextMate, etc.) is instead a native `dependencies:
+# ... embed: true, copy: {...}` Copy Files phase (emit_embed_dependencies)
+# so Xcode orders and re-signs it itself rather than racing a raw `cp -R`
+# against the rest of the build.
+WRAPPER_EXTENSION_FOR_KIND = { 'bundle' => 'tmplugin', 'qlgenerator' => 'qlgenerator' }.freeze
+
+def emit_bundle_target(io, target, deps, header_deps, by_name)
+  name = target.name
+
+  io.puts "  #{name}:"
+  io.puts '    type: bundle'
+  io.puts '    platform: macOS'
+  prefix_header = emit_sources(io, resolved(target.lists['sources']))
+
+  io.puts '    settings:'
+  io.puts '      base:'
+  io.puts "        GCC_PREFIX_HEADER: #{yq(prefix_header)}" if prefix_header
+  io.puts "        WRAPPER_EXTENSION: #{WRAPPER_EXTENSION_FOR_KIND.fetch(kind_of(target))}"
+  io.puts header_search_paths_line(header_deps) unless header_deps.empty?
+
+  io.puts '    postBuildScripts:'
+  io.puts "      - script: #{yq(%("$SRCROOT/Xcode/scripts/assemble_resources.sh" #{name}))}"
+  io.puts "        name: #{yq("Assemble resources (#{name})")}"
+
+  io.puts '    dependencies:'
+  # `link: true` is explicit, not relied on as a default: XcodeGen's own
+  # doc says static libraries link "to executables" by default, and a
+  # `type: bundle` product doesn't count as one for that inference --
+  # found empirically (a real Task 6 build failure, not a hypothetical):
+  # TextMateQL linked with -framework/-l<vendor library> flags present but
+  # every `-l<framework-library>` flag silently absent, "Undefined symbols"
+  # for buffer_t/settings_for_path/etc. emit_tool_target's `type: tool`
+  # targets never needed this (tool IS "executable" by XcodeGen's default).
+  deps.each { |d| io.puts "      - target: #{d}\n        link: true" }
+  linked_sdks(name, deps, by_name).each { |sdk| io.puts "      - sdk: #{sdk}" }
+  emit_embed_dependencies(io, name)
+end
+
 # The generated CxxTest runner's own extension must match bin/rave's choice
 # (bin/rave:1392: any .mm/.m test source promotes the WHOLE runner to .mm,
 # since bin/gen_test textually concatenates every t_*.{cc,mm} file's body
@@ -864,6 +915,51 @@ EMBED = {
   'Dialog2'  => %w[tm_dialog2],
 }.freeze
 
+# Where each EMBED value lands, as an XcodeGen dependency `copy:` block
+# (destination + subpath -- see the Dependency section of XcodeGen's own
+# ProjectSpec.md, verified against the installed 2.46.0 empirically since
+# this tree has no cached copy of that doc). `destination:` values are
+# XcodeGen's fixed enum (dstSubfolderSpec names); `wrapper` means
+# Contents/ itself, so a subpath is how "Library/QuickLook" (not one of
+# the named destinations) is reached. Matches each `files`/`copy`
+# destination string in EMBED's own comment exactly: "MacOS" ->
+# executables, "Resources" -> resources, "PlugIns" -> plugins,
+# "Library/QuickLook" -> wrapper + subpath.
+EMBED_DESTINATION = {
+  'PrivilegedTool' => { destination: 'resources', subpath: nil },
+  'mate'           => { destination: 'executables', subpath: nil },
+  'tm_query'       => { destination: 'executables', subpath: nil },
+  'Dialog'         => { destination: 'plugins', subpath: nil },
+  'Dialog2'        => { destination: 'plugins', subpath: nil },
+  'TextMateQL'     => { destination: 'wrapper', subpath: 'Library/QuickLook' },
+  'tm_dialog'      => { destination: 'resources', subpath: nil },
+  'tm_dialog2'     => { destination: 'resources', subpath: nil },
+}.freeze
+
+# `embed: true` is XcodeGen's default for an application target's `target:`
+# dependency but NOT for a bundle target's (Dialog/Dialog2 embedding
+# tm_dialog/tm_dialog2), so it's spelled out explicitly here rather than
+# relied on either way. `link: false` because none of these eight are ever
+# meant to be linked into the embedder's own Mach-O -- only copied in, same
+# as rave's `files @X`/`copy @X` (asset copying, never a link input; see
+# Target.assets in the header-strategy doc). `codeSign: true` (also the
+# default) matches rave codesigning each embedded bundle independently
+# before it's ever copied into the outer bundle (Target.signature's own
+# `required_targets(..., include_self: true)` + assets loop) -- Xcode's
+# Copy Files "Code Sign on Copy" does the equivalent re-sign-after-copy.
+def emit_embed_dependencies(io, name)
+  EMBED.fetch(name, []).each do |embedded|
+    dest = EMBED_DESTINATION.fetch(embedded)
+    io.puts "      - target: #{embedded}"
+    io.puts '        embed: true'
+    io.puts '        codeSign: true'
+    io.puts '        link: false'
+    io.puts '        copy:'
+    io.puts "          destination: #{dest[:destination]}"
+    io.puts "          subpath: #{yq(dest[:subpath])}" if dest[:subpath]
+  end
+end
+
 # Adds `name` and its full require/require_headers closure to `closure`,
 # recursing into EMBED so e.g. requesting just "TextMate" also pulls in
 # Dialog -> tm_dialog transitively, each validated (and each one's OWN
@@ -914,6 +1010,8 @@ def run_emit_yaml(target_names, io)
       emit_library_target(io, target, header_deps)
     elsif kind_of(target) == 'tool'
       emit_tool_target(io, target, deps, header_deps, by_name)
+    elsif %w[bundle qlgenerator].include?(kind_of(target))
+      emit_bundle_target(io, target, deps, header_deps, by_name)
     else
       raise RaveError, "--emit-yaml: #{name}: kind '#{kind_of(target)}' reached the emission " \
                         'dispatch with no emitter wired yet'
