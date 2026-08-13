@@ -4,6 +4,29 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Task 7: committed the generated TextMate.xcodeproj
+
+**What:** `.gitignore`'s blanket `*.xcodeproj/` pattern removed (it predated
+this task's decision to commit the generated project; the comment above it
+already said as much was still pending). `TextMate.xcodeproj/project.pbxproj`
+and `project.xcworkspace/contents.xcworkspacedata` now tracked --
+`xcuserdata/`/`*.xcuserstate`/`*.xcscmblueprint`/`*.xccheckout`, already
+present lower in `.gitignore`, still keep every per-user bit out regardless
+of the outer directory being tracked. Grepped the committed `project.pbxproj`
+for `/Users/shelby` first: zero matches -- every path XcodeGen emitted is
+`$(SRCROOT)`-relative, nothing machine-local leaked in.
+
+**Why:** Task 7's own checklist: "contributors need only Xcode, not
+XcodeGen." `project.yml` stays the source of truth; regenerate with
+`xcodegen generate --spec project.yml` after editing it.
+
+### If interrupted here
+
+Only the parity doc write-up (`docs/benchmarks/2026-08-12-ninja-parity.md`)
+remains for Task 7. All measurements (41/41 artifacts by identity, 26/26 test
+targets built and run, regexp discrepancy resolved and verified both ways)
+are already done and committed in the three prior commits this session.
+
 ## 2026-08-13 — Task 7: artifact-parity sweep found and fixed a real missing artifact
 
 **What:** Measuring the Xcode build's artifacts against Task 2's recorded 41
