@@ -4,6 +4,56 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Task 7: artifact-parity sweep found and fixed a real missing artifact
+
+**What:** Measuring the Xcode build's artifacts against Task 2's recorded 41
+ninja artifacts (by identity, not path, per this task's instruction) found one
+real gap: `TextMate.app/Contents/MacOS/CommitWindowTool` was absent -- 29
+executables under the Xcode-built app instead of ninja's 30. `bin/rave2yaml`'s
+`EMBED` table (Task 6) captured every `files`/`copy` directive declared
+directly on a bundle-producing target's own `default.rave`, but missed the one
+case where the directive lives on a plain library that a bundle target merely
+`require`s: `Frameworks/CommitWindow/default.rave:5` has `files
+@CommitWindowTool "MacOS"`, and rave's own `signature()` (bin/rave:1097)
+folds every REQUIRED target's own assets into the requiring bundle -- not
+just the bundle's own declared assets. Confirmed by reading bin/rave's
+source, not inferred. Fixed by adding `CommitWindowTool` to `EMBED['TextMate']`
+(keyed by the bundle that actually copies it in, matching every other EMBED
+entry) and `EMBED_DESTINATION['CommitWindowTool']`.
+
+That surfaced a second, previously-latent bug: `CommitWindowTool` is the
+first-ever tool-kind target with neither a `require` nor a `frameworks`/
+`libraries` line (confirmed against its own build.ninja Link edge, which
+really links nothing but libc++), so `emit_tool_target`'s unconditional
+`dependencies:` key had nothing under it -- valid to bin/rave2yaml, but `nil`
+to a YAML parser, and XcodeGen rejected it ("Incorrect type, expected
+Array<Any>"). Fixed by only emitting the `dependencies:` key when there is at
+least one target or SDK to list.
+
+`project.yml` regenerated (additive: one new `CommitWindowTool` target block,
+one new embed dependency entry, one guarded `dependencies:` block).
+`TextMate.app` rebuilt clean and now has all 30 executables under
+`Contents/`, matching ninja's 30 exactly. Full `xcodebuild -scheme TextMate
+-configuration Release build` still succeeds, zero real errors (`grep
+error:` hits are all inside deprecation-warning text/selector names like
+`...configuration:error:`, not actual failures).
+
+**Why:** Task 7's artifact-parity requirement is explicit: "every ninja
+artifact needs an Xcode counterpart... an unexplained missing artifact
+blocks Task 8." This one was neither explained away nor missed.
+
+### If interrupted here
+
+Full artifact parity (41/41 by identity) and full test parity (26/26 targets
+built and run, results matching the ninja baseline's pass/fail/crash pattern
+target-for-target) are both MEASURED and confirmed as of this entry. Not yet
+done: commit `TextMate.xcodeproj` itself (`.gitignore` already updated to stop
+excluding it), and write up
+`docs/benchmarks/2026-08-12-ninja-parity.md` with the Xcode-side results and
+the CommitWindowTool/regexp findings.
+
+---
+
 ## 2026-08-13 — Task 7: root-caused and fixed the regexp/Onigmo Xcode-vs-ninja discrepancy
 
 **What:** `bin/rave2yaml` now emits `OTHER_LDFLAGS: "$(inherited) -force_load

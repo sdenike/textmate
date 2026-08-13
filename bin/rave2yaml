@@ -825,9 +825,19 @@ def emit_tool_target(io, target, deps, header_deps, by_name)
   io.puts "        GCC_PREFIX_HEADER: #{yq(prefix_header)}" if prefix_header
   io.puts header_search_paths_line(header_deps) unless header_deps.empty?
   emit_onigmo_force_load(io, deps)
-  io.puts '    dependencies:'
-  deps.each { |d| io.puts "      - target: #{d}" }
-  linked_sdks(name, deps, by_name).each { |sdk| io.puts "      - sdk: #{sdk}" }
+  # CommitWindowTool is the first tool-kind target with neither a `require`
+  # (deps) nor a `frameworks`/`libraries` line (sdks) -- confirmed against
+  # its own build.ninja Link edge, which really does link nothing but
+  # libc++/the ObjC runtime. An unconditional `dependencies:` key with
+  # nothing indented under it is `nil`, not `[]`, to a YAML parser --
+  # XcodeGen rejects that ("Incorrect type, expected Array<Any>"), so the
+  # key must be omitted entirely rather than left empty.
+  sdks = linked_sdks(name, deps, by_name)
+  unless deps.empty? && sdks.empty?
+    io.puts '    dependencies:'
+    deps.each { |d| io.puts "      - target: #{d}" }
+    sdks.each { |sdk| io.puts "      - sdk: #{sdk}" }
+  end
 end
 
 # `bundle`/`qlgenerator`-kind targets: rave's `add LN_FLAGS "-bundle"` +
@@ -1067,12 +1077,30 @@ end
 # plumbing no target before Task 6 ever needed translated, see the comment
 # there), so -- same rationale as VENDOR_EXTRA -- this is a small, hand-built
 # table rather than a new generic directive shape, verified by hand against
-# each target's exact `files`/`copy` line rather than parsed:
+# EVERY `files`/`copy` line in the tree (grepped exhaustively across
+# Frameworks/Applications/PlugIns/vendor, not just the app's own
+# default.rave) rather than parsed:
 #
 #   Applications/TextMate/default.rave:26-32  files/copy @PrivilegedTool
 #     @mate @tm_query @Dialog @Dialog2 @TextMateQL
 #   PlugIns/dialog-1.x/default.rave:13         files @tm_dialog
 #   PlugIns/dialog/default.rave:13             files @tm_dialog2
+#   Frameworks/CommitWindow/default.rave:5     files @CommitWindowTool "MacOS"
+#
+# CommitWindowTool is keyed under 'TextMate', not 'CommitWindow', even
+# though the `files` line lives in CommitWindow's own default.rave: rave's
+# bin/rave:1097 signature() walks `required_targets(target, ..., include_
+# self: true)` -- target ITSELF PLUS everything it transitively requires --
+# and folds every one of THEIR OWN `files`/`copy` assets into target's
+# bundle. TextMate `require`s CommitWindow (Applications/TextMate/
+# default.rave:2), so CommitWindowTool lands in TextMate.app/Contents/
+# MacOS/ despite never being named in TextMate's own default.rave at all --
+# confirmed against the ninja artifact baseline, which was missing exactly
+# this one entry (29 executables instead of 30 under TextMate.app) until
+# this line was added. CommitWindow itself has no `prefix`/bundle of its
+# own (it is a plain library), so it never calls emit_embed_dependencies --
+# only a target keyed here, i.e. one XcodeGen actually copies files into,
+# does.
 #
 # Embedded names are added to the SAME closure as ordinary `require` deps
 # (see add_to_closure) so each gets its own library.static/tool/bundle
@@ -1080,7 +1108,7 @@ end
 # separately, to know which dependency edges are "embed via Copy Files"
 # (destination + subpath, see the comment there) rather than "link".
 EMBED = {
-  'TextMate' => %w[PrivilegedTool mate tm_query Dialog Dialog2 TextMateQL],
+  'TextMate' => %w[PrivilegedTool mate tm_query Dialog Dialog2 TextMateQL CommitWindowTool],
   'Dialog'   => %w[tm_dialog],
   'Dialog2'  => %w[tm_dialog2],
 }.freeze
@@ -1103,14 +1131,15 @@ EMBED = {
 # wrapper from the build system's point of view even though the OS treats it
 # specially) -- the subpath just needs "Contents/" spelled out explicitly.
 EMBED_DESTINATION = {
-  'PrivilegedTool' => { destination: 'resources', subpath: nil },
-  'mate'           => { destination: 'executables', subpath: nil },
-  'tm_query'       => { destination: 'executables', subpath: nil },
-  'Dialog'         => { destination: 'plugins', subpath: nil },
-  'Dialog2'        => { destination: 'plugins', subpath: nil },
-  'TextMateQL'     => { destination: 'wrapper', subpath: 'Contents/Library/QuickLook' },
-  'tm_dialog'      => { destination: 'resources', subpath: nil },
-  'tm_dialog2'     => { destination: 'resources', subpath: nil },
+  'PrivilegedTool'   => { destination: 'resources', subpath: nil },
+  'mate'             => { destination: 'executables', subpath: nil },
+  'tm_query'         => { destination: 'executables', subpath: nil },
+  'Dialog'           => { destination: 'plugins', subpath: nil },
+  'Dialog2'          => { destination: 'plugins', subpath: nil },
+  'TextMateQL'       => { destination: 'wrapper', subpath: 'Contents/Library/QuickLook' },
+  'tm_dialog'        => { destination: 'resources', subpath: nil },
+  'tm_dialog2'       => { destination: 'resources', subpath: nil },
+  'CommitWindowTool' => { destination: 'executables', subpath: nil },
 }.freeze
 
 # `embed: true` is XcodeGen's default for an application target's `target:`
