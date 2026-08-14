@@ -4,6 +4,40 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Cask automation proven end to end (v3.0.0-revived.17)
+
+**Phase 5a is closed.** `HOMEBREW_TAP_TOKEN` is set on both `sdenike/textmate` and
+`sdenike/hidden-revived`, and the automation has now run for real.
+
+Cutting v3.0.0-revived.17 was the only way to test it: the tag for `.16` already existed, so a
+re-run stops at the tag check and never reaches the cask step. The release note is genuine rather
+than filler — Homebrew availability is real user-facing news.
+
+**Result — all three jobs green, and the bot did the work:**
+
+```
+verify/build [success]   verify/test [success]   release [success]
+tap commit:  "textmate-revived 3.0.0-revived.17"   by github-actions[bot]
+cask:        version "3.0.0-revived.17"
+             sha256  "882833deafd39d365f0d3f28bbb7c7f40041ad1f5f5fc730fca70fdf23b3e3df"
+```
+
+**Verified rather than assumed.** Downloaded the published asset and compared: its sha256 is
+`882833de…`, byte-identical to what the workflow wrote into the cask. A wrong checksum here would
+fail every `brew install` while looking perfectly fine in the diff, so this is the check that
+matters. `brew info --cask sdenike/tap/textmate-revived` now offers `3.0.0-revived.17`.
+
+**hidden-revived cannot release yet.** It has only `HOMEBREW_TAP_TOKEN`; its workflow signs and
+notarizes before reaching the cask step, so it needs five more secrets —
+`MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`, `APPLE_ID`,
+`APPLE_APP_PASSWORD`, `APPLE_TEAM_ID`. Same underlying credentials as TextMate's, different names
+(`KEYCHAIN_PASSWORD` is new and arbitrary). It also versions differently: `MARKETING_VERSION` in
+the Xcode project, triggered by pushing a `v*` tag, not by a changelog edit.
+
+**If interrupted here.** Phases 0-5a are done. Next is **Phase 6 — Liquid Glass + PR #1469's UI
+work**. Largest outstanding debt remains the bundle catalogue: 108 `AvailableBundles.plist` entries
+pointing at `textmatelives`, 41 installed by default on first launch.
+
 ## 2026-08-14 — Phase 5a: central Homebrew tap, with automatic cask bumps
 
 **What.** Created `sdenike/homebrew-tap` as one tap for every application on this account,
