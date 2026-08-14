@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# STOPGAP -- these bundles still need to be ported properly.
+#
+# A number of bundles still carry `#!/usr/bin/env ruby18` shebangs inherited
+# from TextMate 1. No `ruby18` has existed on macOS in many years, so every one
+# of those commands died at `env: ruby18: No such file or directory` before a
+# single line of its Ruby ran. This shim exists so they run at all; it is not a
+# fix for the underlying problem.
+#
+# What still needs doing: each affected bundle should be forked, its shebangs
+# rewritten to plain `ruby`, and its Ruby actually ported to 2.6 -- some of
+# these scripts additionally use `require 'iconv'`, `require 'parsedate'`,
+# `Config::CONFIG`, `TimeoutError` and `Object#type`, all of which raise under
+# 2.6 and which this shim cannot rescue. It gets them to the point of failing
+# on their real incompatibilities instead of failing on the interpreter name.
+# Delete this file once that work is done.
+#
+# The `-K` translation: `-KU` is Ruby 1.8's encoding flag. Ruby 2.6 still
+# accepts it but warns "it is for 1.8 compatibility and may cause odd
+# behavior". Simply dropping it is wrong -- with LANG unset, which is the
+# normal case for a bundle command, Encoding.default_external falls back to
+# US-ASCII and non-ASCII text breaks. `-EUTF-8` reproduces `-KU`'s UTF-8
+# external and script encoding with no warning.
+#
+# Interpreter resolution matches the sibling `ruby` shim: TM_RUBY if set,
+# system Ruby otherwise.
+
+enc=
+n=$#
+i=0
+while [ $i -lt $n ]; do
+	a=$1
+	shift
+	case "$a" in
+		-*K*)
+			# Strip `K` and its one-letter code: -wKU -> -w, -KU -> (dropped).
+			a=$(printf '%s' "$a" | sed 's/K[A-Za-z]//')
+			enc=-EUTF-8
+			[ "$a" = "-" ] || set -- "$@" "$a"
+			;;
+		*)
+			set -- "$@" "$a"
+			;;
+	esac
+	i=$((i + 1))
+done
+
+[ -n "$enc" ] && set -- "$enc" "$@"
+
+exec "${TM_RUBY:-/usr/bin/ruby}" "$@"

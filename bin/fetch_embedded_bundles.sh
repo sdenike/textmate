@@ -80,8 +80,17 @@ for (( i = 0; i < count; i += 5 )); do
 	#   Support/shared/bin/CocoaDialog.app/   — Intel-only, blocks notarization
 	#                                            (kept upstream but removed here
 	#                                             per commit 297d39de)
+	#   src/                                  — find_app.cc and a default.rave
+	#                                            build file. The prebuilt find_app
+	#                                            binary ships in Support/shared/bin,
+	#                                            so these have no runtime use, and
+	#                                            d07cc0c8 deleted the rave build
+	#                                            system from this repository.
+	#                                            Without this scrub, every pin bump
+	#                                            silently reintroduces a .rave file.
 	rm -rf "$dest_dir/.github"
 	rm -rf "$dest_dir/Support/shared/bin/CocoaDialog.app"
+	rm -rf "$dest_dir/src"
 
 	echo -n "$sha" > "$marker"
 

@@ -4,6 +4,57 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Own bundle forks created; ruby18 shim ships (v3.0.0-revived.15)
+
+**What.** Forked the four mandatory bundles under `sdenike`, repointed `MandatoryBundles.h`,
+pushed a `ruby18` compatibility shim into our own Bundle Support fork, and upstreamed the Source
+macro fix so it is no longer wiped by pin bumps. The release depends on no third-party repository
+any more.
+
+| Pin | Now | SHA |
+|---|---|---|
+| Bundle Support | `sdenike/bundle-support.tmbundle` | `e828e72c` (shim added) |
+| Text | `sdenike/text.tmbundle` | `34ab5891` (unchanged) |
+| Source | `sdenike/source.tmbundle` | `36685fda` (shebang fixed) |
+| Themes | `sdenike/themes.tmbundle` | `e6e91850` (unchanged) |
+
+**Checked before trusting the move:** each fork's HEAD sat exactly at the previously pinned SHA,
+so `git log <oldpin>..HEAD` shows only our own commit in each case. No upstream drift rode along
+with the repoint.
+
+**The monorepo idea does not work.** `sdenike/textmate-bundles` holding everything was the ask,
+but `BundleFetcher` parses a URL into owner/repo only, fetches
+`codeload.github.com/{owner}/{repo}/tar.gz/{ref}`, and validates `info.plist` at the tarball root.
+One bundle per repository is baked in; a monorepo needs a fetcher rewrite. Hence four forks.
+
+**The shim, and why `-EUTF-8`.** `Support/shared/bin/ruby18` sits beside the existing `ruby` shim
+and routes to `${TM_RUBY:-/usr/bin/ruby}`. It rewrites any `-K` flag to `-EUTF-8`: Ruby 2.6 accepts
+`-K` but warns it is 1.8 compatibility, while dropping it is actively wrong — with `LANG` unset,
+which is normal for a bundle command, `default_external` falls back to US-ASCII and non-ASCII text
+breaks. Tested against all five shebang forms found in the wild; all five now execute, and the
+`-w -d` variant's `LoadError` chatter is `ruby -d`'s own output, reproduced by plain `ruby -d`.
+
+**This is a stopgap and that is recorded in three places** — the shim's header, the Bundle Support
+pin comment, and the changelog. The 13 affected bundles still need forking and porting: several
+also use `iconv`, `parsedate`, `Config::CONFIG`, `TimeoutError` and `Object#type`, which raise
+under 2.6 and which no shim can rescue. The shim gets them to the point of failing on their real
+incompatibilities instead of on a missing interpreter.
+
+**Bonus catch: the rave purge was being silently undone.** The first real re-fetch of Bundle
+Support since Phase 2 reintroduced `src/default.rave` and `find_app.cc` as untracked files —
+`d07cc0c8` deleted that directory from the repository, but `fetch_embedded_bundles.sh` only
+scrubbed `.github/` and `CocoaDialog.app/`, so the tarball put it back. `src/` is now scrubbed
+too. The prebuilt `find_app` binary ships in `Support/shared/bin`, so the sources have no runtime
+use. Two `.rave` files still exist in the vendored Dialog plug-ins from Task 2b — pre-existing,
+untouched here.
+
+**Verification.** Build SUCCEEDED. Shim present in the built app; a real `ruby18 -wKU` shebang
+executed through the built app's copy returns `ext=UTF-8` with non-ASCII intact. `src/` absent from
+the built app.
+
+**If interrupted here.** Committed on `fix/bundle-ruby18-shebangs` (PR #8), built but **not
+deployed** as .15 yet.
+
 ## 2026-08-13 — BLOCKER found: no write access to the mandatory bundle repos. Deferring bundles.
 
 **Decision (maintainer).** Leave the remaining 24 broken files alone for now and carry on with the
