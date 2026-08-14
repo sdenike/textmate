@@ -305,3 +305,10 @@ void OakAddAutoLayoutViewsToSuperview (NSArray<NSView*>* views, NSView* supervie
 		[superview addSubview:view];
 	}
 }
+
+NSGlassEffectContainerView* OakCreateGlassContainer ()
+{
+	NSGlassEffectContainerView* res = [[NSGlassEffectContainerView alloc] initWithFrame:NSZeroRect];
+	res.translatesAutoresizingMaskIntoConstraints = NO;
+	return res;
+}

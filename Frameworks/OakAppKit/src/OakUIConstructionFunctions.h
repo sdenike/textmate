@@ -25,6 +25,10 @@ NSComboBox* OakCreateComboBox (NSView* labelView = nil);
 OakRolloverButton* OakCreateCloseButton (NSString* accessibilityLabel = @"Close document");
 NSView* OakCreateNSBoxSeparator ();
 
+// Liquid Glass (macOS 26). Adjacent glass surfaces must share a container or
+// they each sample the backdrop independently and the seam shows.
+NSGlassEffectContainerView* OakCreateGlassContainer ();
+
 OakBackgroundFillView* OakCreateVerticalLine (OakBackgroundFillViewStyle style);
 void OakSetupKeyViewLoop (NSArray<NSView*>* views);
 void OakAddAutoLayoutViewsToSuperview (NSArray<NSView*>* views, NSView* superview);
