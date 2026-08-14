@@ -36,8 +36,12 @@ That needs forks of 12 upstream bundle repositories, which creates public reposi
 maintainer's account, so it was not done unprompted. `Source.tmbundle` is the one overlap, already
 fixed here.
 
-**If interrupted here.** Committed on branch `fix/bundle-ruby18-shebangs`; built but **not yet
-deployed**, and no PR opened yet.
+**Deployed.** `bin/deploy-local` installed v3.0.0-revived.14 over .13; the installed app contains
+no `ruby18` anywhere in `SharedSupport/Bundles/`.
+
+**If interrupted here.** Committed on branch `fix/bundle-ruby18-shebangs`, built and deployed.
+Remaining: merge the PR, then decide whether to fork the 12 upstream bundle repositories to fix
+the other 24 shebangs.
 
 ## 2026-08-13 — Bundle Ruby-1.8 triage done; earlier claim in this log was wrong
 
