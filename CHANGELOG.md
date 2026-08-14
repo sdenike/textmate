@@ -2,6 +2,22 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-14 (v3.0.0-revived.17)
+
+TextMate Revived is now installable with Homebrew.
+
+### Added
+
+* Install and update through Homebrew:
+
+  ```sh
+  brew tap sdenike/tap
+  brew install --cask textmate-revived
+  ```
+
+  That tap carries every application from this project, so you only need to tap
+  it once. Downloading the `.tbz` from a release still works exactly as before.
+
 ## 2026-08-13 (v3.0.0-revived.16)
 
 Check for Updates was looking at the wrong project.
