@@ -2,6 +2,29 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.13)
+
+The privileged helper that lets you open or save a file you don't own (a
+root-owned config file, for instance) now carries this project's identity too.
+
+### Changed
+
+* The background helper's launchd job name, install path, socket, LaunchDaemon
+  plist, and authorization right are now all `com.shelbydenike.*` instead of
+  `com.macromates.*`. This is a real, actively used feature — not leftover
+  code — reached any time you try to open or save a file you don't have
+  permission to write.
+
+### Note
+
+* Because the authorization right is renamed, macOS will ask you to approve it
+  again the first time you use this feature after updating, even if you'd
+  approved the old one before.
+* A machine that also has an official TextMate install may still have
+  `/Library/LaunchDaemons/com.macromates.auth_server.plist` registered. This
+  release does not touch it — it isn't necessarily ours to remove, and this
+  app no longer uses it once updated.
+
 ## 2026-08-13 (v3.0.0-revived.12)
 
 ### Changed

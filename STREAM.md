@@ -4,6 +4,73 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 4 Task 3: privileged helper renamed, not deleted
+
+**What:** Investigated `Applications/PrivilegedTool` and `Frameworks/authorization` before
+touching either (plan's file reference, `Applications/PrivilegedTool/src/constants.h`, was
+off by one directory -- the actual `kAuth*` macros live in
+`Frameworks/authorization/src/constants.h`; content matches the plan's description exactly,
+just relocated). Traced real callers: `Frameworks/file/src/open.cc` and `save.cc`
+(`kFileTestWritableByRoot` / `obtain_authorization`), `Frameworks/document/src/OakDocument.mm`
+(the actual document save/open pipeline), and `Applications/mate/src/mate.mm` (the `mate` CLI's
+`authorization` field) all wire into it live. This is the "open/save a file you don't own"
+flow -- e.g. editing `/etc/hosts` -- reachable from both the GUI (an NSAlert offers to
+authenticate) and the command line, not dead code like `CrashReporter` was in Phase 3.
+`connect_to_auth_server` (`Frameworks/authorization/src/server.cc`) self-installs the tool via
+`AuthorizationExecuteWithPrivileges` the first time it's needed, so there's no separate "does
+the app install it" step to find -- first use *is* the install.
+
+**Decision: keep it, rename all five identifiers.** Changed
+`Frameworks/authorization/src/constants.h`'s `kAuthJobName`, `kAuthToolPath`, `kAuthSocketPath`,
+`kAuthPlistPath`, `kAuthRightName` from `com.macromates.*` to `com.shelbydenike.*`. Confirmed by
+grep this is the only file in either directory mentioning "macromates" -- the launchd plist and
+authorization-right registration are both generated at runtime from these macros
+(`Applications/PrivilegedTool/src/install.cc`), nothing else to update.
+
+**Stale daemon: found one on this machine, left it alone, with evidence.**
+`/Library/LaunchDaemons/com.macromates.auth_server.plist` and
+`/Library/PrivilegedHelperTools/com.macromates.auth_server` exist here (`launchctl print
+system/com.macromates.auth_server` confirms it's loaded, on-demand, not running). File
+timestamps -- Oct 2021 and May 2024 -- predate this fork's existence entirely (versioning
+starts at `3.0.0-revived` in 2026), so this is almost certainly an official MacroMates
+TextMate install's own helper, not a prior build of this fork. Per the plan's explicit caution
+("the official TextMate installs the same one... may not be ours to delete"), left it
+untouched -- no `sudo`, no `launchctl unload`, no file removal. Recorded in CHANGELOG.md so a
+user knows why it's still there and that this build no longer uses it.
+
+**Authorization right:** renamed along with the rest (`com.shelbydenike.textmate.openfile`).
+Deliberate, not incidental -- leaving it as `com.macromates.textmate.openfile` while renaming
+the other four would mean this fork's binary silently reuses a right the user may have already
+approved for the official app, without a fresh admin prompt tied to our own tool. Noted in
+CHANGELOG.md that re-approval is expected on first use.
+
+**Verification:** `./bin/build TextMate` -- `BUILD SUCCEEDED`. All 25 baseline test targets
+individually (`./bin/build <name>/test`): 21 pass, `scm`/`buffer`/`file`/`cf` fail/crash for the
+identical documented reasons in `docs/benchmarks/2026-08-12-ninja-parity.md`; `command` hit the
+doc's own documented batching artifact when run 23rd of 25 in one loop, re-ran alone and it
+passed in ~1.8s clean -- 25/25 match, no regression. Confirmed in the built app itself, not just
+source: `strings TextMate.app/Contents/Resources/PrivilegedTool` shows all five
+`com.shelbydenike.*` strings and zero `com.macromates` occurrences. Did not deploy to
+`/Applications`, launch the app, or exercise the actual save-as-root flow -- doing so would
+attempt the tool's self-install path (`AuthorizationExecuteWithPrivileges`, an admin prompt),
+which the task forbids running.
+
+**Why:** The helper is a real, live feature (permission-restricted file open/save), unlike
+`CrashReporter`'s Phase 3 dead code -- evidence-based, not assumed. Identity must stay
+consistent across all five values together since they cross-reference each other (job name in
+the plist, socket path the daemon binds and the client connects to, right name both sides
+check) -- renaming four and not the fifth would silently misbehave rather than fail loudly.
+
+### If interrupted here
+
+Task 3 committed. Task 4 (attribution/credits) next: README's fork disclaimer, Legal.md's
+boost/sparsehash removal + Dialog/Dialog2 credit, `Contributions.md`'s stale
+`com.macromates.TextMate` credits-cache path (a real bug found mid-task -- Task 2 renamed
+`bin/gen_credits.rb`'s own dead `__END__` template but missed the live consumer,
+`Applications/TextMate/about/Contributions.md`, which actually renders in the About window),
+and the `NSHumanReadableCopyright` dual-copyright line, all already edited on disk pending
+their own build/test verification and commit.
+
 ## 2026-08-13 — Phase 4 Task 2b: build, 25-target parity, and fresh-clone verification, all green
 
 **What:** `./bin/build TextMate` -- `BUILD SUCCEEDED`. Ran all 25 baseline test targets
