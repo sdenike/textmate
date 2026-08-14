@@ -40,9 +40,33 @@ committing, rather than trusting `sed`.
 `hidden-revived`. A workflow's built-in `GITHUB_TOKEN` is scoped to its own repository and cannot
 push to the tap.
 
-**If interrupted here.** The tap is live and working. Remaining: the hidden-revived side
-(same automation, README update), and retiring `sdenike/homebrew-hidden-revived` — that deletion is
-irreversible and should be last.
+**Phase 5a complete.** Both PRs merged on green CI — sdenike/textmate#11 (build 4m52s, test 7m5s,
+scan) and sdenike/hidden-revived#4 (that repository runs no PR CI). Issues #10 and #3 both closed
+by their merges. `sdenike/homebrew-hidden-revived` is deleted; before deleting it, its MIT `LICENSE`
+was carried into the new tap and the cask confirmed byte-identical (same sha256) so nothing was
+lost with the repository.
+
+Final state: `brew tap sdenike/tap` serves `textmate-revived` and `hidden-revived`, both audit
+clean, both resolving from `sdenike/homebrew-tap`.
+
+**Mistake worth recording: `brew untap --force` uninstalls, it does not preserve.** This machine had
+Hidden Bar installed *from the old tap*, so after deleting that repository `brew update` failed with
+`fatal: repository … not found`. Plain `brew untap` refused ("Would untap … after uninstalling the
+following casks"), so `--force` was used on the expectation that it would detach the tap and leave
+the installed app alone. It did not — it removed `/Applications/Hidden Bar Revived.app`.
+
+Recovered immediately with `brew install --cask sdenike/tap/hidden-revived`: same version 2.1.0,
+now sourced from the new tap. **Settings survived** — the app is sandboxed, so its preferences live
+in `~/Library/Containers/com.sdenike.hiddenbar/`, and an uninstall (unlike `--zap`) does not touch
+container paths. Verified `com.sdenike.hiddenbar.plist` still present in the container afterwards.
+
+The correct order, for next time: **reinstall from the new tap first, then untap the old one** — or
+accept the uninstall/reinstall cycle knowingly rather than trusting `--force` to be non-destructive.
+
+**Still outstanding, and only the maintainer can do it:** `HOMEBREW_TAP_TOKEN` — a PAT with
+`contents: write` on `sdenike/homebrew-tap` — must be set as a secret on **both** `sdenike/textmate`
+and `sdenike/hidden-revived`. Until then both bump steps warn and skip; releases themselves are
+unaffected.
 
 ## 2026-08-14 — FIRST SIGNED, NOTARIZED RELEASE PUBLISHED (v3.0.0-revived.16)
 
