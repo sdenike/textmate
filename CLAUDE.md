@@ -126,6 +126,31 @@ Do not assume the symlink wiring is in effect; check before relying on it.
 
 The `REST_API` macro and its `api.textmate.org` source were removed in PR #9; bundle delivery is now git-URL/codeload-based (`BundlesManager.mm` fetches via `BundleFetcher` from `codeload.github.com`, `BundleFetcher.mm:65`). `BundlesManager.mm` still polls every 3h via `NSBackgroundActivityScheduler`. Packaging for distribution is unresolved.
 
+### BLOCKER — the mandatory bundle pins point at repos this account cannot write
+
+`MandatoryBundles.h` pins `textmatelives/{bundle-support,text,source}.tmbundle` as **mandatory**:
+bundles the app embeds so a fresh, offline launch still works, and which users cannot remove or
+repoint. Verified 2026-08-13 via the GitHub API: this account has **`push=false` and `admin=false`
+on all three**, and belongs to no organizations. They are themselves forks (`fork=true`) of the
+upstream `textmate/*` bundles.
+
+Consequences, all of which shape the eventual bundle phase:
+
+- Fixes to Bundle Support, Text or Source **cannot be upstreamed**. The embedded copies under
+  `Applications/TextMate/support/Bundles/` are generated artifacts (`fetch_embedded_bundles.sh`
+  `rm -rf`s and re-copies each from its pinned sha), so any local fix there is discarded the next
+  time that pin moves. See the warning comment on the Source pin.
+- The `ruby18` compatibility shim that would fix all 27 broken shebangs at once — one file beside
+  the existing `ruby` shim in `bundle-support.tmbundle/Support/shared/bin/` — cannot be shipped
+  for the same reason.
+- `AvailableBundles.plist`, the catalogue of installable bundles, also lives inside
+  `Bundle Support.tmbundle/Support/`. So even *hiding* bundles from the installer needs the same
+  write access as fixing them; it is not the cheaper option it appears to be.
+- The app's offline bootstrap depends on a third party's repositories.
+
+The fix, when the bundle phase starts: re-fork those three under an account we control and
+repoint these pins. Until then, treat the embedded copies as read-only generated output.
+
 ### KNOWN GAP — bundles are not covered by the Ruby 2.6 constraint
 
 The fork's "zero traces of Ruby 1.8" rule currently stops at the app boundary, and bundles are

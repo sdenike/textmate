@@ -47,8 +47,11 @@ static struct TMMandatoryBundle const kTMMandatoryBundles[] = {
 	// (`#!/usr/bin/env ruby18` -> `ruby`; see CHANGELOG v3.0.0-revived.14). That
 	// directory is a generated artifact: fetch_embedded_bundles.sh rm -rf's each
 	// bundle and re-copies it from the sha below, so BUMPING THIS PIN SILENTLY
-	// DISCARDS THAT FIX. Push the fix to textmatelives/source.tmbundle and bump
-	// to a sha containing it, or re-apply by hand afterwards and verify with
+	// DISCARDS THAT FIX. Note that pushing the fix upstream is NOT currently an
+	// option: this account has push=false on all three textmatelives repos
+	// below (verified 2026-08-13 via the GitHub API). Until they are re-forked
+	// under an account we control and these pins repointed, re-apply the fix by
+	// hand after any pin bump and verify with
 	//   grep -r ruby18 Applications/TextMate/support/Bundles/
 	{
 		"4F45FDC0-62CA-4786-9134-8BC7C1F5606F",

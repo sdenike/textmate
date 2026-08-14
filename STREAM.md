@@ -4,6 +4,38 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — BLOCKER found: no write access to the mandatory bundle repos. Deferring bundles.
+
+**Decision (maintainer).** Leave the remaining 24 broken files alone for now and carry on with the
+main build. Eventually stand up our **own** bundle repository with the updated bundles and repoint
+the pins at it, rather than depending on `textmatelives`.
+
+**Why the question came up.** The proposal was to comment the 13 affected bundles out of the
+installer so nobody installs them until they are fixed. Measured, that trades badly: **25 broken
+items out of ~700**, and 11 of the 13 ship grammars. Hiding them removes syntax highlighting for
+Java, Python, Ruby, HTML, Markdown, Perl, Lua, YAML, Groovy and Cron to suppress 3.6% of their
+items. Ruby alone is 2 broken of 201.
+
+**And hiding is not the cheap option.** `AvailableBundles.plist` lives inside
+`Bundle Support.tmbundle/Support/` — a sha-pinned, regenerated bundle — so editing the catalogue
+needs exactly the same write access as fixing the bundles outright.
+
+**The blocker.** Verified via the GitHub API: this account has `push=false`, `admin=false` on
+`textmatelives/{bundle-support,text,source}.tmbundle` and belongs to no organizations. Those three
+are pinned **mandatory** in `MandatoryBundles.h`. So the app's offline bootstrap depends on a third
+party's repositories, no fix to them can be upstreamed, and the one-file `ruby18` shim that would
+repair all 27 broken shebangs at once (a sibling of the existing `ruby` shim in
+`bundle-support.tmbundle/Support/shared/bin/`) cannot be shipped either.
+
+The Source pin's warning comment originally said to push the fix upstream. That was wrong and is
+corrected — it now records the access constraint and says to re-apply by hand after any pin bump.
+
+**The five shebang forms**, for whoever does the eventual fix: `ruby18` (12), `ruby18 -wKU` (9),
+`ruby18 -w` (4), `ruby18 -w -d` (1), `ruby18  -wKU` (1, double space).
+
+**Why this does not block Phase 5.** The breakage is inherited from upstream, lives in opt-in
+bundles, and is identical for upstream TextMate users. The app's own embedded bundles are clean.
+
 ## 2026-08-13 — Bundle architecture mapped; do NOT extract the mandatory bundles
 
 **Why this came up.** The question was whether to pull all bundles out of the main repository into
