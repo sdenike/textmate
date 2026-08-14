@@ -2,6 +2,25 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.10)
+
+Groundwork for the identity change. **No visible difference in this release** —
+that is the point.
+
+### Added
+
+* A one-time settings migration that runs at launch. The next release changes
+  the application's internal identifier, and macOS keys your preferences to
+  that identifier — theme, font, window layout, file browser state, recent
+  documents. Without this, all of it would silently revert to defaults and the
+  app would look freshly installed.
+
+The migration ships one release *ahead* of the rename deliberately, so the code
+has already run on real machines against the real settings before anything
+depends on it. It copies only what is missing, never overwrites a newer value,
+runs exactly once, and leaves the original settings untouched so an install can
+be rolled back.
+
 ## 2026-08-13 (v3.0.0-revived.9)
 
 The dependency purge is done — this build links nothing that isn't part of Xcode itself.
