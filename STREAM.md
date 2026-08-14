@@ -41,10 +41,33 @@ The fork's own notice renders `2026-2026` this year. Maintainer chose to keep th
 fork merges *from*. That stale line is what sent Task 4's first pass at `Legal.md` to the wrong
 URLs. Corrected, with a note that shipped docs must link to `sdenike/textmate`.
 
-**If interrupted here.** Changes are committed. Still to do to close Phase 4: deploy with
-`bin/deploy-local` and verify the installed bundle; check the Phase 4 exit criteria (bundles
-still load, `txmt://` still opens, bookmarks/folds on existing files survive); then push the
-branch, open a PR, and merge.
+**Deployed and exit criteria met.** `bin/deploy-local` installed v3.0.0-revived.13 over .12.
+All eight criteria in `docs/superpowers/plans/2026-08-13-phase-4-identity.md:106-113` check out
+against the *installed* build, not the build tree:
+
+- Identifiers: app `com.shelbydenike.TextMate`; `com.shelbydenike.plugin.Dialog` and `.Dialog2`;
+  `com.shelbydenike.TextMateQL`; helper `com.shelbydenike.auth_server`, `.plist`, `.sock`.
+- Settings carried over: 64 keys in the `com.shelbydenike.TextMate` domain.
+- Bookmarks/folds: xattr names in `OakDocument.mm` still `com.macromates.*`, unchanged.
+- Bundles load: `~/Library/Caches/com.shelbydenike.TextMate/BundlesIndex.binary` and
+  `~/Library/Application Support/TextMate/Bundles.plist` were both rewritten at launch, 54
+  bundles on disk, nothing bundle-related in the log. (`lsof` shows no open `.tmbundle` handles,
+  which is expected — they are parsed into memory and closed, so that is not counter-evidence.)
+- 38 `com.macromates.textmate.*` UTIs intact; `txmt` URL scheme registered.
+- `mate` and `txmt://open?url=…` both opened a file in the running app, confirmed by `lsof`
+  showing the process holding it — exit 0 alone would not have proved the document appeared.
+- No crash reports; the process survived both open paths.
+
+**Pushed, PR open.** Branch `phase-4/identity` pushed to `origin` (14 commits ahead of master).
+PR: https://github.com/sdenike/textmate/pull/6
+
+Note for future sessions: `gh pr create` fails on this machine with
+`GraphQL: Resource not accessible by personal access token (createPullRequest)` — the `gh` token
+lacks PR write scope. The GitHub MCP server authenticates separately and works; use it instead of
+re-authenticating `gh`.
+
+**If interrupted here.** The PR is open and unmerged. Remaining: merge it, then Phase 5
+(Developer ID signing, notarization, in-app updates from GitHub Releases).
 
 ## 2026-08-13 — SESSION HANDOFF: Phase 4 nearly complete, Task 4 unverified
 
