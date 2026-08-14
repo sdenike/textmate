@@ -4,6 +4,79 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — SESSION HANDOFF: Phase 4 nearly complete, Task 4 unverified
+
+**Read this first on resume.** Everything below is committed; nothing is in the working tree.
+
+### Exact state
+
+- Branch `phase-4/identity`, **12 commits ahead of master**, working tree clean, **not pushed, no PR**.
+- Installed: `/Applications/TextMate.app` — `com.shelbydenike.TextMate`, name `TextMate`,
+  **v3.0.0-revived.12**. One app on the machine; no duplicates.
+- Submodules: **4** (`Applications/TextMate/icons`, `bin/CxxTest`, `vendor/Onigmo/vendor`,
+  `vendor/kvdb/vendor`). Dialog and Dialog2 were vendored, dropping 2.
+- Phases 0, 1, 2, 3 are merged to master. Phase 4 is this branch.
+
+### Phase 4 task status
+
+| Task | State |
+|---|---|
+| 1 — preferences migration | **done**, verified against real data (37/37 keys), released as v3.0.0-revived.10 |
+| 2 — bundle identifiers | **done**, migration fired for real, `mate` verified working, released as .11 |
+| 2b — vendor Dialog plug-ins | **done**, provenance recorded, fresh-clone build verified, released as .12 |
+| 3 — privileged helper | **done** (`8bc1a8f9`) — helper is LIVE (wired into the document open/save path for permission-restricted files), so kept not deleted; all five identifiers moved as one unit since they cross-reference at runtime |
+| 4 — attribution and credits | **COMMITTED BUT UNVERIFIED** (`c0c327c0`) |
+
+### The one thing that needs doing on resume
+
+`c0c327c0` landed mid-task when the session was interrupted. It has **not been built** and the
+**25 test targets have not been re-run against it**. Do that first.
+
+What it contains: README's unaffiliated-fork + GPLv3 notice; `Legal.md` with boost and sparsehash
+removed (both deleted in Phase 3) and the vendored Dialog plug-ins documented;
+`NSHumanReadableCopyright` keeping MacroMates' notice and adding ours alongside — not instead of.
+I also corrected its new `Legal.md` links, which pointed at `textmatelives/textmate` rather than
+this repository.
+
+Task 3 also has **no release of its own** — the identifier rename it performed has not been built,
+deployed, or changelogged.
+
+### Then, to close Phase 4
+
+1. Build, run the 25 targets against `docs/benchmarks/2026-08-12-ninja-parity.md`.
+2. Release v3.0.0-revived.13 covering Tasks 3 and 4; deploy; verify.
+3. Check Phase 4 exit criteria in the plan — notably that bundles still load, `txmt://` still
+   opens, and bookmarks/folds on existing files still work.
+4. Push, open a PR, merge.
+
+### Standing constraints that must not be forgotten
+
+- **Never rename these** — they are on-disk format written into the user's own files, and share
+  files with things that DO change: extended attributes in `OakDocument.mm`
+  (`com.macromates.bookmarks`, `.folded`, `.crc32`, `.selectionRange`, `.visibleIndex`,
+  `.backup.*`), the 38 `com.macromates.textmate.*` UTIs in `Applications/TextMate/Info.plist`,
+  and the `txmt://` URL scheme.
+- `CFBundleName` stays `TextMate` — the user asked the menu bar not read "TextMate Revived". The
+  version string identifies the build.
+- After each task: build, bump version, update changelog, deploy, verify.
+- `bin/deploy-local` moves rather than copies, and refuses on identifier mismatch. That guard is
+  correct behaviour, not a bug.
+- Do NOT launch the app via `osascript` polling — it hangs on an Automation permission prompt.
+- Build output goes to `~/build/textmate-revived/xcode`; never `/tmp`.
+- A stale `com.macromates.auth_server` LaunchDaemon may exist from the pre-rename build. It was
+  deliberately NOT removed — the official TextMate installs the same one, so on a machine with
+  both it may not be ours to delete.
+
+### Remaining phases
+
+5 (Developer ID signing, notarization, in-app updates from GitHub Releases) · 5a (central
+`sdenike/homebrew-tap`, migrate `hidden-revived` onto it) · 6 (Liquid Glass + PR #1469's UI work)
+· 7 (performance) · 8 (shared modules) · 9 (optional LSP).
+
+Of the three upstream forks, only textmatelives is merged. PR #1469's UI work lands in Phase 6;
+tectiv3's remaining work is Phase 9.
+
+
 ## 2026-08-13 — Phase 4 Task 3: privileged helper renamed, not deleted
 
 **What:** Investigated `Applications/PrivilegedTool` and `Frameworks/authorization` before
