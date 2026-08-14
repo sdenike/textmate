@@ -35,6 +35,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" authorization"
         name: "Generate CxxTest runner (authorization)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tauthorization.cc"
     settings:
@@ -96,6 +97,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" io"
         name: "Generate CxxTest runner (io)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tio.cc"
     settings:
@@ -149,6 +151,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" text"
         name: "Generate CxxTest runner (text)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Ttext.cc"
     settings:
@@ -179,6 +182,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" cf"
         name: "Generate CxxTest runner (cf)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tcf.cc"
     settings:
@@ -214,6 +218,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" ns"
         name: "Generate CxxTest runner (ns)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tns.mm"
     settings:
@@ -281,6 +286,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" plist"
         name: "Generate CxxTest runner (plist)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tplist.cc"
     settings:
@@ -333,6 +339,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" regexp"
         name: "Generate CxxTest runner (regexp)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tregexp.cc"
     settings:
@@ -391,6 +398,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" Onigmo"
         name: "Generate CxxTest runner (Onigmo)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_TOnigmo.cc"
     settings:
@@ -443,6 +451,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" buffer"
         name: "Generate CxxTest runner (buffer)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tbuffer.mm"
     settings:
@@ -495,6 +504,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" bundles"
         name: "Generate CxxTest runner (bundles)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tbundles.cc"
     settings:
@@ -544,6 +554,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" scope"
         name: "Generate CxxTest runner (scope)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tscope.cc"
     settings:
@@ -575,6 +586,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" parse"
         name: "Generate CxxTest runner (parse)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tparse.cc"
     settings:
@@ -642,6 +654,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" BundlesManager"
         name: "Generate CxxTest runner (BundlesManager)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_TBundlesManager.mm"
     settings:
@@ -732,6 +745,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" OakAppKit"
         name: "Generate CxxTest runner (OakAppKit)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_TOakAppKit.mm"
     settings:
@@ -802,6 +816,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" file"
         name: "Generate CxxTest runner (file)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tfile.cc"
     settings:
@@ -865,6 +880,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" command"
         name: "Generate CxxTest runner (command)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tcommand.cc"
     settings:
@@ -927,6 +943,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" selection"
         name: "Generate CxxTest runner (selection)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tselection.cc"
     settings:
@@ -978,6 +995,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" settings"
         name: "Generate CxxTest runner (settings)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tsettings.cc"
     settings:
@@ -1022,6 +1040,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" encoding"
         name: "Generate CxxTest runner (encoding)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tencoding.mm"
     settings:
@@ -1059,6 +1078,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" scm"
         name: "Generate CxxTest runner (scm)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tscm.cc"
     settings:
@@ -1124,6 +1144,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" theme"
         name: "Generate CxxTest runner (theme)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Ttheme.cc"
     settings:
@@ -1173,6 +1194,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" SoftwareUpdate"
         name: "Generate CxxTest runner (SoftwareUpdate)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_TSoftwareUpdate.mm"
     settings:
@@ -1317,6 +1339,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" document"
         name: "Generate CxxTest runner (document)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tdocument.mm"
     settings:
@@ -1416,6 +1439,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" FileBrowser"
         name: "Generate CxxTest runner (FileBrowser)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_TFileBrowser.mm"
     settings:
@@ -1519,6 +1543,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" HTMLOutput"
         name: "Generate CxxTest runner (HTMLOutput)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_THTMLOutput.cc"
     settings:
@@ -1628,6 +1653,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" editor"
         name: "Generate CxxTest runner (editor)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Teditor.cc"
     settings:
@@ -1695,6 +1721,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" layout"
         name: "Generate CxxTest runner (layout)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_Tlayout.cc"
     settings:
@@ -2013,6 +2040,7 @@ targets:
     preBuildScripts:
       - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" TextMate"
         name: "Generate CxxTest runner (TextMate)"
+        basedOnDependencyAnalysis: false
         outputFiles:
           - "$(DERIVED_FILE_DIR)/_TTextMate.mm"
     settings:

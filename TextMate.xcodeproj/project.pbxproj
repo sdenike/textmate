@@ -4995,6 +4995,28 @@
 		6021FC55BCDE5AE20F25F690 /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
+			dstPath = Contents/Library/QuickLook;
+			dstSubfolderSpec = 1;
+			files = (
+				E890A7A29ABD10C7678C4894 /* TextMateQL.bundle in Embed Dependencies */,
+			);
+			name = "Embed Dependencies";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 7;
+			files = (
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+			);
+			name = "Embed Dependencies";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
@@ -5004,18 +5026,7 @@
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = Contents/Library/QuickLook;
-			dstSubfolderSpec = 1;
-			files = (
-				E890A7A29ABD10C7678C4894 /* TextMateQL.bundle in Embed Dependencies */,
-			);
-			name = "Embed Dependencies";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
+		CE7C236ADC0BB38B3F166180 /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
@@ -5024,17 +5035,6 @@
 				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
 				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
 				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
-			);
-			name = "Embed Dependencies";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		CE7C236ADC0BB38B3F166180 /* Embed Dependencies */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 7;
-			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -10525,6 +10525,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		03E268CF63438436682DE87A /* Generate CxxTest runner (document) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10544,6 +10545,7 @@
 		};
 		187EA53E4AA85ECEB7785867 /* Generate CxxTest runner (text) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10563,6 +10565,7 @@
 		};
 		19490EED5F6FE695C4089776 /* Generate CxxTest runner (TextMate) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10582,6 +10585,7 @@
 		};
 		22F26692C1E5DE2A40722F5D /* Generate CxxTest runner (scope) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10601,6 +10605,7 @@
 		};
 		238751AD7256DD335554989F /* Generate CxxTest runner (buffer) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10620,6 +10625,7 @@
 		};
 		247808DFB438DF9718BADF2E /* Generate CxxTest runner (regexp) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10658,6 +10664,7 @@
 		};
 		28DBF32A1063800B4D616A18 /* Generate CxxTest runner (authorization) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10677,6 +10684,7 @@
 		};
 		38898E4557BBCAC875E18716 /* Generate CxxTest runner (parse) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10696,6 +10704,7 @@
 		};
 		416C455200A4D05CF7CCF966 /* Generate CxxTest runner (SoftwareUpdate) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10715,6 +10724,7 @@
 		};
 		468DB27A3C874C6F8FCA9EE5 /* Generate CxxTest runner (BundlesManager) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10734,6 +10744,7 @@
 		};
 		4A6A0D6B189B70A1A94EAD1C /* Generate CxxTest runner (theme) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10753,6 +10764,7 @@
 		};
 		54AC5E7E4C02F45869B295ED /* Generate CxxTest runner (encoding) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10791,6 +10803,7 @@
 		};
 		6733EF59CC33ADA5374CFD95 /* Generate CxxTest runner (command) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10810,6 +10823,7 @@
 		};
 		72C24067C8A75C90E81A612E /* Generate CxxTest runner (HTMLOutput) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10829,6 +10843,7 @@
 		};
 		894038E6EC4A20302DF0346D /* Generate CxxTest runner (Onigmo) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10848,6 +10863,7 @@
 		};
 		9ABFE6D8CEACBF99C8F4E037 /* Generate CxxTest runner (selection) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10867,6 +10883,7 @@
 		};
 		9EE588C29DAFCEAF4D7D507F /* Generate CxxTest runner (bundles) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10886,6 +10903,7 @@
 		};
 		A4809556124EF45835EF4442 /* Generate CxxTest runner (io) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10905,6 +10923,7 @@
 		};
 		A554818DAE11DFB33D22B939 /* Generate CxxTest runner (cf) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10924,6 +10943,7 @@
 		};
 		A6B7E8F404140DDFFCAE17D4 /* Generate CxxTest runner (layout) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10943,6 +10963,7 @@
 		};
 		A7BBC3574DD5604334ED9C23 /* Generate CxxTest runner (editor) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10962,6 +10983,7 @@
 		};
 		B01436990973A5BB1715EB49 /* Generate CxxTest runner (plist) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -10981,6 +11003,7 @@
 		};
 		B171B2EF2CDC36A794228ACF /* Generate CxxTest runner (FileBrowser) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -11000,6 +11023,7 @@
 		};
 		B3477732A5553FAABC0A5CDF /* Generate CxxTest runner (settings) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -11019,6 +11043,7 @@
 		};
 		C6F93E96050CD4D109BC41E0 /* Generate CxxTest runner (file) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -11038,6 +11063,7 @@
 		};
 		CAFDEDB8D79E8C2E6C769DFF /* Generate CxxTest runner (ns) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -11076,6 +11102,7 @@
 		};
 		DC917116890E0B21778030B0 /* Generate CxxTest runner (OakAppKit) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -11114,6 +11141,7 @@
 		};
 		E8376429641D8491DFBD8A85 /* Generate CxxTest runner (scm) */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
