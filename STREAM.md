@@ -4,6 +4,41 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Phase 6 execution started: OakAppKit_test now exists (Task 1 of 5)
+
+Branch `phase-6/liquid-glass-foundation`, executing
+`docs/superpowers/plans/2026-08-14-liquid-glass-foundation.md` subagent-driven. Task 1 committed as
+`4cd0e5a8`.
+
+**What Task 1 did.** Added the `OakAppKit_test` target to `project.yml`, regenerated
+`TextMate.xcodeproj`, added a placeholder `Frameworks/OakAppKit/tests/t_glass.mm`, and wired
+`OakAppKit` into the `--no-parallel` lists in `bin/build` and CI plus CI's `TESTS=` string. The
+framework had test files but no target, so `bin/build OakAppKit/test` failed outright and there was
+no test cycle to do TDD against.
+
+**`--no-parallel` is now eight frameworks, not seven** — `CLAUDE.md` updated. These tests construct
+`NSView`s and Cocoa asserts `NSThread.isMainThread`. Note `gen_test.sh`'s own comment still names
+seven, because `OakAppKit_test` postdates the ninja baseline it describes.
+
+**A plan defect that implementation found.** The brief's dependency list omitted `Quartz.framework`
+and `libsqlite3.tbd` and the target would not link. The list had been derived from OakAppKit's
+`HEADER_SEARCH_PATHS` roots — which describes what *compiles*, not what *links*. `-ObjC` forces the
+whole static archive to load, so every transitive SDK dependency of OakAppKit applies to anything
+linking it. Ruling: accept the addition. This is precisely the kind of gap a fresh implementer
+catches and a plan author does not.
+
+**Verified rather than taken on trust:** `bin/build OakAppKit/test` → BUILD SUCCEEDED;
+`OakAppKit_test -v` → `1 test passed`. The IDE's "file not found" and "OAK_ASSERT undeclared"
+diagnostics on `t_glass.mm` are **false positives** — clangd lacks the target's
+`HEADER_SEARCH_PATHS`; the header resolves through the symlink
+`Xcode/include/OakAppKit/OakAppKit/OakUIConstructionFunctions.h`.
+
+**If interrupted here.** Task 1 is committed and under review; Tasks 2–5 are not started. The SDD
+ledger at `.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md` is the resume point — it
+records which tasks are complete and every ruling made. **Do not add a `CHANGELOG.md` entry for this
+increment**: it is additive, ships nothing user-visible, and a CHANGELOG push to master triggers a
+release.
+
 ## 2026-08-14 — Liquid Glass foundation plan written; v.18 shipped and self-updated
 
 **v3.0.0-revived.18 published and installed via Check for Updates.** The maintainer ran the in-app
