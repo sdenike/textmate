@@ -312,3 +312,13 @@ NSGlassEffectContainerView* OakCreateGlassContainer ()
 	res.translatesAutoresizingMaskIntoConstraints = NO;
 	return res;
 }
+
+NSGlassEffectView* OakCreateGlassBackground (NSGlassEffectViewStyle style, NSColor* tint)
+{
+	NSGlassEffectView* res = [[NSGlassEffectView alloc] initWithFrame:NSZeroRect];
+	res.translatesAutoresizingMaskIntoConstraints = NO;
+	res.style = style;
+	if(tint)
+		res.tintColor = tint;
+	return res;
+}

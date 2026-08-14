@@ -29,6 +29,15 @@ NSView* OakCreateNSBoxSeparator ();
 // they each sample the backdrop independently and the seam shows.
 NSGlassEffectContainerView* OakCreateGlassContainer ();
 
+// `style` is NSGlassEffectViewStyleRegular for chrome sitting over content, or
+// NSGlassEffectViewStyleClear for transient overlays that should read through.
+// `tint` may be nil for the system default; when non-nil it must be a dynamic
+// colour that resolves for both light and dark appearance.
+//
+// Put content in the returned view's `contentView`. Adding subviews directly
+// does not composite correctly.
+NSGlassEffectView* OakCreateGlassBackground (NSGlassEffectViewStyle style, NSColor* tint = nil);
+
 OakBackgroundFillView* OakCreateVerticalLine (OakBackgroundFillViewStyle style);
 void OakSetupKeyViewLoop (NSArray<NSView*>* views);
 void OakAddAutoLayoutViewsToSuperview (NSArray<NSView*>* views, NSView* superview);

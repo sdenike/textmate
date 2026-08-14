@@ -1,6 +1,24 @@
 #import <OakAppKit/OakUIConstructionFunctions.h>
 #import <oak/oak.h>
 
+// bin/gen_test wraps this file's body in its own namespace, so declaring to_s
+// here would otherwise hide (not overload) the global to_s(bool) etc. that the
+// pre-existing autoresize test below relies on. Pull those back in.
+using ::to_s;
+
+// OAK_ASSERT_EQ needs to stringify both sides on failure; NSGlassEffectViewStyle
+// has no built-in to_s (see t_OakCompareVersionStrings.mm for the same pattern
+// with NSComparisonResult).
+std::string to_s (NSGlassEffectViewStyle style)
+{
+	switch(style)
+	{
+		case NSGlassEffectViewStyleRegular: return "NSGlassEffectViewStyleRegular";
+		case NSGlassEffectViewStyleClear:   return "NSGlassEffectViewStyleClear";
+	}
+	return NULL_STR;
+}
+
 void test_glass_container_is_a_container ()
 {
 	NSGlassEffectContainerView* container = OakCreateGlassContainer();
@@ -14,4 +32,37 @@ void test_glass_container_does_not_autoresize ()
 	// autoresizes fights its own constraints.
 	NSGlassEffectContainerView* container = OakCreateGlassContainer();
 	OAK_ASSERT_EQ(container.translatesAutoresizingMaskIntoConstraints, NO);
+}
+
+void test_glass_background_applies_style ()
+{
+	NSGlassEffectView* regular = OakCreateGlassBackground(NSGlassEffectViewStyleRegular, nil);
+	OAK_ASSERT(regular != nil);
+	OAK_ASSERT_EQ(regular.style, NSGlassEffectViewStyleRegular);
+
+	NSGlassEffectView* clear = OakCreateGlassBackground(NSGlassEffectViewStyleClear, nil);
+	OAK_ASSERT_EQ(clear.style, NSGlassEffectViewStyleClear);
+}
+
+void test_glass_background_nil_tint_leaves_system_default ()
+{
+	NSGlassEffectView* view = OakCreateGlassBackground(NSGlassEffectViewStyleRegular, nil);
+	OAK_ASSERT(view.tintColor == nil);
+}
+
+void test_glass_background_applies_tint_when_given ()
+{
+	NSColor* tint = [NSColor colorWithWhite:0.5 alpha:0.5];
+	NSGlassEffectView* view = OakCreateGlassBackground(NSGlassEffectViewStyleRegular, tint);
+	OAK_ASSERT(view.tintColor != nil);
+}
+
+void test_glass_background_hosts_content_via_contentView ()
+{
+	// The API contract callers get wrong: content goes in contentView, not as a
+	// subview. Encoding it here means one place to be right instead of twelve.
+	NSGlassEffectView* view = OakCreateGlassBackground(NSGlassEffectViewStyleRegular, nil);
+	NSView* content = [[NSView alloc] initWithFrame:NSZeroRect];
+	view.contentView = content;
+	OAK_ASSERT_EQ(view.contentView, content);
 }
