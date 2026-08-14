@@ -306,10 +306,11 @@ void OakAddAutoLayoutViewsToSuperview (NSArray<NSView*>* views, NSView* supervie
 	}
 }
 
-NSGlassEffectContainerView* OakCreateGlassContainer ()
+NSGlassEffectContainerView* OakCreateGlassContainer (CGFloat spacing)
 {
 	NSGlassEffectContainerView* res = [[NSGlassEffectContainerView alloc] initWithFrame:NSZeroRect];
 	res.translatesAutoresizingMaskIntoConstraints = NO;
+	res.spacing = spacing;
 	return res;
 }
 
@@ -318,6 +319,7 @@ NSGlassEffectView* OakCreateGlassBackground (NSGlassEffectViewStyle style, NSCol
 	NSGlassEffectView* res = [[NSGlassEffectView alloc] initWithFrame:NSZeroRect];
 	res.translatesAutoresizingMaskIntoConstraints = NO;
 	res.style = style;
+	res.cornerRadius = OakGlassChromeMetrics().cornerRadius;
 	if(tint)
 		res.tintColor = tint;
 	return res;

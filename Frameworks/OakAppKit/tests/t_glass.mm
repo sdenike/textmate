@@ -34,6 +34,14 @@ void test_glass_container_does_not_autoresize ()
 	OAK_ASSERT_EQ(container.translatesAutoresizingMaskIntoConstraints, NO);
 }
 
+void test_glass_container_applies_spacing ()
+{
+	// spacing is what actually merges nearby glass views (see the header
+	// comment); a caller passing a value must see it land on the view.
+	NSGlassEffectContainerView* container = OakCreateGlassContainer(8);
+	OAK_ASSERT_EQ(container.spacing, 8);
+}
+
 void test_glass_background_applies_style ()
 {
 	NSGlassEffectView* regular = OakCreateGlassBackground(NSGlassEffectViewStyleRegular, nil);
@@ -52,9 +60,15 @@ void test_glass_background_nil_tint_leaves_system_default ()
 
 void test_glass_background_applies_tint_when_given ()
 {
-	NSColor* tint = [NSColor colorWithWhite:0.5 alpha:0.5];
+	// Dynamic, not static: the header requires tint to be "a dynamic colour
+	// that resolves for both light and dark appearance", and this fixture is
+	// exemplar code for future callers, so it must actually be one.
+	NSColor* tint = [NSColor colorWithName:nil dynamicProvider:^NSColor* (NSAppearance* appearance){
+		NSAppearanceName match = [appearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
+		return [match isEqualToString:NSAppearanceNameDarkAqua] ? [NSColor colorWithWhite:0.2 alpha:0.5] : [NSColor colorWithWhite:0.8 alpha:0.5];
+	}];
 	NSGlassEffectView* view = OakCreateGlassBackground(NSGlassEffectViewStyleRegular, tint);
-	OAK_ASSERT(view.tintColor != nil);
+	OAK_ASSERT([view.tintColor isEqual:tint]);
 }
 
 void test_glass_background_hosts_content_via_contentView ()
@@ -77,6 +91,15 @@ void test_glass_background_does_not_autoresize ()
 {
 	NSGlassEffectView* view = OakCreateGlassBackground(NSGlassEffectViewStyleRegular, nil);
 	OAK_ASSERT_EQ(view.translatesAutoresizingMaskIntoConstraints, NO);
+}
+
+void test_glass_background_applies_corner_radius ()
+{
+	// OakGlassChromeMetrics() is disconnected from NSGlassEffectView's real
+	// cornerRadius property unless the constructor wires them together itself
+	// -- otherwise every call site has to remember to do it.
+	NSGlassEffectView* view = OakCreateGlassBackground(NSGlassEffectViewStyleRegular, nil);
+	OAK_ASSERT_EQ(view.cornerRadius, OakGlassChromeMetrics().cornerRadius);
 }
 
 void test_glass_chrome_metrics_are_shared_constants ()
