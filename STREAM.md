@@ -4,6 +4,58 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 4 Task 2: bundle identifiers changed to com.shelbydenike.* (Dialog/Dialog2 blocked on a submodule)
+
+**What:** Changed `CFBundleIdentifier` in `Applications/TextMate/Info.plist:12` and
+`Applications/QuickLookGenerator/Info.plist:12` from `com.macromates.${TARGET_NAME}` to
+`com.shelbydenike.${TARGET_NAME}`. Updated the dependents that must stay in sync with it: the
+`~/Library/Caches/com.macromates.TextMate/` cache directory hardcoded in
+`Applications/gtm/src/gtm.cc:104`, `Applications/QuickLookGenerator/src/generate.mm:38`,
+`Frameworks/BundlesManager/src/BundlesManager.mm:950,957`, `bin/gen_credits.rb:202`, and
+`bin/build:16,30`; the app-bundle lookup in `Applications/mate/src/mate.mm:59`
+(`URLForApplicationWithBundleIdentifier:`); and QuickLookGenerator's explicit prefs suite in
+`Applications/QuickLookGenerator/src/generate.mm:209` (`initWithSuiteName:`). Left the 38 UTI
+declarations and `txmt://` scheme in the same `Info.plist` untouched (only line 12 changed) and
+left every internal-chrome identifier alone (dispatch queues, log subsystems, error domain,
+pasteboard type, Touch Bar identifiers in both `OakTextView.mm` and
+`DocumentWindowController.mm`, Mach port names, `runner.mm`'s fallback-only cache-path string,
+the SCM svn driver's `com.macromates.TextMate.scm` lookup -- confirmed inert, since `scm` is
+`type: library.static` in `project.yml` and no bundle in this app ever declares that identifier,
+so it always falls through to `CFBundleGetMainBundle()` -- and Task 1's
+`PreferencesMigration.mm` source domain, which must stay pinned to the old identifier forever by
+design).
+
+**Blocked, not done:** `PlugIns/dialog/Info.plist:16` and `PlugIns/dialog-1.x/Info.plist:16`
+(Dialog / Dialog2 plug-in identifiers) are **git submodules** pointing at
+`https://github.com/textmate/dialog.git` and `https://github.com/textmate/dialog-1.x.git` --
+upstream's own repos, never forked under this project; `git log` on both paths shows every past
+change here is a pointer-bump to a commit upstream published, never an independent commit.
+`project.yml`'s `INFOPLIST_FILE` reads each submodule's plist directly at build time, so there is
+no build-setting indirection that can rename the identifier without editing that tracked file.
+Committing the edit only inside the local submodule checkout would produce a commit that exists
+on this machine alone -- `.gitmodules` still resolves to upstream, so a fresh clone or CI's `git
+submodule update` would fail to fetch it. That is a certain, silent break for the next checkout,
+not a hypothetical one. A real fix means either forking both repos under project control and
+repointing `.gitmodules`, or vendoring them into the tree and dropping the submodule -- a
+repo-topology decision the plan does not make and this task should not make unilaterally.
+Reverted both edits; both files are back to `com.macromates.plugin.${TARGET_NAME}`, tree clean.
+It is a 1-line change in each once someone decides where that commit should live.
+
+**Why:** `Applications/TextMate/Info.plist:12` is the app's real identity; everything else
+touched here is code that has to keep agreeing with it. Leaving any of it on the old identifier
+while the app itself moved would silently break QuickLook previews, `bin/gen_credits.rb`,
+`mate`, or bundle-index caching, each in a different, hard-to-notice way.
+
+### If interrupted here
+
+Committed. Next: `bin/build`, run all 25 baseline test targets against
+`docs/benchmarks/2026-08-12-ninja-parity.md`, verify Task 1's migration actually fires against
+the real `~/Library/Preferences/com.macromates.TextMate.plist` (back up first), verify `mate`
+finds the renamed app, then handle `bin/deploy-local`'s expected identifier-mismatch refusal by
+moving the old `/Applications/TextMate.app` aside (never deleting it) before installing the new
+one. Do not touch `PlugIns/dialog*` again without first resolving the submodule question above.
+
+
 ## 2026-08-13 — Phase 4 Task 1: preferences migration (pre-rename release)
 
 **What:** Added `Applications/TextMate/src/PreferencesMigration.{h,mm}`:

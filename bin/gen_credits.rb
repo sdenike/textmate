@@ -199,7 +199,7 @@ See [commits at GitHub][1].
     </tr>
 <%
 require 'bin/gen_credits'
-credits = generate_credits(File.expand_path('~/Library/Caches/com.macromates.TextMate/githubcredits'))
+credits = generate_credits(File.expand_path('~/Library/Caches/com.shelbydenike.TextMate/githubcredits'))
 %>
 <%= credits %>
 </table>
