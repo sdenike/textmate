@@ -17,7 +17,12 @@ jobs:
           submodules: recursive
 
       - name: Install build dependencies
-        run: brew install mercurial subversion
+        # multimarkdown renders the About/Legal/Contributions pages during the
+        # 'Assemble resources' script phase (bin/gen_html:67 searches for that
+        # binary and nothing else). Without it the build fails with "Unable to
+        # find a markdown compiler". mercurial and subversion are for scm's
+        # tests, which skip the hg/svn cases when those are absent.
+        run: brew install mercurial subversion multimarkdown
 
       - name: Build TextMate.app
         run: xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build
@@ -32,7 +37,12 @@ jobs:
           submodules: recursive
 
       - name: Install build dependencies
-        run: brew install mercurial subversion
+        # multimarkdown renders the About/Legal/Contributions pages during the
+        # 'Assemble resources' script phase (bin/gen_html:67 searches for that
+        # binary and nothing else). Without it the build fails with "Unable to
+        # find a markdown compiler". mercurial and subversion are for scm's
+        # tests, which skip the hg/svn cases when those are absent.
+        run: brew install mercurial subversion multimarkdown
 
       - name: Build and run all framework tests
         run: |
