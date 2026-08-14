@@ -7,6 +7,7 @@
 #import <text/utf8.h>
 
 static NSString* const kRecordingPlaceholderString = @"…";
+static CGFloat const kControlHeight = 22;
 
 @interface OakKeyEquivalentView ()
 {
@@ -35,7 +36,18 @@ static NSString* const kRecordingPlaceholderString = @"…";
 
 		_glassView              = OakCreateGlassBackground(NSGlassEffectViewStyleRegular);
 		_glassView.cornerRadius = 8; // provisional -- the renders decide this; see the task that follows
-		_glassView.contentView  = _displayField;
+
+		// The glass pins its contentView to fill itself, so handing it the
+		// field directly would stretch the field and push the glyphs off centre.
+		// A holder takes the stretching; the field keeps its natural height.
+		_displayField.translatesAutoresizingMaskIntoConstraints = NO;
+		NSView* fieldHolder = [[NSView alloc] initWithFrame:NSZeroRect];
+		fieldHolder.translatesAutoresizingMaskIntoConstraints = NO;
+		[fieldHolder addSubview:_displayField];
+		[_displayField.leadingAnchor constraintEqualToAnchor:fieldHolder.leadingAnchor].active   = YES;
+		[_displayField.trailingAnchor constraintEqualToAnchor:fieldHolder.trailingAnchor].active = YES;
+		[_displayField.centerYAnchor constraintEqualToAnchor:fieldHolder.centerYAnchor].active   = YES;
+		_glassView.contentView = fieldHolder;
 
 		// Added first, so the clear button that setShowClearButton: appends
 		// later is always above it.
@@ -44,13 +56,21 @@ static NSString* const kRecordingPlaceholderString = @"…";
 		[_glassView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor].active = YES;
 		[_glassView.topAnchor constraintEqualToAnchor:self.topAnchor].active           = YES;
 		[_glassView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor].active     = YES;
+
+		// Priority 999, not required: 22 is this control's natural height, but a
+		// host that sets its own must still win, as it did before the control
+		// had a glass background. Without this the field's 16pt intrinsic height
+		// propagates up through the glass and shrinks the control.
+		NSLayoutConstraint* height = [self.heightAnchor constraintEqualToConstant:kControlHeight];
+		height.priority = 999;
+		height.active   = YES;
 	}
 	return self;
 }
 
 - (NSSize)intrinsicContentSize
 {
-	return NSMakeSize(NSViewNoIntrinsicMetric, 22);
+	return NSMakeSize(NSViewNoIntrinsicMetric, kControlHeight);
 }
 
 - (CGFloat)baselineOffsetFromBottom

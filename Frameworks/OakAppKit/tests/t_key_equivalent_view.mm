@@ -16,10 +16,17 @@ static NSGlassEffectView* GlassOf (OakKeyEquivalentView* view)
 
 static NSTextField* DisplayFieldOf (OakKeyEquivalentView* view)
 {
-	NSView* content = GlassOf(view).contentView;
-	OAK_ASSERT(content != nil);
-	OAK_ASSERT([content isKindOfClass:[NSTextField class]]);
-	return (NSTextField*)content;
+	// The glass hosts a holder view whose only child is the display field. The
+	// holder exists so the field keeps its natural height and stays centred
+	// rather than stretching to fill the glass, so reach through it -- the
+	// glass's contentView is the holder, not the field.
+	NSView* holder = GlassOf(view).contentView;
+	OAK_ASSERT(holder != nil);
+
+	NSView* field = holder.subviews.firstObject;
+	OAK_ASSERT(field != nil);
+	OAK_ASSERT([field isKindOfClass:[NSTextField class]]);
+	return (NSTextField*)field;
 }
 
 void test_key_equivalent_view_is_not_opaque ()
@@ -77,12 +84,51 @@ void test_key_equivalent_view_dims_its_text_while_recording ()
 
 void test_key_equivalent_view_keeps_its_clear_button_above_the_glass ()
 {
-	// setEventString: sets showClearButton itself (OakKeyEquivalentView.mm:46),
-	// so assigning a non-empty string is enough to add the button.
+	// setEventString: sets showClearButton itself, so assigning a non-empty
+	// string is enough to add the button.
 	OakKeyEquivalentView* view = [[OakKeyEquivalentView alloc] initWithFrame:NSZeroRect];
 	view.eventString = @"@s";
 
 	OAK_ASSERT(view.subviews.count >= 2);
 	OAK_ASSERT([view.subviews.firstObject isKindOfClass:[NSGlassEffectView class]]);
 	OAK_ASSERT(![view.subviews.lastObject isKindOfClass:[NSGlassEffectView class]]);
+}
+
+void test_key_equivalent_view_keeps_its_declared_height ()
+{
+	// The glass hosts the display field through contentView, which pins the
+	// field to fill it. Without the height constraint below, the field's own
+	// 16pt intrinsic height propagates up through the glass and beats the
+	// control's declared 22, silently shrinking the control.
+	OakKeyEquivalentView* view = [[OakKeyEquivalentView alloc] initWithFrame:NSZeroRect];
+	view.eventString = @"@s";
+
+	NSView* host = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 180, 60)];
+	view.translatesAutoresizingMaskIntoConstraints = NO;
+	[host addSubview:view];
+	[view.leadingAnchor constraintEqualToAnchor:host.leadingAnchor].active   = YES;
+	[view.trailingAnchor constraintEqualToAnchor:host.trailingAnchor].active = YES;
+	[view.centerYAnchor constraintEqualToAnchor:host.centerYAnchor].active   = YES;
+	[host layoutSubtreeIfNeeded];
+
+	OAK_ASSERT_EQ(NSHeight(view.frame), 22);
+}
+
+void test_key_equivalent_view_yields_its_height_to_a_host ()
+{
+	// The height is priority 999, not required, so a host that needs a
+	// different size still wins -- which is how the control behaved before it
+	// gained a glass background.
+	OakKeyEquivalentView* view = [[OakKeyEquivalentView alloc] initWithFrame:NSZeroRect];
+
+	NSView* host = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 180, 60)];
+	view.translatesAutoresizingMaskIntoConstraints = NO;
+	[host addSubview:view];
+	[view.leadingAnchor constraintEqualToAnchor:host.leadingAnchor].active   = YES;
+	[view.trailingAnchor constraintEqualToAnchor:host.trailingAnchor].active = YES;
+	[view.centerYAnchor constraintEqualToAnchor:host.centerYAnchor].active   = YES;
+	[view.heightAnchor constraintEqualToConstant:30].active                  = YES;
+	[host layoutSubtreeIfNeeded];
+
+	OAK_ASSERT_EQ(NSHeight(view.frame), 30);
 }
