@@ -4,6 +4,46 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Phase 5a: central Homebrew tap, with automatic cask bumps
+
+**What.** Created `sdenike/homebrew-tap` as one tap for every application on this account,
+replacing the tap-per-app pattern. Seeded it with `textmate-revived` (new) and `hidden-revived`
+(carried over unchanged from `sdenike/homebrew-hidden-revived`). Added a cask-bump step to
+`release.yml`. Tracking issue: sdenike/textmate#10; the hidden-revived side is
+sdenike/hidden-revived#3.
+
+**Why central.** A tap per app means a new repository each time something ships, and users running
+a separate `brew tap` for each. One tap: `brew tap sdenike/tap` once, and everything added later is
+immediately installable.
+
+**Verified against real Homebrew, not by inspection.** Tapped it locally and ran
+`brew audit --cask` on both casks — clean, no warnings. `brew info` resolves
+`textmate-revived 3.0.0-revived.16 (auto_updates)` with `Required: arm64 architecture, macOS >= 26`
+and the `TextMate.app` artifact. The sha256 is the real one, computed from the published
+`.tbz` (`4bee83a3…`).
+
+Caught one thing that way: `depends_on macos: ">= :tahoe"` is the deprecated string-comparison
+form and warned on every invocation, though it resolved identically. The bare symbol
+`depends_on macos: :tahoe` already means "this version or newer". Also worth noting the local tap
+does not refresh on `brew untap && brew tap` — that restores from cache, so verifying a pushed
+change needs `git -C $(brew --repository)/Library/Taps/sdenike/homebrew-tap pull`.
+
+**Automation shape.** The bump step commits **directly to the tap's default branch**, not via a
+pull request. A PR per release would need merging every time, which is the manual step the
+automation exists to remove; the tap's commit history serves as the record. The step is guarded:
+it checks for `HOMEBREW_TAP_TOKEN` first and, if absent, emits a warning and succeeds, so a missing
+token can never fail an otherwise-good release. It also verifies both substitutions landed before
+committing, rather than trusting `sed`.
+
+**Blocked on the maintainer for one thing.** `HOMEBREW_TAP_TOKEN` must be a PAT with
+`contents: write` on `sdenike/homebrew-tap`, set as a secret on both `textmate` and
+`hidden-revived`. A workflow's built-in `GITHUB_TOKEN` is scoped to its own repository and cannot
+push to the tap.
+
+**If interrupted here.** The tap is live and working. Remaining: the hidden-revived side
+(same automation, README update), and retiring `sdenike/homebrew-hidden-revived` — that deletion is
+irreversible and should be last.
+
 ## 2026-08-14 — FIRST SIGNED, NOTARIZED RELEASE PUBLISHED (v3.0.0-revived.16)
 
 **Shipped.** <https://github.com/sdenike/textmate/releases/tag/v3.0.0-revived.16> —

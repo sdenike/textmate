@@ -101,13 +101,44 @@ in this job):
 12. **Extract release notes** with `bin/extract_changes` (`:269-281`).
 13. **Create the GitHub Release** with `gh release create "v${VERSION}"` — no
     `--prerelease`/`--draft`, so it becomes `releases/latest` (`:283-303`).
-14. **Delete the ephemeral keychain** (always) (`:305-307`).
+14. **Bump the Homebrew cask** in `sdenike/homebrew-tap` — computes the published
+    archive's sha256, rewrites `version` and `sha256` in
+    `Casks/textmate-revived.rb`, and commits to the tap's default branch. Needs
+    the `HOMEBREW_TAP_TOKEN` secret; without it the step warns and succeeds, so
+    a missing token never fails an otherwise-good release. See "Homebrew" below.
+15. **Delete the ephemeral keychain** (always).
 
-## First-time setup (not yet done)
+## Homebrew
 
-**No release has ever been cut from this repository.** As of 2026-08-13
-`gh api repos/sdenike/textmate/actions/secrets` returns `total_count: 0`, and
-the `Release` workflow has never run. Until the five secrets below exist, a
+Installed via the central tap, which serves every one of this account's apps:
+
+```sh
+brew tap sdenike/tap
+brew install --cask textmate-revived
+```
+
+The cask is `auto_updates true` because TextMate updates itself from GitHub
+Releases — Homebrew installs it and then stays out of the updater's way. It also
+declares `depends_on macos: :tahoe` and `depends_on arch: :arm64`, matching the
+fork's constraints.
+
+**Cask updates are automatic.** The release workflow rewrites the cask's version
+and checksum after publishing, so there is no manual step. It commits straight to
+the tap rather than opening a pull request: a PR per release would need merging
+every time, which is exactly the manual step this removes. The tap's commit
+history is the audit trail.
+
+The one prerequisite is a `HOMEBREW_TAP_TOKEN` secret on this repository — a PAT
+with `contents: write` on `sdenike/homebrew-tap`. A workflow's built-in
+`GITHUB_TOKEN` only has access to its own repository, so it cannot push to the
+tap.
+
+## First-time setup
+
+**As of 2026-08-14 the five signing secrets below are set and v3.0.0-revived.16
+shipped successfully** — signed, notarized, stapled and published. Keep this
+section for setting the repository up again from scratch. Until the secrets
+exist, a
 release run reaches the signing step and fails.
 
 ### 1. Export the Developer ID certificate as a `.p12`
