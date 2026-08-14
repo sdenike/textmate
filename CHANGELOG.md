@@ -2,6 +2,14 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-14 (v3.0.0-revived.19)
+
+### Changed
+
+* The About window no longer shows a background image. The one it had came from
+  a different fork of TextMate and was never this project's artwork; the window
+  now uses your theme's own colours.
+
 ## 2026-08-14 (v3.0.0-revived.18)
 
 Missing icons are back.

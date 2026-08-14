@@ -4,6 +4,80 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — SESSION CLOSE: Phases 5, 5a and Phase 6's foundation shipped
+
+**Read this first on resume.** Everything below is merged to master. Working tree clean.
+
+### Where the project is
+
+| | |
+|---|---|
+| Released | **v3.0.0-revived.19**, signed, notarized, on GitHub Releases and Homebrew |
+| Install | `brew tap sdenike/tap && brew install --cask textmate-revived` |
+| Phases done | 0, 1, 2, 3, 4, 5, 5a, and Phase 6's **foundation increment** |
+| Phases left | 6 increments 2-6 (the visible glass work), 7 performance, 8 shared modules, 9 optional LSP |
+
+### What shipped this session
+
+**Phase 5 — signing and notarization.** The first signed, notarized release this fork has ever
+produced. Getting there meant fixing five silent failures in a pipeline that had never once run:
+workflows triggering on `main` when this repo uses `master`; a release guard matching `-undead` when
+this fork ships `-revived`; `multimarkdown` missing from two separate workflows; the deleted
+`network_test` still in the CI target list, aborting the step and suppressing ten later targets; and
+notarization rejecting `PrivilegedTool` for a debug entitlement, because the Mach-O re-sign sweep
+never globbed `Resources/`. The in-app updater now works end to end — verified by the maintainer
+updating into .18 from inside the app.
+
+**Phase 5a — central Homebrew tap.** `sdenike/homebrew-tap` serves every app on the account.
+`hidden-revived` migrated onto it and `sdenike/homebrew-hidden-revived` was deleted. Both repos'
+release workflows now bump their cask automatically; verified by cutting .17 and watching
+`github-actions[bot]` commit the correct checksum unaided.
+
+**Phase 6 foundation.** Three glass constructors in `OakUIConstructionFunctions`, plus the test
+target `OakAppKit` never had. No callers yet, by design. See `CLAUDE.md`'s "Liquid Glass" section.
+
+### Repo-wide defects found and fixed along the way
+
+These were not the task and matter more than it:
+
+1. **Tests silently did not run when changed** — all 28 targets. `gen_test`'s script phases declared
+   `outputFiles:` and no `inputFiles:`, so the runner was never regenerated. Anyone doing TDD here
+   would have watched a red test pass. Declaring `inputFiles:` would *not* have fixed it (Xcode does
+   not glob them); `basedOnDependencyAnalysis: false` did, plus removing `Time.now` from
+   `bin/gen_test` so a content comparison could keep builds incremental.
+2. **40 framework images never shipped** — the tab overflow button rendered as the literal word
+   "Button", per-tab close buttons were invisible, and all 20 Bundle Editor icons were missing.
+   Fixed in .18.
+3. **The README described a different fork**, told people to install two dependencies removed in
+   .6, and the About window shipped that fork's artwork as a full-bleed background.
+
+### Standing constraints that must not be forgotten
+
+- **Never rename** the `com.macromates.*` xattrs in `OakDocument.mm`, the 38 UTIs, or the `txmt://`
+  scheme — they are on-disk format in users' own files.
+- `CFBundleName` stays `TextMate`; the version string identifies the build.
+- **A `CHANGELOG.md` push to master triggers a release.** Do not touch it for changes that are not
+  user-visible.
+- `bin/deploy-local` installs an **ad-hoc** build that cannot self-update. The maintainer runs the
+  signed Homebrew build; do not deploy-local over it.
+- Never use `OAK_ASSERT_EQ` on a raw Objective-C object pointer (see `CLAUDE.md`).
+- `command_test` is flaky; one run of it is not evidence in either direction.
+
+### Largest outstanding debt
+
+**The bundle catalogue.** `AvailableBundles.plist` has 108 entries, every one pointing at
+`textmatelives`, and `DefaultBundles.plist` has 41 — the set a fresh install pulls automatically.
+24 files across 13 of those bundles still carry `#!/usr/bin/env ruby18` shebangs. The mandatory four
+are now forked under `sdenike` and a `ruby18` shim in our `bundle-support` fork makes those commands
+run, but that shim is a stopgap: several also use `iconv`, `parsedate`, `Config::CONFIG`,
+`TimeoutError` and `Object#type`, which no shim can rescue.
+
+### If interrupted here
+
+Nothing in flight. Next step is planning **Phase 6 increment 2** (small controls:
+`OakKeyEquivalentView`, `OFBFinderTagsChooser`) against the foundation, with screenshots in both
+appearances for the maintainer to review — that is where visible change starts.
+
 ## 2026-08-14 — Final review found the spec's own explanation was wrong; fixed (`0aa31d5c`)
 
 The whole-branch review returned three Important findings, all in API shape, all fixed in one wave.

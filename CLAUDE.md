@@ -115,6 +115,39 @@ The two largest layers worth knowing:
 
 `Frameworks/HTMLOutput` was migrated from legacy `WebView` to `WKWebView` for macOS 26. The bundle-output bridge runs through three custom `WKURLSchemeHandler`s (`x-txmt-filehandle`, `tm-file`, `tm-system`) in `Frameworks/HTMLOutput/src/helpers/`. `tm-system` is the synchronous variant required by the git bundle's commit dialog.
 
+### Liquid Glass (Phase 6)
+
+`Frameworks/OakAppKit/src/OakUIConstructionFunctions` — the shared UI-construction header, imported
+by 46 files — gained three constructors on 2026-08-14:
+
+```objc
+NSGlassEffectContainerView* OakCreateGlassContainer (CGFloat spacing = 0);
+NSGlassEffectView*          OakCreateGlassBackground (NSGlassEffectViewStyle style, NSColor* tint = nil);
+struct OakGlassMetrics { CGFloat cornerRadius; NSEdgeInsets contentInsets; };
+OakGlassMetrics             OakGlassChromeMetrics ();
+```
+
+**They have no callers yet.** Increments 2-6 of the phase adopt them across the 12 existing
+`NSVisualEffectView` sites; the foundation landed first so those sites inherit one contract instead
+of twelve guesses. Design: `docs/superpowers/specs/2026-08-14-liquid-glass-design.md`.
+
+Three facts about the SDK that the constructors encode, each of which is easy to get wrong:
+
+- **`NSGlassEffectView` hosts content through its `contentView` property**, not by adding subviews.
+- **A container merges adjacent glass only with a non-zero `spacing`.** Apple's header: the default
+  of zero "is sufficient for batch processing eligible glass effect views, while *avoiding
+  distortion and merging effects* for other views in close proximity." Merging also applies to
+  descendants of the container's `contentView`, not to direct subviews.
+- **`OakGlassChromeMetrics().cornerRadius` is applied by `OakCreateGlassBackground`.**
+  `contentInsets` has no counterpart property on `NSGlassEffectView` — it is advisory data for
+  callers building constraints.
+
+The deployment target is macOS 26.0, so never write `@available(macOS 26, *)` guards or
+`NSVisualEffectView` fallbacks around these — every branch would be dead code. Third-party examples
+(iTerm2's included) carry such guards; do not copy them.
+
+`OakTextView`'s own drawing is deliberately out of scope: text needs an opaque backdrop.
+
 ## Tests
 
 CxxTest-style, but home-grown: `bin/gen_test` reads each `tests/t_*.{cc,mm}` file, finds top-level `void test_*()` functions, and emits a single runner with `main()`. Assertions are `OAK_ASSERT`, `OAK_ASSERT_EQ`, `OAK_ASSERT_NE`. Filesystem fixtures use `test::jail_t` from `Frameworks/test`.
