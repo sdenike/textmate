@@ -4,6 +4,64 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 4 Task 2b: build, 25-target parity, and fresh-clone verification, all green
+
+**What:** `./bin/build TextMate` -- `BUILD SUCCEEDED`. Ran all 25 baseline test targets
+individually (`./bin/build <name>/test`, matching the doc's own per-target methodology) against
+`docs/benchmarks/2026-08-12-ninja-parity.md`: **25/25 match exactly**. 21 pass; `scm` fails the
+same documented `2 of 84` (hg/svn absent locally, identical message); `buffer` fails the same
+documented `3 of 26` (identical three `t_buffer.mm` misspellings assertions, same lines); `file`
+fails the same documented `1 of 11` (identical `t_save.cc:113` iconv TRANSLIT assertion); `cf`
+crashes the same documented SIGBUS/exit 138, no summary printed. `command` reproduced the doc's
+own noted batching artifact when run as target 23 of 25 in one long loop (looked hung, killed by
+a `timeout 180` guard); re-ran it alone immediately after and it built and passed in about a
+second with clean exit 0, exactly as the doc's own methodology predicts and as Task 2's build
+already found for the same target. `editor` passed cleanly within the batch, no artifact this
+run.
+
+Verified `TMPlugInController.mm`'s plug-in loading is identifier-agnostic (see previous entry),
+so no code change was needed there -- confirmed again post-build by checking the two identifiers
+the running app's built bundle actually carries (below), which is what `loadPlugInAtPath:` reads
+at runtime.
+
+Both plug-ins confirmed in the built app: `TextMate.app/Contents/PlugIns/Dialog.tmplugin` and
+`Dialog2.tmplugin` present, `CFBundleIdentifier` reads `com.shelbydenike.plugin.Dialog` and
+`com.shelbydenike.plugin.Dialog2` respectively (`PlistBuddy`, not a grep of source).
+
+**Fresh-clone proof, the check that actually matters here:** `git clone --recursive` of this
+local repository (branch `phase-4/identity`, both new commits included) into a `mktemp -d` temp
+directory. Confirmed before building: `git submodule status` inside the clone shows exactly the
+4 real submodules (icons, CxxTest, Onigmo, kvdb) -- neither dialog path listed, nothing to fetch
+from `github.com/textmate/dialog*` -- and both `PlugIns/dialog*/PROVENANCE.md` plus the renamed
+`Info.plist` identifiers are present as ordinary files in the clone. `./bin/build TextMate` in
+that clone: `BUILD SUCCEEDED`, both `.tmplugin` bundles present with the correct
+`com.shelbydenike.plugin.*` identifiers -- proof a party who only has this git history, not this
+machine's working tree, gets a working build. Temp clone then deleted (`rm -rf`).
+
+**One deliberate wrinkle, handled:** `Xcode/Base.xcconfig` pins `SYMROOT`/`OBJROOT` to the fixed
+absolute path `$(HOME)/build/textmate-revived/xcode` (Phase 2 Task 6, to keep build output out of
+Spotlight) -- not relative to `$(SRCROOT)`, so the temp clone's build shared and briefly
+overwrote the same output directory the main tree's own verified build lived in, rather than
+writing somewhere self-contained under the temp directory. Source compilation itself was still
+correctly isolated (each tree's own `$(SRCROOT)`-relative files), so this doesn't weaken the
+fresh-clone proof, but to leave the shared build directory in a known-good state sourced from the
+real working tree (not a now-deleted temp path) rather than /tmp, re-ran `./bin/build TextMate`
+against the main tree once more after deleting the clone and re-verified both identifiers again
+against that final rebuild -- shown above.
+
+**Why:** This is the verification bar for Task 2b: proof, not assumption, that a party who never
+had this machine's working tree -- a fresh clone or CI -- gets a repository that no longer
+depends on the two unforked upstream submodules being reachable, builds clean, and ships both
+plug-ins under the new identity.
+
+### If interrupted here
+
+Task 2b is complete: both plug-ins vendored (commit `0d1a7e6e`), both identifiers renamed
+(commit `fce08a2c`), build verified, 25/25 test parity verified, fresh-clone build verified, temp
+clone deleted, main tree's build directory restored and re-verified. `git status --porcelain`
+clean except this STREAM.md entry, about to be committed. Nothing else queued for Task 2b. Next:
+per the Phase 4 plan, Task 3 (the privileged helper) or Task 4 (attribution/credits).
+
 ## 2026-08-13 — Phase 4 Task 2b: Dialog/Dialog2 plug-in identifiers renamed
 
 **What:** Changed `CFBundleIdentifier` in `PlugIns/dialog/Info.plist:16` and
