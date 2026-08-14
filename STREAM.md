@@ -4,6 +4,40 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Liquid Glass foundation done: 5/5 tasks, 25/25 parity (Task 5)
+
+Branch `phase-6/liquid-glass-foundation`, 13 commits `d805ce4a..a04e6dc4`. Full app build succeeds.
+**25 of 25 baseline targets match** `docs/benchmarks/2026-08-12-ninja-parity.md`: `scm` 2/84,
+`buffer` 3/26, `file` 1/11, `cf` exit 138, the other 21 pass. Plus `Onigmo` 2 and the new
+`OakAppKit` 8.
+
+**A regression I diagnosed and then had to un-diagnose.** `command_test` hung three times on this
+branch while passing once on `master`, which looked like something I had broken. It was not. Running
+the **same already-built binary** three times gave `exit 0 / 4 tests passed`, then two hangs — so
+it is flaky, and my master A/B was a single sample that happened to land on the passing side. The
+cause is the one CI already documents: `wait_for_command()` polls `NSApp`, nil in a test binary, so
+the completion path fires or does not depending on timing. The parity document described this target
+as merely slow; it now carries an addendum saying one run of it is not evidence in either direction.
+
+**What this branch delivers beyond the plan**, and not by scope creep — these surfaced because it
+was the first genuine TDD done in this repository:
+
+1. **Tests silently did not run when changed** (28 targets). Adding or editing a test did nothing
+   while the suite reported green.
+2. **The generated runner then churned on every build**, forcing a recompile and relink of every
+   test target. That was my own fix trading one defect for another; the reviewer caught it, and its
+   proposed `cmp` guard was itself inert until `<%= Time.now %>` came out of `bin/gen_test`.
+3. `CLAUDE.md` now documents three traps that cost real time today: the stale runner, `gen_test`'s
+   implicit `namespace <filename>{…}` wrapping and its `to_s` shadowing, and why `OAK_ASSERT_EQ`
+   must never be used on a raw Objective-C object pointer.
+
+**If interrupted here.** All five tasks complete and reviewed; the final whole-branch review is in
+flight. Nothing is merged and nothing is released — this increment is additive, ships no
+user-visible change, and deliberately has **no `CHANGELOG.md` entry**, since a CHANGELOG push to
+master triggers the release workflow. Every ruling made on the maintainer's behalf is in
+`.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md`, which is also the resume point.
+Next after merge: plan increment 2 (small controls) against a foundation that now exists.
+
 ## 2026-08-14 — An assertion that destroyed the information it existed to give (Task 3 fix round)
 
 `test_glass_background_hosts_content_via_contentView` used `OAK_ASSERT_EQ(view.contentView, content)`
