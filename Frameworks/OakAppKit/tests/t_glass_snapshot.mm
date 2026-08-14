@@ -1,4 +1,5 @@
 #import <OakAppKit/OakUIConstructionFunctions.h>
+#import <OakAppKit/OakKeyEquivalentView.h>
 #import <oak/oak.h>
 
 // Renders `view` offscreen with `appearanceName` forced on the application.
@@ -126,4 +127,32 @@ void test_snapshot_captures_live_glass ()
 	// Measured at 0.44 for this exact comparison; 0.02 is a floor far below it
 	// that still fails outright if glass stops rendering.
 	OAK_ASSERT(MeanDifference(without, with) > 0.02);
+}
+
+static OakKeyEquivalentView* MakeRecorder (NSString* eventString, CGFloat cornerRadius)
+{
+	OakKeyEquivalentView* view = [[OakKeyEquivalentView alloc] initWithFrame:NSZeroRect];
+	view.eventString = eventString;
+	((NSGlassEffectView*)view.subviews.firstObject).cornerRadius = cornerRadius;
+	[view.widthAnchor constraintEqualToConstant:180].active = YES;
+	return view;
+}
+
+void test_key_equivalent_view_renders_in_both_appearances ()
+{
+	// Two radii are captured because the right one is a judgement the renders
+	// have to settle: OakGlassChromeMetrics().cornerRadius is 12, chosen for
+	// chrome bars, and this control is a fixed 22pt tall, so 12 exceeds half its
+	// height and rounds it to a pill. 8 is the SDK's own default.
+	for(NSNumber* radius in @[ @8, @12 ])
+	{
+		for(NSString* appearance in @[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ])
+		{
+			NSBitmapImageRep* rep = SnapshotView(MakeRecorder(@"@s", radius.doubleValue), appearance);
+			OAK_ASSERT(rep.pixelsWide > 0);
+			OAK_ASSERT(rep.pixelsHigh > 0);
+			WriteSnapshotIfRequested(rep, [NSString stringWithFormat:@"key-equivalent-r%@-%@", radius,
+				[appearance isEqualToString:NSAppearanceNameAqua] ? @"light" : @"dark"]);
+		}
+	}
 }
