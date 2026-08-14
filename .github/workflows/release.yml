@@ -2,7 +2,10 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    # This repository's default branch is master. The textmatelives fork this
+    # workflow came from used main; leaving it that way meant a CHANGELOG.md
+    # push here never triggered a release at all.
+    branches: [master]
     paths:
       - CHANGELOG.md
   workflow_dispatch:
@@ -51,18 +54,21 @@ jobs:
           echo "Detected: v${VERSION}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Skip if not an -undead release
+      # This fork versions as -revived; the upstream textmatelives fork this
+      # workflow came from used -undead. The guard exists so that unrelated
+      # CHANGELOG.md edits (typo fixes, back-filled notes) do not cut a release.
+      - name: Skip if not a -revived release
         id: guard
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           case "${VERSION}" in
-            *-undead*)
+            *-revived*)
               echo "should_release=true" >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo "::notice::Top version '${VERSION}' is not an undead release; skipping"
+              echo "::notice::Top version '${VERSION}' is not a revived release; skipping"
               echo "should_release=false" >> "$GITHUB_OUTPUT"
               ;;
           esac

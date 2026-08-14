@@ -486,15 +486,22 @@ BOOL HasDocumentWindow (NSArray* windows)
 	if(NSMenu* menu = [self mainMenu])
 		NSApp.mainMenu = menu;
 
-	// Fork update feed: git's smart-HTTP ref advertisement for
-	// textmatelives/textmate — what `git ls-remote` reads. Unlike the GitHub
-	// Releases API it is unmetered, so checks cannot be starved by the
-	// 60-requests/hour-per-IP quota (issue #26). SoftwareUpdate picks the
-	// highest refs/tags/v* version — the beta channel includes -beta tags,
-	// the others skip them, so beta users converge back onto stable when it
-	// catches up — and derives the download URL from release.yml's asset
-	// convention. No nightly stream exists, so Canary behaves like Release.
-	NSURL* const feedURL = [NSURL URLWithString:@"https://github.com/textmatelives/textmate.git/info/refs?service=git-upload-pack"];
+	// Fork update feed: git's smart-HTTP ref advertisement for THIS repository —
+	// what `git ls-remote` reads. Unlike the GitHub Releases API it is
+	// unmetered, so checks cannot be starved by the 60-requests/hour-per-IP
+	// quota (issue #26). SoftwareUpdate picks the highest refs/tags/v* version
+	// — the beta channel includes -beta tags, the others skip them, so beta
+	// users converge back onto stable when it catches up — and derives the
+	// download URL from release.yml's asset convention, i.e. from this same
+	// host and path. No nightly stream exists, so Canary behaves like Release.
+	//
+	// This MUST point at the repository whose releases we sign. It previously
+	// read textmatelives/textmate, which is not this fork: users would have
+	// been offered a third party's builds. Those downloads would have been
+	// rejected anyway — OakDownloadManager validates the extracted bundle's
+	// Developer ID against the installed app's Team Identifier — so it failed
+	// safe, but updates could never succeed.
+	NSURL* const feedURL = [NSURL URLWithString:@"https://github.com/sdenike/textmate.git/info/refs?service=git-upload-pack"];
 	SoftwareUpdate.sharedInstance.channels = @{
 		kSoftwareUpdateChannelRelease:    feedURL,
 		kSoftwareUpdateChannelPrerelease: feedURL,

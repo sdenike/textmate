@@ -4,6 +4,145 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — First CI run in this repository's history; it failed, then was fixed
+
+**What.** Fixing the workflow branch triggers made CI actually run on a pull request for the first
+time ever. It failed both jobs immediately, which is exactly what it was supposed to do.
+
+**The failure.** `** BUILD FAILED **` in the `Assemble resources (TextMate)` script phase, with one
+decisive line:
+
+```
+Unable to find a markdown compiler
+```
+
+`bin/gen_html:67` declares `MARKDOWN_COMPILERS = %w[ multimarkdown ]` and searches for that binary
+alone. `.github/workflows/build-and-test.yml` installed only `mercurial subversion` — the two
+needed by `scm`'s tests — and never `multimarkdown`, which every About/Legal/Contributions page
+goes through. Added to both the `build` and `test` jobs.
+
+**Pre-existing, not a regression.** The workflow triggered on `branches: [main]` while this
+repository's default branch is `master`, so it had never once run and the missing dependency could
+not surface. This was the first time the build had been exercised on a clean machine rather than a
+developer laptop that happens to have `multimarkdown` from an earlier Homebrew install. Diagnosing
+it needed the jobs API (`/actions/runs/<id>/jobs`) to name the failing step — `gh run view
+--log-failed` returned 51 KB of compiler warnings with the actual error nowhere near the end.
+
+**Noted, not fixed:** `bin/gen_html` has `abort "Unable to find a markdown compiler" if
+filter.nil?` twice, at lines 70 and 78. The second is dead — `filter` is already proven non-nil by
+line 70. Harmless, out of scope here.
+
+**Second failure, after multimarkdown fixed the first.** `build` then passed in 3m0s, but `test`
+still failed at 5m0s with exit 65 and no `FAILED: <target>` line — meaning a *build* failure inside
+the test job, not an assertion:
+
+```
+xcodebuild: error: The project 'TextMate.xcodeproj' does not contain a target named 'network_test'.
+```
+
+`build-and-test.yml`'s hardcoded `TESTS` list still named `network_test`. The framework was deleted
+in `42e674ce`; the parity document already records the resulting 26 → 25 drop, and this same
+staleness turned up earlier today when running the suite locally. Because the list is iterated in
+order and xcodebuild aborts the step, every target after `io_test` never ran at all. Removed;
+the list is now the 19 CI-included targets.
+
+Both of these had the same root cause as each other: **a workflow pointed at a branch that does not
+exist in this repository cannot fail, so its bugs accumulate silently.** Two of them had.
+
+**If interrupted here.** PR #9 carries the update-feed fix, the workflow trigger fixes, the
+rewritten `docs/RELEASING.md`, and two CI fixes (`multimarkdown`, `network_test`). **Do not merge
+until CI is green.** No CHANGELOG entry for the CI work: nothing in the shipped application
+changed.
+
+## 2026-08-13 — Update feed pointed at another fork; Phase 5 surveyed (v3.0.0-revived.16)
+
+**The bug.** `AppController.mm:497` set the software-update feed to
+`https://github.com/textmatelives/textmate.git/info/refs?service=git-upload-pack`.
+`OakUpdateAssetURLForVersion` derives the download URL from that same host and path, so the
+updater checked a third party's tags and would have offered their release assets. Same class of
+problem as the bundle pins, found by sweeping for `textmatelives` after fixing those.
+
+It **failed safe** rather than dangerously: `OakDownloadManager` validates the extracted bundle's
+Developer ID against the installed app's Team Identifier, so a foreign build would have been
+rejected. But updates could never succeed, and version comparison ran against someone else's tags.
+Now points at `sdenike/textmate`, with a comment saying it must track whatever repository we sign
+releases in.
+
+Also repointed the About window's feedback link and the Contributions page's commit/tree links,
+which sent users to that other project. The `commits/main` link also had the wrong branch for this
+repository.
+
+**Phase 5 is much further along than the roadmap suggests.** Survey findings:
+
+- `.github/workflows/release.yml` already does the whole chain: imports a Developer ID cert from
+  secrets into a temporary keychain, builds signed, re-signs every embedded Mach-O with
+  `--options runtime --timestamp`, re-seals nested bundles (`.tmplugin`, `.framework`,
+  `.qlgenerator`, `.appex`), substitutes `CS_GET_TASK_ALLOW=false`, notarizes via `notarytool`,
+  staples with a retry loop, and verifies with `spctl`.
+- `SoftwareUpdate` already targets GitHub Releases and verifies Developer ID by Team Identifier.
+- `ENABLE_HARDENED_RUNTIME = YES`; entitlements exist for the app and `mate`.
+- A valid **Developer ID Application: Shelby Denike (485WH9DHS4)** identity is present locally.
+
+**What actually blocks a release — configuration, not code:**
+
+1. **No GitHub secrets are set.** `gh secret list --repo sdenike/textmate` returns empty with
+   exit 0, so this is a real empty list, not a permissions failure. `release.yml` needs
+   `MAC_CERTIFICATE_P12`, `MAC_CERTIFICATE_PWD`, and the notarization Apple ID / team ID /
+   app-specific password.
+2. **`release.yml` has never run** — `gh run list --workflow=release.yml` is empty.
+3. `Base.xcconfig` sets `CODE_SIGN_IDENTITY = -` (ad-hoc) and no `DEVELOPMENT_TEAM`, which is
+   correct for local builds but means only CI produces a signed app.
+
+These are the maintainer's to supply — a `.p12` and notarization credentials cannot and should not
+be uploaded on their behalf.
+
+**Sizing the remaining bundle work properly.** The sweep also showed the bundle catalogue is far
+larger than the earlier "13 bundles" framing: `AvailableBundles.plist` has **108 entries, every one
+pointing at `textmatelives`**, and `DefaultBundles.plist` has **41** — the set a fresh install
+pulls automatically. So a first launch still fetches 41 bundles from a third party. That is the
+real scope of the deferred bundle phase, and it is much bigger than the 13 bundles with broken
+shebangs.
+
+**Then: the release pipeline could never have fired.** Two inherited textmatelives assumptions in
+the workflows, both silent:
+
+1. `release.yml` triggered on `branches: [main]`. This repository's default branch is `master`, so
+   pushing `CHANGELOG.md` never started a release.
+2. Its guard was "Skip if not an **-undead** release", matching `*-undead*`. This fork versions as
+   `-revived`, so even a manual `workflow_dispatch` would have skipped with a notice.
+
+The workflow was half-migrated already — `if: github.repository == 'sdenike/textmate'` and the
+`textmate-revived` build path were updated, but the trigger and guard were not. Both fixed.
+
+**And CI has never run on a single pull request here.** `ci.yml` triggered on `main` for both
+`push` and `pull_request`, while `gitleaks.yml` correctly used `master`. That is why every PR in
+this session showed exactly one check (`scan`) — `build-and-test` was never invoked. Fixed.
+
+**The `.p12` question.** There is **no `.p12` anywhere** in the home directory. What exists are
+`AuthKey_*.p8` App Store Connect API keys under `~/.appstoreconnect/private_keys/` — a different
+credential, for API/notarytool authentication, not code signing. The signing identity lives in the
+login keychain (`Developer ID Application: Shelby DeNike (485WH9DHS4)`); a `.p12` is how it gets
+into CI and has to be exported once.
+
+`sdenike/hidden-revived` uses the same scheme under different secret names
+(`MACOS_CERTIFICATE`/`MACOS_CERTIFICATE_PASSWORD`/`APPLE_APP_PASSWORD` vs this repo's
+`MAC_CERTIFICATE_P12`/`MAC_CERTIFICATE_PWD`/`APPLE_ID_PWD`) — and it has **no secrets set either**;
+its one release run failed in 17 seconds. Verified via
+`gh api repos/<r>/actions/secrets` returning `{"total_count":0}` with a 200, not a 403 — the
+earlier `gh secret list` empty output could have been a scope problem, so it was re-checked
+explicitly.
+
+`docs/RELEASING.md` was still textmatelives' document: `-undead` versions, `main` branch,
+`textmatelives/textmate` URLs, and a "How users get the update" section describing an
+`api.github.com/releases/latest` poll the code does not do (it reads the git ref advertisement and
+*derives* the asset URL). Rewritten, with a new **First-time setup** section covering the `.p12`
+export, the app-specific password, the five `gh secret set` commands, deleting the exported `.p12`
+afterwards, and dry-running via `workflow_dispatch`.
+
+**If interrupted here.** Committed on `fix/update-feed-points-at-fork`, PR #9. Nothing blocks the
+next step except the maintainer adding those five secrets — that is the only remaining gate on a
+first signed, notarized release.
+
 ## 2026-08-13 — Own bundle forks created; ruby18 shim ships (v3.0.0-revived.15)
 
 **What.** Forked the four mandatory bundles under `sdenike`, repointed `MandatoryBundles.h`,

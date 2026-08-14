@@ -2,6 +2,22 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.16)
+
+Check for Updates was looking at the wrong project.
+
+### Fixed
+
+* The in-app updater checked a different fork's repository for new versions,
+  and would have offered you its builds rather than this project's. Nothing
+  unsafe could have been installed — a downloaded update is only accepted if it
+  is signed by the same developer as the copy you are running, and those builds
+  are not — but it meant updating could never actually work. It now checks this
+  project's own repository.
+* The About window's feedback link and the Contributions page's commit links
+  pointed at that same other repository, so they led to a project unrelated to
+  the version you are running.
+
 ## 2026-08-13 (v3.0.0-revived.15)
 
 The bundles this application depends on now come from repositories this project
