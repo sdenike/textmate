@@ -203,13 +203,22 @@ every test target every time — a real cost on targets with large dependency li
 
 Tests that shell out to git must call `git init -b master` (not bare `git init`) — modern git's `init.defaultBranch` defaults to `main` and breaks tests that assume `master`.
 
-**`bin/gen_test` wraps each test file in `namespace <filename> { … }`.** Two consequences worth
+**`bin/gen_test` wraps each test file in `namespace <filename> { … }`.** Three consequences worth
 knowing before they cost you an afternoon. `OAK_ASSERT_EQ` stringifies both operands on failure, so
 asserting on a type with no `to_s()` fails to compile — define an overload in the test file, as
 `t_OakCompareVersionStrings.mm` does for `NSComparisonResult`. But defining one inside that implicit
 namespace **hides the global `to_s` overloads from unqualified lookup**, which breaks unrelated
 assertions elsewhere in the same file with a confusing error. Add `using ::to_s;` near the top when
 you introduce a local overload.
+
+Third — the one that bites when you copy an assertion between files — **a `to_s` overload defined in
+one test file is invisible to its siblings in the same target**, because each lives in its own
+namespace. The symptom is `no viable 'begin' function`, from the generic `to_s(_T const&)` fallback
+trying to iterate the operand, and it reads as though the assertion itself is wrong when the
+identical line compiles fine one file over. Found 2026-08-14 moving
+`OAK_ASSERT_EQ(view.style, NSGlassEffectViewStyleRegular)` from `t_glass.mm`, which defines the
+overload, into `t_key_equivalent_view.mm`, which does not. Prefer `OAK_ASSERT(a == b)` over
+duplicating the overload into the second file.
 
 **Never use `OAK_ASSERT_EQ` on a raw Objective-C object pointer.** Use `OAK_ASSERT(a == b)`. There
 is no `to_s` overload for `NSView*` and friends, so the comparison silently resolves to

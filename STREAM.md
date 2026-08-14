@@ -43,7 +43,22 @@ glass rect is bit-identical, and live `screencapture` of the same window agrees 
 with no visible window, no activation policy, and no screen-recording permission. So the screenshots
 are a real test, they run headless, and they run under CI.
 
-**Task 1 has landed.** `765eb320` adds the snapshot harness,
+**Task 2 has landed — the recorder is on glass.** `776ed70c` modifies
+`Frameworks/OakAppKit/src/OakKeyEquivalentView.mm` and adds `t_key_equivalent_view.mm`, taking the
+suite to `OakAppKit_test: 16 tests passed`. This is the first application code in the fork to call a
+glass constructor. The control now installs an `NSGlassEffectView` as its first subview with the
+display string hosted in that view's `contentView`; `drawRect:` is deleted outright, `isOpaque`
+returns `NO` so glass has a backdrop to sample, and the focus ring follows the glass's corner radius
+instead of a square. Corner radius is provisionally 8, pending the renders.
+
+**A trap worth knowing, now in `CLAUDE.md`.**
+`OAK_ASSERT_EQ(view.style, NSGlassEffectViewStyleRegular)` compiles in `t_glass.mm` and fails in a
+new test file, because `bin/gen_test` wraps each test file in its own namespace and the `to_s`
+overload for that enum lives in the first file. The generic `to_s(_T const&)` fallback then tries to
+iterate the enum, and the error — `no viable 'begin' function` — reads as though the assertion is
+wrong rather than misplaced. Use `OAK_ASSERT(a == b)`.
+
+**Task 1 landed earlier.** `765eb320` adds the snapshot harness,
 `Frameworks/OakAppKit/tests/t_glass_snapshot.mm` (129 lines, one file). It exposes `SnapshotView`,
 `WriteSnapshotIfRequested` and `MeanDifference` for Task 3 to reuse, and its own test asserts that
 glass actually rendered — a floor of 0.02 against a measured 0.44, so it fails outright if the
@@ -51,12 +66,21 @@ capture path ever stops seeing glass. Its implementer had not yet filed its repo
 was written, so the reported test count is unconfirmed here; it should read `11 tests passed`.
 
 **If interrupted here:** the SDD ledger is
-`.superpowers/sdd/2026-08-14-liquid-glass-small-controls/progress.md`; its pre-flight scan is clean
-and the verified baseline before Task 1 was `OakAppKit_test: 10 tests passed`. Task briefs 1 and 2
-are written beside it. Resume by running `bin/build OakAppKit/test` and confirming 11; then Task 2
-(the migration itself — brief already written), Task 3 (render four PNGs at radius 8 and 12, light
-and dark), Task 4 (full suite against the parity doc), Task 5 (**maintainer picks the corner radius
-from the renders — this is the gate**), Task 6 (CHANGELOG, release, confirm the cask bump).
+`.superpowers/sdd/2026-08-14-liquid-glass-small-controls/progress.md`, and it carries the rulings
+behind both brief corrections. Briefs 1–3 are written beside it. Tasks 1 and 2 are complete and
+committed; Task 1's review came back clean on both verdicts. Confirm state with:
+
+```sh
+~/build/textmate-revived/xcode/Release/OakAppKit_test -v --no-parallel   # expect 16, or 17 after Task 3
+```
+
+Note that `bin/build` itself never prints a pass count — it execs the runner without `-v` and the
+runner is silent on success. Its silence is not evidence that tests did not run.
+
+Remaining: Task 3 (render four PNGs at radius 8 and 12, light and dark — was dispatched alongside
+Task 2's review), Task 4 (full suite against the parity doc, plus exercising the control in the
+running app via ⌃⌘T), Task 5 (**maintainer picks the corner radius from the renders — this is the
+gate; nothing ships before it**), Task 6 (CHANGELOG, release, confirm the cask bump).
 
 ---
 
