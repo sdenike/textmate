@@ -52,8 +52,18 @@ untouched here.
 executed through the built app's copy returns `ext=UTF-8` with non-ASCII intact. `src/` absent from
 the built app.
 
-**If interrupted here.** Committed on `fix/bundle-ruby18-shebangs` (PR #8), built but **not
-deployed** as .15 yet.
+**Merged.** PR #8 merged to master as `a1df7c19`, carrying v3.0.0-revived.14 and .15. Branch
+deleted, master synced, tree clean. The PR's title and body were rewritten before merging — it had
+been opened as a narrow shebang fix and grew into the fork migration, so the description no longer
+matched its contents.
+
+**Post-merge verification.** `BundlesManager/test` and `bundles/test` pass. The app relaunches and
+rebuilds its bundle index (`Bundles.plist` and `BundlesIndex.binary` both rewritten at launch). The
+shim is present in the installed app *and* in the `Managed/` copy, which is the one bundle commands
+actually resolve against.
+
+**If interrupted here.** Nothing in flight. Next: Phase 5 — Developer ID signing, notarization,
+in-app updates from GitHub Releases.
 
 ## 2026-08-13 — BLOCKER found: no write access to the mandatory bundle repos. Deferring bundles.
 
