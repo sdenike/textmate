@@ -43,15 +43,20 @@ glass rect is bit-identical, and live `screencapture` of the same window agrees 
 with no visible window, no activation policy, and no screen-recording permission. So the screenshots
 are a real test, they run headless, and they run under CI.
 
+**Task 1 has landed.** `765eb320` adds the snapshot harness,
+`Frameworks/OakAppKit/tests/t_glass_snapshot.mm` (129 lines, one file). It exposes `SnapshotView`,
+`WriteSnapshotIfRequested` and `MeanDifference` for Task 3 to reuse, and its own test asserts that
+glass actually rendered — a floor of 0.02 against a measured 0.44, so it fails outright if the
+capture path ever stops seeing glass. Its implementer had not yet filed its report when this entry
+was written, so the reported test count is unconfirmed here; it should read `11 tests passed`.
+
 **If interrupted here:** the SDD ledger is
 `.superpowers/sdd/2026-08-14-liquid-glass-small-controls/progress.md`; its pre-flight scan is clean
-and the verified baseline is `OakAppKit_test: 10 tests passed`. Task briefs 1 and 2 are written
-beside it. Task 1 (the snapshot harness, `Frameworks/OakAppKit/tests/t_glass_snapshot.mm`) was
-dispatched to an implementer and had not reported back. Resume by checking whether that file exists
-and whether the count reads 11; then Task 2 (the migration itself), Task 3 (render four PNGs at
-radius 8 and 12, light and dark), Task 4 (full suite against the parity doc), Task 5 (**maintainer
-picks the corner radius from the renders — this is the gate**), Task 6 (CHANGELOG, release,
-confirm the cask bump).
+and the verified baseline before Task 1 was `OakAppKit_test: 10 tests passed`. Task briefs 1 and 2
+are written beside it. Resume by running `bin/build OakAppKit/test` and confirming 11; then Task 2
+(the migration itself — brief already written), Task 3 (render four PNGs at radius 8 and 12, light
+and dark), Task 4 (full suite against the parity doc), Task 5 (**maintainer picks the corner radius
+from the renders — this is the gate**), Task 6 (CHANGELOG, release, confirm the cask bump).
 
 ---
 
