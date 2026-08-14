@@ -4,6 +4,48 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — All 40 framework image assets were missing from the app (v3.0.0-revived.18)
+
+**Found by the maintainer noticing the literal word "Button" in the tab bar.** That is AppKit's
+default `NSButton` title: an `NSButton` with neither image nor title draws it. The overflow button's
+only visual is `regularImage = [NSImage imageNamed:@"TabOverflowThinTemplate" inSameBundleAsClass:]`,
+which was returning nil.
+
+**Cause.** Every PNG under `Frameworks/*/gfx/` — 40 files across OakTabBarView (14), BundleEditor
+(20) and OakAppKit (6) — was in the repository but never copied into the built app. `project.yml`
+contains no `gfx` reference at all. The Phase 2 XcodeGen migration dropped them, and they shipped
+missing in v3.0.0-revived.16 and .17.
+
+**Why it went unnoticed for two releases.** The failure is completely silent. `imageNamed:` returns
+nil, the button draws a default title, the build succeeds, every test passes. Nothing anywhere
+reports a missing asset. Also broken and unnoticed: the per-tab close button (`CloseTemplate` plus
+five `TabCloseThin*` variants) and all 20 Bundle Editor item icons.
+
+**Fix.** `assemble_resources.sh` now copies them flat into `Contents/Resources`. Flat matters: the
+frameworks are statically linked (there is no `Contents/Frameworks`), so
+`+[NSBundle bundleForClass:]` resolves to the app bundle itself and `imageNamed:` searches the
+Resources root — a `gfx/` subdirectory would not be found. Verified all 40 basenames are unique
+before flattening, so nothing silently overwrites.
+
+**Caught an off-by-one in my own fix.** The first version copied 39 of 40. `Proxy.png` in
+`BundleEditor/gfx/Bundle Item Icons/` is a **symlink** to `Settings.png`, and `find -type f`
+excludes symlinks. Now `\( -type f -o -type l \)`; `cp` follows the link and writes a real file.
+The acceptance check that missed it was "at least 40 PNGs in Resources" — which passed at 42 by
+counting three unrelated PNGs in `About/` and `TextMate Help/` subdirectories. **Counting a
+superset is not verification**; the correct check compares the exact expected set against the
+Resources *root*, which is what the fix now uses.
+
+**Not deployed with `bin/deploy-local` on purpose.** The maintainer is now running the signed
+Homebrew build, and deploy-local would replace it with an ad-hoc build that cannot self-update
+(see "Bundle delivery" in `CLAUDE.md`). Shipping this as .18 instead, which also exercises the
+in-app updater for the first time on a properly signed pair.
+
+**If interrupted here.** Phase 6 design is paused mid-way: scope (Liquid Glass only), depth
+(replace custom views with standard controls), sequencing (low-risk first, tab bar last),
+verification (screenshots reviewed by the maintainer), approach A (foundation first) and the
+six-increment migration sequence are all agreed. **Next design section is the tab bar decision** —
+whether to adopt native `NSWindow` tabbing.
+
 ## 2026-08-14 — Cask automation proven end to end (v3.0.0-revived.17)
 
 **Phase 5a is closed.** `HOMEBREW_TAP_TOKEN` is set on both `sdenike/textmate` and

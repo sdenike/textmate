@@ -2,6 +2,21 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-14 (v3.0.0-revived.18)
+
+Missing icons are back.
+
+### Fixed
+
+* Buttons and icons drawn from the application's own image assets were missing.
+  Most visibly, the tab bar's overflow button rendered as the literal word
+  "Button", and the close button on each tab was invisible. The Bundle Editor's
+  item icons — bundle, command, snippet, macro and the rest — were missing for
+  the same reason. All 40 of those images were left out of the application when
+  it moved to the Xcode build in an earlier release, and nothing failed loudly:
+  a missing image simply draws as a blank button, so it went unnoticed until
+  someone spotted the word "Button" in the tab bar.
+
 ## 2026-08-14 (v3.0.0-revived.17)
 
 TextMate Revived is now installable with Homebrew.

@@ -131,6 +131,26 @@ assemble_textmate() {
 	mkdir -p "$contents/Resources"
 	cp -p "$app/icons/"*.icns "$contents/Resources/"
 
+	# Framework image assets. The frameworks are statically linked into the
+	# app, so +[NSImage imageNamed:inSameBundleAsClass:] resolves through
+	# +[NSBundle bundleForClass:] to the app bundle itself -- these must sit
+	# flat in Resources/, not under a gfx/ subdirectory, or the lookup misses.
+	#
+	# A miss is silent: imageNamed: returns nil, and an NSButton with neither
+	# image nor title falls back to drawing AppKit's default title, "Button".
+	# That is exactly what shipped in v3.0.0-revived.16 and .17 -- the tab
+	# overflow button and the per-tab close button both rendered as the word
+	# "Button". Verify after changing this with:
+	#   find "$APP/Contents/Resources" -name 'TabOverflowThinTemplate*'
+	while IFS= read -r -d '' gfx; do
+		cp -p "$gfx" "$contents/Resources/$(basename "$gfx")"
+	#
+	# `-type f -o -type l` rather than plain `-type f`: BundleEditor ships
+	# Proxy.png as a symlink to Settings.png, and -type f silently excludes
+	# symlinks, so the plain form copied 39 of the 40 images. cp follows the
+	# link and writes a real file, which is what the bundle wants.
+	done < <(find "$SRCROOT/Frameworks" -type d -name gfx -exec find {} \( -type f -o -type l \) -name '*.png' -print0 \;)
+
 	# about/* + ../../CHANGELOG.md -- files -> Resources/About.
 	mkdir -p "$contents/Resources/About/css" "$contents/Resources/About/js"
 	for f in About Legal Contributions; do
