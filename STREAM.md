@@ -4,6 +4,48 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 4 Task 4 VERIFIED; `${YEAR}` copyright bug found and fixed
+
+**What.** Built `c0c327c0` (Task 4) and `8bc1a8f9` (Task 3) and ran the full test suite against
+them. Both verify clean. Found and fixed a separate, long-standing bug in the resource pipeline
+while checking Task 4's own output.
+
+**Verification result.** Build SUCCEEDED. App identity `com.shelbydenike.TextMate`,
+`CFBundleName` `TextMate`, version `3.0.0-revived.13` (extracted from `CHANGELOG.md` by
+`assemble_resources.sh`'s `app_version()`, so bumping the changelog heading *is* the version
+bump — there is no separate `MARKETING_VERSION` to edit).
+
+**25 of 25 baseline targets match `docs/benchmarks/2026-08-12-ninja-parity.md` exactly**, with
+the four known-bad reproducing identically: `scm` 2/84 (no `hg`/`svn` on this machine), `buffer`
+3/26 (misspellings), `file` 1/11 (iconv TRANSLIT), `cf` SIGBUS exit 138. `authorization` — the
+only target that covers Task 3's actual code change — passes. `Onigmo_test` and `TextMate_test`
+also pass. The prior handoff's "25 test targets" and the parity doc's 26-row table are
+reconciled: `network_test` was deleted in `42e674ce` ("build!: delete the dead network
+framework"), which the parity doc's own closing line already records.
+
+**The `${YEAR}` bug.** The shipped `NSHumanReadableCopyright` read a literal
+`© MacroMates Ltd., 2004-${YEAR}`. Cause: `assemble_resources.sh` dispatched each resource to a
+transform by file extension, and `.strings` went straight to `utf16.sh` (transcode only) while
+only `Info.plist` files went through `expand_plist.sh` (which is what passes
+`-dYEAR="$(date +%Y)"`). Nothing ever substituted the variable. Fixed by adding an
+`expand_utf16()` helper that expands and then transcodes, used at both `.strings` call sites.
+This also fixed the same latent bug in both Dialog plug-ins, which now read `2005-2026` and
+`2008-2026`. Pre-existing, not caused by Task 4 — the installed v.12 build has it too — but it
+is a defect in exactly what Task 4 was auditing, so it was fixed here rather than deferred.
+
+The fork's own notice renders `2026-2026` this year. Maintainer chose to keep the
+`2026-${YEAR}` range: it self-corrects in January and needs no future code change.
+
+**Also fixed.** `CLAUDE.md` claimed this repository is `textmatelives/textmate`. It is not —
+`origin` is `git@github.com:sdenike/textmate.git`, and `textmatelives` is a separate remote this
+fork merges *from*. That stale line is what sent Task 4's first pass at `Legal.md` to the wrong
+URLs. Corrected, with a note that shipped docs must link to `sdenike/textmate`.
+
+**If interrupted here.** Changes are committed. Still to do to close Phase 4: deploy with
+`bin/deploy-local` and verify the installed bundle; check the Phase 4 exit criteria (bundles
+still load, `txmt://` still opens, bookmarks/folds on existing files survive); then push the
+branch, open a PR, and merge.
+
 ## 2026-08-13 — SESSION HANDOFF: Phase 4 nearly complete, Task 4 unverified
 
 **Read this first on resume.** Everything below is committed; nothing is in the working tree.

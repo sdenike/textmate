@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Fork constraints
 
-This is `textmatelives/textmate`, a fork of `textmate/textmate` targeting macOS 26 / Apple Silicon.
+This is `sdenike/textmate` (remote `origin`), a fork of `textmate/textmate` targeting macOS 26 /
+Apple Silicon. `textmatelives` is a *separate remote* this fork merges from — not this repository.
+Links in shipped docs must point at `sdenike/textmate`.
 
 Hard constraints declared by the maintainer:
 - arm64 only — do not add x86_64 fallbacks

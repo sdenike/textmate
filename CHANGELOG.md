@@ -5,7 +5,9 @@ Title: Release Notes
 ## 2026-08-13 (v3.0.0-revived.13)
 
 The privileged helper that lets you open or save a file you don't own (a
-root-owned config file, for instance) now carries this project's identity too.
+root-owned config file, for instance) now carries this project's identity too,
+and the credits and licensing pages have been brought in line with what this
+fork actually ships.
 
 ### Changed
 
@@ -14,6 +16,22 @@ root-owned config file, for instance) now carries this project's identity too.
   `com.macromates.*`. This is a real, actively used feature — not leftover
   code — reached any time you try to open or save a file you don't have
   permission to write.
+* The copyright line in Get Info now keeps MacroMates' notice and adds this
+  fork's alongside it, rather than replacing it.
+* The Legal page drops Boost and sparsehash, which this fork no longer uses,
+  and documents the Dialog and Dialog2 plug-ins now vendored directly into the
+  repository, with their provenance recorded per plug-in.
+* The README states plainly that this is an unaffiliated, community-maintained
+  fork, not endorsed by or affiliated with MacroMates or Allan Odgaard, and
+  licensed under GPLv3 like upstream.
+
+### Fixed
+
+* The copyright line in Get Info showed a literal `${YEAR}` instead of the
+  current year, in the application and in both Dialog plug-ins. The build
+  picked each resource's transform by file extension, and `.strings` files
+  went straight to the UTF-16 transcode step without passing through variable
+  expansion first. Long-standing; not new in this release.
 
 ### Note
 
