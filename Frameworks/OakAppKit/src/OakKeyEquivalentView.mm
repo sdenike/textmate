@@ -11,6 +11,8 @@ static NSString* const kRecordingPlaceholderString = @"…";
 @interface OakKeyEquivalentView ()
 {
 	OakRolloverButton* _clearButton;
+	NSGlassEffectView* _glassView;
+	NSTextField* _displayField;
 	id _eventMonitor;
 	void* _hotkeyToken;
 }
@@ -22,7 +24,27 @@ static NSString* const kRecordingPlaceholderString = @"…";
 - (id)initWithFrame:(NSRect)aRect
 {
 	if(self = [super initWithFrame:aRect])
+	{
 		self.disableGlobalHotkeys = YES;
+
+		_displayField                           = [NSTextField labelWithString:@""];
+		_displayField.alignment                 = NSTextAlignmentCenter;
+		_displayField.font                      = OakControlFont();
+		_displayField.textColor                 = NSColor.labelColor;
+		_displayField.cell.accessibilityElement = NO; // this class answers for itself; see accessibilityAttributeValue:
+
+		_glassView              = OakCreateGlassBackground(NSGlassEffectViewStyleRegular);
+		_glassView.cornerRadius = 8; // provisional -- the renders decide this; see the task that follows
+		_glassView.contentView  = _displayField;
+
+		// Added first, so the clear button that setShowClearButton: appends
+		// later is always above it.
+		OakAddAutoLayoutViewsToSuperview(@[ _glassView ], self);
+		[_glassView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor].active   = YES;
+		[_glassView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor].active = YES;
+		[_glassView.topAnchor constraintEqualToAnchor:self.topAnchor].active           = YES;
+		[_glassView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor].active     = YES;
+	}
 	return self;
 }
 
@@ -68,7 +90,7 @@ static NSString* const kRecordingPlaceholderString = @"…";
 	if(_displayString == aString || [_displayString isEqualToString:aString])
 		return;
 	_displayString = aString;
-	[self setNeedsDisplay:YES];
+	_displayField.stringValue = aString ?: @"";
 }
 
 - (void)setShowClearButton:(BOOL)flag
@@ -109,6 +131,7 @@ static NSString* const kRecordingPlaceholderString = @"…";
 	_recording = flag;
 	self.showClearButton = OakNotEmptyString(self.eventString) && !self.recording;
 	self.displayString = _recording ? kRecordingPlaceholderString : [NSString stringWithCxxString:ns::glyphs_for_event_string(to_s(self.eventString))];
+	_displayField.textColor = _recording ? NSColor.secondaryLabelColor : NSColor.labelColor;
 
 	if(self.recording)
 	{
@@ -162,7 +185,7 @@ static NSString* const kRecordingPlaceholderString = @"…";
 
 - (BOOL)isOpaque
 {
-	return YES;
+	return NO;
 }
 
 - (BOOL)acceptsFirstMouse:(NSEvent*)anEvent
@@ -198,38 +221,9 @@ static NSString* const kRecordingPlaceholderString = @"…";
 		[super keyDown:anEvent];
 }
 
-- (void)drawRect:(NSRect)aRect
-{
-	NSRect frame = [self bounds];
-
-	NSColor* frameColor      = NSColor.lightGrayColor;
-	NSColor* backgroundColor = NSColor.whiteColor;
-
-	if(@available(macos 10.14, *))
-	{
-		if([[NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]] isEqualToString:NSAppearanceNameDarkAqua])
-			frameColor = NSColor.tertiaryLabelColor;
-		backgroundColor = NSColor.controlColor;
-	}
-
-	[frameColor set];
-	NSFrameRect(frame);
-
-	[backgroundColor set];
-	NSRectFill(NSIntersectionRect(aRect, NSInsetRect(frame, 1, 1)));
-
-	NSDictionary* stringAttributes = @{
-		NSForegroundColorAttributeName: self.recording ? [NSColor secondaryLabelColor] : [NSColor labelColor],
-		NSFontAttributeName:            OakControlFont()
-	};
-
-	NSSize size = [self.displayString sizeWithAttributes:stringAttributes];
-	[self.displayString drawAtPoint:NSMakePoint(NSMidX([self visibleRect]) - size.width / 2, NSMidY([self visibleRect]) - size.height / 2) withAttributes:stringAttributes];
-}
-
 - (void)drawFocusRingMask
 {
-	NSRectFill([self bounds]);
+	[[NSBezierPath bezierPathWithRoundedRect:self.bounds xRadius:_glassView.cornerRadius yRadius:_glassView.cornerRadius] fill];
 }
 
 - (NSRect)focusRingMaskBounds
