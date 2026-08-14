@@ -4,6 +4,33 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Liquid Glass foundation complete: all three constructors landed (Task 4 of 5)
+
+`OakGlassChromeMetrics` added, commit `52057e6a`. **7 tests passing.** The foundation the whole
+phase rests on now exists in `Frameworks/OakAppKit/src/OakUIConstructionFunctions`:
+
+```objc
+NSGlassEffectContainerView* OakCreateGlassContainer ();
+NSGlassEffectView*          OakCreateGlassBackground (NSGlassEffectViewStyle style, NSColor* tint = nil);
+struct OakGlassMetrics { CGFloat cornerRadius; NSEdgeInsets contentInsets; };
+OakGlassMetrics             OakGlassChromeMetrics ();
+```
+
+All three are **deliberately uncalled** — increments 2-6 of the phase are their consumers. A reviewer
+applying YAGNI would flag them; that is pre-adjudicated in the SDD ledger.
+
+**Task 4 needed no `to_s` overload** — its `CGFloat`/`NSEdgeInsets` fields resolved against the
+existing numeric overloads. Worth noting because Task 3 had to discover the namespace-shadowing trap
+the hard way; carrying that discovery into Task 4's brief meant it did not repeat the search.
+
+**If interrupted here.** Task 5 (parity verification across all 25 baseline targets plus `Onigmo`
+and the new `OakAppKit`) is running; the combined Tasks 3+4 review is in flight. The four known-bad
+targets must reproduce identically — `scm` 2/84, `buffer` 3/26, `file` 1/11, `cf` SIGBUS 138 — and
+this is the first parity run whose results are trustworthy, since before today's fix a changed test
+could silently not run. Resume from
+`.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md`. Still **no `CHANGELOG.md`
+entry**: additive increment, and a CHANGELOG push to master triggers a release.
+
 ## 2026-08-14 — Glass constructors 2 of 3 landed; two more build traps documented (Tasks 2-3)
 
 **Task 2** — `OakCreateGlassContainer`, commit `3bf9695b`. **Task 3** — `OakCreateGlassBackground`,
