@@ -325,6 +325,70 @@ jobs:
             --generate-notes \
             "${{ steps.archive.outputs.archive }}"
 
+      # Keep sdenike/homebrew-tap's cask in step with the release just published,
+      # so `brew upgrade --cask textmate-revived` works without anyone editing a
+      # cask by hand. Commits straight to the tap's default branch rather than
+      # opening a pull request: a PR per release would need merging every time,
+      # which is the manual step this exists to remove. The tap's commit history
+      # is the audit trail.
+      #
+      # Needs HOMEBREW_TAP_TOKEN — a PAT with contents:write on sdenike/homebrew-tap.
+      # The workflow's own GITHUB_TOKEN cannot write to another repository. If the
+      # secret is absent the step warns and succeeds, so a missing token never
+      # fails an otherwise-good release; the cask can be bumped by re-running.
+      - name: Check for tap token
+        if: steps.tagcheck.outputs.should_release == 'true'
+        id: taptoken
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${TAP_TOKEN:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::HOMEBREW_TAP_TOKEN is not set — skipping the Homebrew cask update. The release itself is unaffected."
+          fi
+
+      - name: Check out the Homebrew tap
+        if: steps.tagcheck.outputs.should_release == 'true' && steps.taptoken.outputs.present == 'true'
+        uses: actions/checkout@v5
+        with:
+          repository: sdenike/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Bump textmate-revived cask
+        if: steps.tagcheck.outputs.should_release == 'true' && steps.taptoken.outputs.present == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCHIVE: ${{ steps.archive.outputs.archive }}
+        run: |
+          set -euo pipefail
+          SHA=$(shasum -a 256 "$ARCHIVE" | cut -d' ' -f1)
+          CASK="homebrew-tap/Casks/textmate-revived.rb"
+          [ -f "$CASK" ] || { echo "::error::$CASK not found in the tap"; exit 1; }
+
+          # Anchored to the two-space indent so only the cask's own stanzas match.
+          /usr/bin/sed -i '' -E "s|^  version \".*\"$|  version \"${VERSION}\"|" "$CASK"
+          /usr/bin/sed -i '' -E "s|^  sha256 \".*\"$|  sha256 \"${SHA}\"|" "$CASK"
+
+          grep -q "version \"${VERSION}\"" "$CASK" || { echo "::error::version substitution failed"; exit 1; }
+          grep -q "sha256 \"${SHA}\"" "$CASK"      || { echo "::error::sha256 substitution failed"; exit 1; }
+
+          cd homebrew-tap
+          if git diff --quiet; then
+            echo "Cask already at ${VERSION}; nothing to do."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "textmate-revived ${VERSION}
+
+          Released by sdenike/textmate's release workflow, run ${GITHUB_RUN_ID}.
+          sha256 computed from the published TextMate-${VERSION}.tbz."
+          git push
+
       - name: Cleanup keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/build.keychain-db" || true
