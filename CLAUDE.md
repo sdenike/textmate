@@ -79,6 +79,24 @@ duplicate is left in the build tree. That costs a relink on the next build, not 
 It reads `CFBundleIdentifier` from the freshly built app and refuses to replace a
 bundle in `/Applications` whose identifier differs — it will not clobber an unrelated TextMate install.
 
+**A `bin/deploy-local` build can never self-update, and that is correct.** Local builds are ad-hoc
+signed (`CODE_SIGN_IDENTITY = -` in `Xcode/Base.xcconfig`), so they carry `Signature=adhoc` and
+`TeamIdentifier=not set`. `OakDownloadManager` only installs an update whose Developer ID Team
+Identifier matches the **running** app's, so Check for Updates downloads the release and then
+refuses it with *"The downloaded update is not signed by the expected developer."* That is the
+guard working — it is what stops a build signed by someone else replacing yours — not a signing
+bug. Confirm which you are running with:
+
+```sh
+codesign -dv --verbose=2 /Applications/TextMate.app 2>&1 | grep -E 'Signature|TeamIdentifier'
+```
+
+To get a self-updating app, install the real release instead of a local build:
+
+```sh
+brew install --cask textmate-revived     # or download the .tbz from Releases
+```
+
 Self-hosted building (pressing ⌘B inside a running TextMate.app to rebuild TextMate itself, via
 the optional Ninja bundle and `.tm_properties`' old `TM_NINJA_TARGET` mapping) no longer works —
 neither ninja nor that mapping exist anymore. Build from Xcode or the command line instead.
