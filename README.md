@@ -4,6 +4,11 @@
   <img src="docs/images/tml_banner_800px.png" alt="TextMate Lives" width="1000">
 </p>
 
+> This is an **unaffiliated, community-maintained fork** of [TextMate](https://github.com/textmate/textmate)
+> by MacroMates ApS / Allan Odgaard. It is not endorsed by, sponsored by, or otherwise affiliated
+> with MacroMates or Allan Odgaard. Licensed under the GNU General Public License v3.0 (or later),
+> the same license as upstream.
+
 ## About this fork
 
 I ❤️ TextMate.

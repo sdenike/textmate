@@ -24,17 +24,14 @@ TextMate vendors [xdiff][] from the [Git project][git-repo], originally based on
 
 xdiff is licensed under the [GNU Lesser General Public License v2.1][lgpl-2.1].
 
-## Boost
+## Dialog and Dialog2 plug-ins
 
-[Boost][] is used as a header-only library.
-
-Boost is licensed under the [Boost Software License 1.0][bsl-1.0].
-
-## sparsehash
-
-[sparsehash][] is copyright Google Inc.
-
-sparsehash is licensed under the [3-clause BSD license][bsd-sparsehash].
+[Dialog][] and [Dialog2][] (`PlugIns/dialog-1.x` and `PlugIns/dialog`) are TextMate's own
+dialog-box plug-ins, vendored directly into this repository rather than pulled from an external
+submodule. Both are copyright (c) 2007 MacroMates; that notice is preserved unchanged in their
+source. Upstream did not distribute either under a separate license, so they are covered by this
+repository's own license (GPLv3) like everything else here. Exact provenance — origin repository,
+commit, and date — is recorded in each plug-in's own `PROVENANCE.md`.
 
 [Onigmo]: https://github.com/k-takata/Onigmo
 [Oniguruma]: https://github.com/kkos/oniguruma
@@ -44,7 +41,5 @@ sparsehash is licensed under the [3-clause BSD license][bsd-sparsehash].
 [xdiff]: https://github.com/git/git/tree/master/xdiff
 [git-repo]: https://github.com/git/git
 [lgpl-2.1]: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
-[Boost]: https://www.boost.org/
-[bsl-1.0]: https://www.boost.org/LICENSE_1_0.txt
-[sparsehash]: https://github.com/sparsehash/sparsehash
-[bsd-sparsehash]: https://github.com/sparsehash/sparsehash/blob/master/COPYING
+[Dialog]: https://github.com/sdenike/textmate/blob/master/PlugIns/dialog-1.x/PROVENANCE.md
+[Dialog2]: https://github.com/sdenike/textmate/blob/master/PlugIns/dialog/PROVENANCE.md
