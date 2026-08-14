@@ -4,6 +4,56 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — First CI run in this repository's history; it failed, then was fixed
+
+**What.** Fixing the workflow branch triggers made CI actually run on a pull request for the first
+time ever. It failed both jobs immediately, which is exactly what it was supposed to do.
+
+**The failure.** `** BUILD FAILED **` in the `Assemble resources (TextMate)` script phase, with one
+decisive line:
+
+```
+Unable to find a markdown compiler
+```
+
+`bin/gen_html:67` declares `MARKDOWN_COMPILERS = %w[ multimarkdown ]` and searches for that binary
+alone. `.github/workflows/build-and-test.yml` installed only `mercurial subversion` — the two
+needed by `scm`'s tests — and never `multimarkdown`, which every About/Legal/Contributions page
+goes through. Added to both the `build` and `test` jobs.
+
+**Pre-existing, not a regression.** The workflow triggered on `branches: [main]` while this
+repository's default branch is `master`, so it had never once run and the missing dependency could
+not surface. This was the first time the build had been exercised on a clean machine rather than a
+developer laptop that happens to have `multimarkdown` from an earlier Homebrew install. Diagnosing
+it needed the jobs API (`/actions/runs/<id>/jobs`) to name the failing step — `gh run view
+--log-failed` returned 51 KB of compiler warnings with the actual error nowhere near the end.
+
+**Noted, not fixed:** `bin/gen_html` has `abort "Unable to find a markdown compiler" if
+filter.nil?` twice, at lines 70 and 78. The second is dead — `filter` is already proven non-nil by
+line 70. Harmless, out of scope here.
+
+**Second failure, after multimarkdown fixed the first.** `build` then passed in 3m0s, but `test`
+still failed at 5m0s with exit 65 and no `FAILED: <target>` line — meaning a *build* failure inside
+the test job, not an assertion:
+
+```
+xcodebuild: error: The project 'TextMate.xcodeproj' does not contain a target named 'network_test'.
+```
+
+`build-and-test.yml`'s hardcoded `TESTS` list still named `network_test`. The framework was deleted
+in `42e674ce`; the parity document already records the resulting 26 → 25 drop, and this same
+staleness turned up earlier today when running the suite locally. Because the list is iterated in
+order and xcodebuild aborts the step, every target after `io_test` never ran at all. Removed;
+the list is now the 19 CI-included targets.
+
+Both of these had the same root cause as each other: **a workflow pointed at a branch that does not
+exist in this repository cannot fail, so its bugs accumulate silently.** Two of them had.
+
+**If interrupted here.** PR #9 carries the update-feed fix, the workflow trigger fixes, the
+rewritten `docs/RELEASING.md`, and two CI fixes (`multimarkdown`, `network_test`). **Do not merge
+until CI is green.** No CHANGELOG entry for the CI work: nothing in the shipped application
+changed.
+
 ## 2026-08-13 — Update feed pointed at another fork; Phase 5 surveyed (v3.0.0-revived.16)
 
 **The bug.** `AppController.mm:497` set the software-update feed to

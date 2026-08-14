@@ -59,10 +59,18 @@ jobs:
           #             between macOS 14.5 (runner SDK) and macOS 26 (local).
           #
           # Fixed list, not discovered: the `.rave` files this used to be grepped from are
-          # gone (Phase 2 Task 8). This is the 20 CI-included test targets from the 26-target
-          # parity baseline (docs/benchmarks/2026-08-12-ninja-parity.md) -- add a new
-          # framework's `<name>_test` target here by hand if it ships tests.
-          TESTS="authorization_test bundles_test BundlesManager_test document_test encoding_test FileBrowser_test HTMLOutput_test io_test network_test ns_test parse_test plist_test regexp_test scm_test scope_test selection_test settings_test SoftwareUpdate_test text_test theme_test"
+          # gone (Phase 2 Task 8). This is the 19 CI-included test targets from the parity
+          # baseline (docs/benchmarks/2026-08-12-ninja-parity.md) -- add a new framework's
+          # `<name>_test` target here by hand if it ships tests.
+          #
+          # network_test was removed from this list on 2026-08-14: the framework was deleted
+          # in 42e674ce ("build!: delete the dead network framework"), so xcodebuild aborted
+          # the whole job with "does not contain a target named 'network_test'" before
+          # reaching the targets after it alphabetically. The parity document already records
+          # the resulting 26 -> 25 drop; this list had simply never been updated, and could
+          # not fail visibly while the workflow was triggering on a branch that does not
+          # exist here.
+          TESTS="authorization_test bundles_test BundlesManager_test document_test encoding_test FileBrowser_test HTMLOutput_test io_test ns_test parse_test plist_test regexp_test scm_test scope_test selection_test settings_test SoftwareUpdate_test text_test theme_test"
           echo "Running tests: $TESTS"
           FAIL=0
           for t in $TESTS; do
