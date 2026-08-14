@@ -4,6 +4,58 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Update feed pointed at another fork; Phase 5 surveyed (v3.0.0-revived.16)
+
+**The bug.** `AppController.mm:497` set the software-update feed to
+`https://github.com/textmatelives/textmate.git/info/refs?service=git-upload-pack`.
+`OakUpdateAssetURLForVersion` derives the download URL from that same host and path, so the
+updater checked a third party's tags and would have offered their release assets. Same class of
+problem as the bundle pins, found by sweeping for `textmatelives` after fixing those.
+
+It **failed safe** rather than dangerously: `OakDownloadManager` validates the extracted bundle's
+Developer ID against the installed app's Team Identifier, so a foreign build would have been
+rejected. But updates could never succeed, and version comparison ran against someone else's tags.
+Now points at `sdenike/textmate`, with a comment saying it must track whatever repository we sign
+releases in.
+
+Also repointed the About window's feedback link and the Contributions page's commit/tree links,
+which sent users to that other project. The `commits/main` link also had the wrong branch for this
+repository.
+
+**Phase 5 is much further along than the roadmap suggests.** Survey findings:
+
+- `.github/workflows/release.yml` already does the whole chain: imports a Developer ID cert from
+  secrets into a temporary keychain, builds signed, re-signs every embedded Mach-O with
+  `--options runtime --timestamp`, re-seals nested bundles (`.tmplugin`, `.framework`,
+  `.qlgenerator`, `.appex`), substitutes `CS_GET_TASK_ALLOW=false`, notarizes via `notarytool`,
+  staples with a retry loop, and verifies with `spctl`.
+- `SoftwareUpdate` already targets GitHub Releases and verifies Developer ID by Team Identifier.
+- `ENABLE_HARDENED_RUNTIME = YES`; entitlements exist for the app and `mate`.
+- A valid **Developer ID Application: Shelby Denike (485WH9DHS4)** identity is present locally.
+
+**What actually blocks a release — configuration, not code:**
+
+1. **No GitHub secrets are set.** `gh secret list --repo sdenike/textmate` returns empty with
+   exit 0, so this is a real empty list, not a permissions failure. `release.yml` needs
+   `MAC_CERTIFICATE_P12`, `MAC_CERTIFICATE_PWD`, and the notarization Apple ID / team ID /
+   app-specific password.
+2. **`release.yml` has never run** — `gh run list --workflow=release.yml` is empty.
+3. `Base.xcconfig` sets `CODE_SIGN_IDENTITY = -` (ad-hoc) and no `DEVELOPMENT_TEAM`, which is
+   correct for local builds but means only CI produces a signed app.
+
+These are the maintainer's to supply — a `.p12` and notarization credentials cannot and should not
+be uploaded on their behalf.
+
+**Sizing the remaining bundle work properly.** The sweep also showed the bundle catalogue is far
+larger than the earlier "13 bundles" framing: `AvailableBundles.plist` has **108 entries, every one
+pointing at `textmatelives`**, and `DefaultBundles.plist` has **41** — the set a fresh install
+pulls automatically. So a first launch still fetches 41 bundles from a third party. That is the
+real scope of the deferred bundle phase, and it is much bigger than the 13 bundles with broken
+shebangs.
+
+**If interrupted here.** Changes committed on `fix/update-feed-points-at-fork`; PR opened. Nothing
+deployed as .16 yet.
+
 ## 2026-08-13 — Own bundle forks created; ruby18 shim ships (v3.0.0-revived.15)
 
 **What.** Forked the four mandatory bundles under `sdenike`, repointed `MandatoryBundles.h`,

@@ -91,7 +91,7 @@ class GitHubLookup
     http.use_ssl = true
 
     request = Net::HTTP::Get.new(uri.request_uri, {
-      'User-Agent' => 'textmatelives-build',
+      'User-Agent' => 'textmate-revived-build',
       'Accept'     => 'application/vnd.github+json'
     })
     request['Authorization'] = "Bearer #{ENV['GITHUB_TOKEN']}" if ENV['GITHUB_TOKEN'] && !ENV['GITHUB_TOKEN'].empty?
