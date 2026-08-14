@@ -129,21 +129,54 @@ The `REST_API` macro and its `api.textmate.org` source were removed in PR #9; bu
 ### KNOWN GAP — bundles are not covered by the Ruby 2.6 constraint
 
 The fork's "zero traces of Ruby 1.8" rule currently stops at the app boundary, and bundles are
-where Ruby actually executes. As of 2026-08-13 the 54 installed bundles contain **27 files**
-matching Ruby 1.8 markers (`$KCODE`, `require 'jcode'`, 1.8 shebangs) across Ruby, YAML, Java,
-Perl, Lua, Gist, Markdown and HTML. That number is un-triaged: some are genuine breakage
-(`$KCODE` and `require 'jcode'` raise under Ruby 2.6), while others are intentional content —
-`Bundle Development.tmbundle/Snippets/Ruby 1_8 Shebang.tmSnippet` is a template *for inserting* a
-1.8 shebang, not broken code.
+where Ruby actually executes. Triaged 2026-08-13 across the 54 installed bundles. Every verdict
+below was checked by running the construct against the real system Ruby (2.6.10p210), not
+inferred.
 
-Three separable pieces of work, **scheduled before Phase 5** because Phase 5 is what makes builds
-public — a signed, notarized app that pulls stock 1.8 bundles hands the bug to real users:
+**The dominant problem is a shebang, not a language feature.** 24 files across 13 bundles begin
+`#!/usr/bin/env ruby18`. There is no `ruby18` on `PATH` and **no `ruby18` shim** in
+`bundle-support.tmbundle/Support/shared/bin/` (it ships `ruby` only), so every one of them dies at
+`env: ruby18: No such file or directory` before a line of Ruby runs. The `${TM_RUBY:-/usr/bin/ruby}`
+shim does not save these — they name a different interpreter.
 
-1. **Triage** — classify all 27 hits as breakage / template / dead test fixture. Sizes the rest.
-2. **Fork and port** — fork whichever bundles genuinely break, port them, and decide the same for
-   `themes.tmbundle`, still on upstream.
-3. **Delivery and sync** — repoint `AvailableBundles.plist` at forked repositories so a downloaded
-   build cannot silently pull stock 1.8 bundles; document an upstream re-merge path; fix or delete
-   `reset_bundles.sh`'s dead paths.
+| Bundle | Broken files | Bundle | Broken files |
+|---|---|---|---|
+| Java | 4 | Markdown | 1 |
+| Python (templates) | 4 | Ruby | 1 |
+| YAML | 3 | Source | 1 |
+| Active4D | 2 | Groovy | 1 |
+| Lua | 2 | HTML | 1 |
+| Perl | 2 | Cron | 1 |
+| Gist | 1 | | |
+
+The Python entries are `Templates/*/info.plist` whose `<key>command</key>` *is* the `ruby18`
+script, so creating a new Python file from a template fails. Two further hits are **not**
+breakage: `Ruby.tmbundle/Tests/rubylexer/regtest.rb` is a test fixture, and
+`Bundle Development.tmbundle/Snippets/Ruby 1_8 Shebang.tmSnippet` is a snippet whose `<key>content</key>`
+inserts a 1.8 shebang — intentional, though a fork that bans 1.8 arguably should not ship a
+shortcut for writing one.
+
+**Library and API breakage, separate from the shebangs** (these sets overlap the table above — do
+not sum them). Confirmed fatal under 2.6.10: `require 'iconv'` and `require 'parsedate'` both
+`cannot load such file` (3 files, 1 file); `Config::CONFIG` and `TimeoutError` both raise
+`NameError` (1 file, 3 files); `Object#type` raises `NoMethodError` (~5 files). A `String#each`
+pattern matches ~19 files, but that regex also catches `Array#each` and `IO#each`, which are fine
+— treat 5 and 19 as upper bounds needing per-file confirmation, not counts.
+
+**Confirmed harmless** — deprecation warning only, code still runs: `Fixnum`/`Bignum` (11 files),
+`Hash#index` (18 files). **Confirmed absent entirely**: `$KCODE`, `require 'jcode'`, `ftools`,
+`generator`, `soap`. An earlier note in this file claimed `$KCODE` and `jcode` were the real
+breakage; that was wrong, and neither appears anywhere in the installed bundles.
+
+Remaining work, **scheduled before Phase 5** because Phase 5 is what makes builds public — a
+signed, notarized app that pulls stock 1.8 bundles hands the bug to real users:
+
+1. **Fix the shebangs** — 24 files, 13 bundles. Mechanical, and it is most of the problem.
+2. **Fix the library calls** — confirm the `Object#type` and `String#each` hits per file, then port
+   `iconv`, `parsedate`, `Config::CONFIG` and `TimeoutError`.
+3. **Fork and repoint** — fork whichever bundles get changed, decide the same for
+   `themes.tmbundle` (still upstream), point `AvailableBundles.plist` at the forks so a downloaded
+   build cannot silently pull stock 1.8 bundles, document an upstream re-merge path, and fix or
+   delete `reset_bundles.sh`'s dead paths.
 
 Ruby in bundles resolves through `${TM_RUBY:-/usr/bin/ruby}` via `Support/shared/bin/ruby` in the forked `bundle-support.tmbundle`. `TM_RUBY` is the long-standing override hook — do not introduce a new Ruby discovery scheme.
