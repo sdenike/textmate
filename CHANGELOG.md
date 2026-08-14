@@ -2,6 +2,103 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.13)
+
+The privileged helper that lets you open or save a file you don't own (a
+root-owned config file, for instance) now carries this project's identity too,
+and the credits and licensing pages have been brought in line with what this
+fork actually ships.
+
+### Changed
+
+* The background helper's launchd job name, install path, socket, LaunchDaemon
+  plist, and authorization right are now all `com.shelbydenike.*` instead of
+  `com.macromates.*`. This is a real, actively used feature — not leftover
+  code — reached any time you try to open or save a file you don't have
+  permission to write.
+* The copyright line in Get Info now keeps MacroMates' notice and adds this
+  fork's alongside it, rather than replacing it.
+* The Legal page drops Boost and sparsehash, which this fork no longer uses,
+  and documents the Dialog and Dialog2 plug-ins now vendored directly into the
+  repository, with their provenance recorded per plug-in.
+* The README states plainly that this is an unaffiliated, community-maintained
+  fork, not endorsed by or affiliated with MacroMates or Allan Odgaard, and
+  licensed under GPLv3 like upstream.
+
+### Fixed
+
+* The copyright line in Get Info showed a literal `${YEAR}` instead of the
+  current year, in the application and in both Dialog plug-ins. The build
+  picked each resource's transform by file extension, and `.strings` files
+  went straight to the UTF-16 transcode step without passing through variable
+  expansion first. Long-standing; not new in this release.
+
+### Note
+
+* Because the authorization right is renamed, macOS will ask you to approve it
+  again the first time you use this feature after updating, even if you'd
+  approved the old one before.
+* A machine that also has an official TextMate install may still have
+  `/Library/LaunchDaemons/com.macromates.auth_server.plist` registered. This
+  release does not touch it — it isn't necessarily ours to remove, and this
+  app no longer uses it once updated.
+
+## 2026-08-13 (v3.0.0-revived.12)
+
+### Changed
+
+* The two bundled Dialog plug-ins now carry this project's identifiers and live
+  directly in the repository rather than as links to unmaintained upstream
+  repositories. Their origin — repository and exact revision — is recorded
+  alongside them, and the original copyright notices are unchanged.
+
+Cloning the project now pulls four external components instead of six.
+
+## 2026-08-13 (v3.0.0-revived.11)
+
+The application now has its own identity, separate from the original TextMate.
+
+### Changed
+
+* The app's internal identifier is now `com.shelbydenike.TextMate`. Your
+  settings carried over automatically via the migration shipped in the previous
+  release — nothing to do.
+* Your original settings are left in place untouched, so an older build can
+  still be installed if needed.
+
+### Deliberately unchanged
+
+Three things kept the original naming on purpose, because changing them would
+break your existing data or files elsewhere on your Mac:
+
+* **Bookmarks and code folds** are stored as extended attributes on the files
+  themselves. Renaming those would orphan every bookmark and fold in every file
+  you have ever opened.
+* **Document type identifiers**, which every installed bundle references.
+* **`txmt://` links**, which external tools and existing links rely on.
+
+Bundles, themes, and gems live in a folder named for the app rather than its
+identifier, so they were never affected.
+
+## 2026-08-13 (v3.0.0-revived.10)
+
+Groundwork for the identity change. **No visible difference in this release** —
+that is the point.
+
+### Added
+
+* A one-time settings migration that runs at launch. The next release changes
+  the application's internal identifier, and macOS keys your preferences to
+  that identifier — theme, font, window layout, file browser state, recent
+  documents. Without this, all of it would silently revert to defaults and the
+  app would look freshly installed.
+
+The migration ships one release *ahead* of the rename deliberately, so the code
+has already run on real machines against the real settings before anything
+depends on it. It copies only what is missing, never overwrites a newer value,
+runs exactly once, and leaves the original settings untouched so an install can
+be rolled back.
+
 ## 2026-08-13 (v3.0.0-revived.9)
 
 The dependency purge is done — this build links nothing that isn't part of Xcode itself.

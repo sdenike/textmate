@@ -4,6 +4,7 @@
 #import <io/path.h>
 #import <text/format.h>
 #import <crash/info.h>
+#import "PreferencesMigration.h"
 
 static void sig_int_handler (void* unused)
 {
@@ -48,6 +49,13 @@ static void increase_max_open_files (rlim_t required = 2048)
 
 int main (int argc, char const* argv[])
 {
+	// Must run before anything -- including oak::application_t below --
+	// touches NSUserDefaults.standardUserDefaults: a default read before
+	// migration runs sees the unmigrated (pre-rename) value.
+	@autoreleasepool {
+		MigrateLegacyPreferencesIfNeeded();
+	}
+
 	oak::application_t::set_support(path::join(path::home(), "Library/Application Support/TextMate"));
 	oak::application_t app(argc, argv);
 

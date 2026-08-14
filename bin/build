@@ -13,7 +13,7 @@
 #    That reads like a broken build; it is a leaked shell environment.
 #
 # 2. bin/gen_credits.rb opens a DBM cache at
-#    ~/Library/Caches/com.macromates.TextMate/githubcredits.db
+#    ~/Library/Caches/com.shelbydenike.TextMate/githubcredits.db
 #    If an earlier build ever ran under sudo, that file is root-owned and
 #    DBM.new fails with EACCES even though the directory is yours. Deleting it
 #    needs write permission on the directory, not the file, so no sudo is
@@ -27,7 +27,7 @@
 #                               # `ninja <framework>/test`)
 set -euo pipefail
 
-CACHE="$HOME/Library/Caches/com.macromates.TextMate/githubcredits.db"
+CACHE="$HOME/Library/Caches/com.shelbydenike.TextMate/githubcredits.db"
 if [ -e "$CACHE" ] && [ ! -O "$CACHE" ]; then
 	echo "build: clearing foreign-owned credits cache at $CACHE" >&2
 	rm -f "$CACHE" || {

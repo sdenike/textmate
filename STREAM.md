@@ -4,6 +4,598 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — KNOWN GAP logged: bundles are outside the Ruby 2.6 constraint
+
+**Why this came up.** After the Phase 4 PR opened, the question was whether the plan needs to
+cover updating the bundles too. It does. Logged as a known gap rather than planned in detail —
+recorded here and in `CLAUDE.md`'s "Bundle delivery" section, **scheduled before Phase 5**.
+
+**Why before Phase 5.** Phase 5 is Developer ID signing, notarization and public releases. That is
+the point at which builds reach people who are not us. A signed, notarized app that pulls stock
+Ruby 1.8 bundles ships the bug to real users; fixing it while distribution is still local is far
+cheaper.
+
+**What the audit found.**
+
+- Only **three** bundles are forked: `MandatoryBundles.h` pins
+  `textmatelives/{bundle-support,text,source}.tmbundle`. A fourth mandatory bundle,
+  `themes.tmbundle` (`MandatoryBundles.h:53`), still points at **upstream `textmate/`**.
+- Everything else — roughly 50 bundles — is fetched stock via
+  `https://codeload.github.com/%@/%@/tar.gz/%@` (`BundleFetcher.mm:65`) from whatever
+  `AvailableBundles.plist` names.
+- **27 installed files** match Ruby 1.8 markers (`$KCODE`, `require 'jcode'`, 1.8 shebangs) across
+  Ruby, YAML, Java, Perl, Lua, Gist, Markdown, HTML. Un-triaged on purpose: `$KCODE` and
+  `require 'jcode'` genuinely raise under Ruby 2.6, but
+  `Bundle Development.tmbundle/Snippets/Ruby 1_8 Shebang.tmSnippet` is a template *for inserting* a
+  1.8 shebang — intentional content. The 27 is a search hit count, not a defect count.
+
+**Correction to a stale doc claim.** `CLAUDE.md` said local dev wires bundles in via symlinks from
+`~/src/github.com/textmatelives/bundles/`. Those repositories **do not exist on this machine**, so
+`bin/reset_bundles.sh` is inoperative here — the 54 entries in `Managed/Bundles/` are real
+directories downloaded via codeload, not symlinks. Corrected in `CLAUDE.md`.
+
+**Shape of the eventual work** (triage first — it is the only piece whose cost is known, and it
+sizes the other two): triage the 27 hits; fork and port whichever bundles genuinely break, and
+decide `themes.tmbundle`'s fate; then repoint `AvailableBundles.plist` at forked repositories,
+document an upstream re-merge path, and fix or delete `reset_bundles.sh`'s dead paths.
+
+**If interrupted here.** Nothing is in flight. The gap is documented in `CLAUDE.md` and here; no
+plan document has been written and no bundle has been touched.
+
+## 2026-08-13 — Phase 4 Task 4 VERIFIED; `${YEAR}` copyright bug found and fixed
+
+**What.** Built `c0c327c0` (Task 4) and `8bc1a8f9` (Task 3) and ran the full test suite against
+them. Both verify clean. Found and fixed a separate, long-standing bug in the resource pipeline
+while checking Task 4's own output.
+
+**Verification result.** Build SUCCEEDED. App identity `com.shelbydenike.TextMate`,
+`CFBundleName` `TextMate`, version `3.0.0-revived.13` (extracted from `CHANGELOG.md` by
+`assemble_resources.sh`'s `app_version()`, so bumping the changelog heading *is* the version
+bump — there is no separate `MARKETING_VERSION` to edit).
+
+**25 of 25 baseline targets match `docs/benchmarks/2026-08-12-ninja-parity.md` exactly**, with
+the four known-bad reproducing identically: `scm` 2/84 (no `hg`/`svn` on this machine), `buffer`
+3/26 (misspellings), `file` 1/11 (iconv TRANSLIT), `cf` SIGBUS exit 138. `authorization` — the
+only target that covers Task 3's actual code change — passes. `Onigmo_test` and `TextMate_test`
+also pass. The prior handoff's "25 test targets" and the parity doc's 26-row table are
+reconciled: `network_test` was deleted in `42e674ce` ("build!: delete the dead network
+framework"), which the parity doc's own closing line already records.
+
+**The `${YEAR}` bug.** The shipped `NSHumanReadableCopyright` read a literal
+`© MacroMates Ltd., 2004-${YEAR}`. Cause: `assemble_resources.sh` dispatched each resource to a
+transform by file extension, and `.strings` went straight to `utf16.sh` (transcode only) while
+only `Info.plist` files went through `expand_plist.sh` (which is what passes
+`-dYEAR="$(date +%Y)"`). Nothing ever substituted the variable. Fixed by adding an
+`expand_utf16()` helper that expands and then transcodes, used at both `.strings` call sites.
+This also fixed the same latent bug in both Dialog plug-ins, which now read `2005-2026` and
+`2008-2026`. Pre-existing, not caused by Task 4 — the installed v.12 build has it too — but it
+is a defect in exactly what Task 4 was auditing, so it was fixed here rather than deferred.
+
+The fork's own notice renders `2026-2026` this year. Maintainer chose to keep the
+`2026-${YEAR}` range: it self-corrects in January and needs no future code change.
+
+**Also fixed.** `CLAUDE.md` claimed this repository is `textmatelives/textmate`. It is not —
+`origin` is `git@github.com:sdenike/textmate.git`, and `textmatelives` is a separate remote this
+fork merges *from*. That stale line is what sent Task 4's first pass at `Legal.md` to the wrong
+URLs. Corrected, with a note that shipped docs must link to `sdenike/textmate`.
+
+**Deployed and exit criteria met.** `bin/deploy-local` installed v3.0.0-revived.13 over .12.
+All eight criteria in `docs/superpowers/plans/2026-08-13-phase-4-identity.md:106-113` check out
+against the *installed* build, not the build tree:
+
+- Identifiers: app `com.shelbydenike.TextMate`; `com.shelbydenike.plugin.Dialog` and `.Dialog2`;
+  `com.shelbydenike.TextMateQL`; helper `com.shelbydenike.auth_server`, `.plist`, `.sock`.
+- Settings carried over: 64 keys in the `com.shelbydenike.TextMate` domain.
+- Bookmarks/folds: xattr names in `OakDocument.mm` still `com.macromates.*`, unchanged.
+- Bundles load: `~/Library/Caches/com.shelbydenike.TextMate/BundlesIndex.binary` and
+  `~/Library/Application Support/TextMate/Bundles.plist` were both rewritten at launch, 54
+  bundles on disk, nothing bundle-related in the log. (`lsof` shows no open `.tmbundle` handles,
+  which is expected — they are parsed into memory and closed, so that is not counter-evidence.)
+- 38 `com.macromates.textmate.*` UTIs intact; `txmt` URL scheme registered.
+- `mate` and `txmt://open?url=…` both opened a file in the running app, confirmed by `lsof`
+  showing the process holding it — exit 0 alone would not have proved the document appeared.
+- No crash reports; the process survived both open paths.
+
+**Pushed, PR open.** Branch `phase-4/identity` pushed to `origin` (14 commits ahead of master).
+PR: https://github.com/sdenike/textmate/pull/6
+
+Note for future sessions: `gh pr create` fails on this machine with
+`GraphQL: Resource not accessible by personal access token (createPullRequest)` — the `gh` token
+lacks PR write scope. The GitHub MCP server authenticates separately and works; use it instead of
+re-authenticating `gh`.
+
+**If interrupted here.** The PR is open and unmerged. Remaining: merge it, then Phase 5
+(Developer ID signing, notarization, in-app updates from GitHub Releases).
+
+## 2026-08-13 — SESSION HANDOFF: Phase 4 nearly complete, Task 4 unverified
+
+**Read this first on resume.** Everything below is committed; nothing is in the working tree.
+
+### Exact state
+
+- Branch `phase-4/identity`, **12 commits ahead of master**, working tree clean, **not pushed, no PR**.
+- Installed: `/Applications/TextMate.app` — `com.shelbydenike.TextMate`, name `TextMate`,
+  **v3.0.0-revived.12**. One app on the machine; no duplicates.
+- Submodules: **4** (`Applications/TextMate/icons`, `bin/CxxTest`, `vendor/Onigmo/vendor`,
+  `vendor/kvdb/vendor`). Dialog and Dialog2 were vendored, dropping 2.
+- Phases 0, 1, 2, 3 are merged to master. Phase 4 is this branch.
+
+### Phase 4 task status
+
+| Task | State |
+|---|---|
+| 1 — preferences migration | **done**, verified against real data (37/37 keys), released as v3.0.0-revived.10 |
+| 2 — bundle identifiers | **done**, migration fired for real, `mate` verified working, released as .11 |
+| 2b — vendor Dialog plug-ins | **done**, provenance recorded, fresh-clone build verified, released as .12 |
+| 3 — privileged helper | **done** (`8bc1a8f9`) — helper is LIVE (wired into the document open/save path for permission-restricted files), so kept not deleted; all five identifiers moved as one unit since they cross-reference at runtime |
+| 4 — attribution and credits | **COMMITTED BUT UNVERIFIED** (`c0c327c0`) |
+
+### The one thing that needs doing on resume
+
+`c0c327c0` landed mid-task when the session was interrupted. It has **not been built** and the
+**25 test targets have not been re-run against it**. Do that first.
+
+What it contains: README's unaffiliated-fork + GPLv3 notice; `Legal.md` with boost and sparsehash
+removed (both deleted in Phase 3) and the vendored Dialog plug-ins documented;
+`NSHumanReadableCopyright` keeping MacroMates' notice and adding ours alongside — not instead of.
+I also corrected its new `Legal.md` links, which pointed at `textmatelives/textmate` rather than
+this repository.
+
+Task 3 also has **no release of its own** — the identifier rename it performed has not been built,
+deployed, or changelogged.
+
+### Then, to close Phase 4
+
+1. Build, run the 25 targets against `docs/benchmarks/2026-08-12-ninja-parity.md`.
+2. Release v3.0.0-revived.13 covering Tasks 3 and 4; deploy; verify.
+3. Check Phase 4 exit criteria in the plan — notably that bundles still load, `txmt://` still
+   opens, and bookmarks/folds on existing files still work.
+4. Push, open a PR, merge.
+
+### Standing constraints that must not be forgotten
+
+- **Never rename these** — they are on-disk format written into the user's own files, and share
+  files with things that DO change: extended attributes in `OakDocument.mm`
+  (`com.macromates.bookmarks`, `.folded`, `.crc32`, `.selectionRange`, `.visibleIndex`,
+  `.backup.*`), the 38 `com.macromates.textmate.*` UTIs in `Applications/TextMate/Info.plist`,
+  and the `txmt://` URL scheme.
+- `CFBundleName` stays `TextMate` — the user asked the menu bar not read "TextMate Revived". The
+  version string identifies the build.
+- After each task: build, bump version, update changelog, deploy, verify.
+- `bin/deploy-local` moves rather than copies, and refuses on identifier mismatch. That guard is
+  correct behaviour, not a bug.
+- Do NOT launch the app via `osascript` polling — it hangs on an Automation permission prompt.
+- Build output goes to `~/build/textmate-revived/xcode`; never `/tmp`.
+- A stale `com.macromates.auth_server` LaunchDaemon may exist from the pre-rename build. It was
+  deliberately NOT removed — the official TextMate installs the same one, so on a machine with
+  both it may not be ours to delete.
+
+### Remaining phases
+
+5 (Developer ID signing, notarization, in-app updates from GitHub Releases) · 5a (central
+`sdenike/homebrew-tap`, migrate `hidden-revived` onto it) · 6 (Liquid Glass + PR #1469's UI work)
+· 7 (performance) · 8 (shared modules) · 9 (optional LSP).
+
+Of the three upstream forks, only textmatelives is merged. PR #1469's UI work lands in Phase 6;
+tectiv3's remaining work is Phase 9.
+
+
+## 2026-08-13 — Phase 4 Task 3: privileged helper renamed, not deleted
+
+**What:** Investigated `Applications/PrivilegedTool` and `Frameworks/authorization` before
+touching either (plan's file reference, `Applications/PrivilegedTool/src/constants.h`, was
+off by one directory -- the actual `kAuth*` macros live in
+`Frameworks/authorization/src/constants.h`; content matches the plan's description exactly,
+just relocated). Traced real callers: `Frameworks/file/src/open.cc` and `save.cc`
+(`kFileTestWritableByRoot` / `obtain_authorization`), `Frameworks/document/src/OakDocument.mm`
+(the actual document save/open pipeline), and `Applications/mate/src/mate.mm` (the `mate` CLI's
+`authorization` field) all wire into it live. This is the "open/save a file you don't own"
+flow -- e.g. editing `/etc/hosts` -- reachable from both the GUI (an NSAlert offers to
+authenticate) and the command line, not dead code like `CrashReporter` was in Phase 3.
+`connect_to_auth_server` (`Frameworks/authorization/src/server.cc`) self-installs the tool via
+`AuthorizationExecuteWithPrivileges` the first time it's needed, so there's no separate "does
+the app install it" step to find -- first use *is* the install.
+
+**Decision: keep it, rename all five identifiers.** Changed
+`Frameworks/authorization/src/constants.h`'s `kAuthJobName`, `kAuthToolPath`, `kAuthSocketPath`,
+`kAuthPlistPath`, `kAuthRightName` from `com.macromates.*` to `com.shelbydenike.*`. Confirmed by
+grep this is the only file in either directory mentioning "macromates" -- the launchd plist and
+authorization-right registration are both generated at runtime from these macros
+(`Applications/PrivilegedTool/src/install.cc`), nothing else to update.
+
+**Stale daemon: found one on this machine, left it alone, with evidence.**
+`/Library/LaunchDaemons/com.macromates.auth_server.plist` and
+`/Library/PrivilegedHelperTools/com.macromates.auth_server` exist here (`launchctl print
+system/com.macromates.auth_server` confirms it's loaded, on-demand, not running). File
+timestamps -- Oct 2021 and May 2024 -- predate this fork's existence entirely (versioning
+starts at `3.0.0-revived` in 2026), so this is almost certainly an official MacroMates
+TextMate install's own helper, not a prior build of this fork. Per the plan's explicit caution
+("the official TextMate installs the same one... may not be ours to delete"), left it
+untouched -- no `sudo`, no `launchctl unload`, no file removal. Recorded in CHANGELOG.md so a
+user knows why it's still there and that this build no longer uses it.
+
+**Authorization right:** renamed along with the rest (`com.shelbydenike.textmate.openfile`).
+Deliberate, not incidental -- leaving it as `com.macromates.textmate.openfile` while renaming
+the other four would mean this fork's binary silently reuses a right the user may have already
+approved for the official app, without a fresh admin prompt tied to our own tool. Noted in
+CHANGELOG.md that re-approval is expected on first use.
+
+**Verification:** `./bin/build TextMate` -- `BUILD SUCCEEDED`. All 25 baseline test targets
+individually (`./bin/build <name>/test`): 21 pass, `scm`/`buffer`/`file`/`cf` fail/crash for the
+identical documented reasons in `docs/benchmarks/2026-08-12-ninja-parity.md`; `command` hit the
+doc's own documented batching artifact when run 23rd of 25 in one loop, re-ran alone and it
+passed in ~1.8s clean -- 25/25 match, no regression. Confirmed in the built app itself, not just
+source: `strings TextMate.app/Contents/Resources/PrivilegedTool` shows all five
+`com.shelbydenike.*` strings and zero `com.macromates` occurrences. Did not deploy to
+`/Applications`, launch the app, or exercise the actual save-as-root flow -- doing so would
+attempt the tool's self-install path (`AuthorizationExecuteWithPrivileges`, an admin prompt),
+which the task forbids running.
+
+**Why:** The helper is a real, live feature (permission-restricted file open/save), unlike
+`CrashReporter`'s Phase 3 dead code -- evidence-based, not assumed. Identity must stay
+consistent across all five values together since they cross-reference each other (job name in
+the plist, socket path the daemon binds and the client connects to, right name both sides
+check) -- renaming four and not the fifth would silently misbehave rather than fail loudly.
+
+### If interrupted here
+
+Task 3 committed. Task 4 (attribution/credits) next: README's fork disclaimer, Legal.md's
+boost/sparsehash removal + Dialog/Dialog2 credit, `Contributions.md`'s stale
+`com.macromates.TextMate` credits-cache path (a real bug found mid-task -- Task 2 renamed
+`bin/gen_credits.rb`'s own dead `__END__` template but missed the live consumer,
+`Applications/TextMate/about/Contributions.md`, which actually renders in the About window),
+and the `NSHumanReadableCopyright` dual-copyright line, all already edited on disk pending
+their own build/test verification and commit.
+
+## 2026-08-13 — Phase 4 Task 2b: build, 25-target parity, and fresh-clone verification, all green
+
+**What:** `./bin/build TextMate` -- `BUILD SUCCEEDED`. Ran all 25 baseline test targets
+individually (`./bin/build <name>/test`, matching the doc's own per-target methodology) against
+`docs/benchmarks/2026-08-12-ninja-parity.md`: **25/25 match exactly**. 21 pass; `scm` fails the
+same documented `2 of 84` (hg/svn absent locally, identical message); `buffer` fails the same
+documented `3 of 26` (identical three `t_buffer.mm` misspellings assertions, same lines); `file`
+fails the same documented `1 of 11` (identical `t_save.cc:113` iconv TRANSLIT assertion); `cf`
+crashes the same documented SIGBUS/exit 138, no summary printed. `command` reproduced the doc's
+own noted batching artifact when run as target 23 of 25 in one long loop (looked hung, killed by
+a `timeout 180` guard); re-ran it alone immediately after and it built and passed in about a
+second with clean exit 0, exactly as the doc's own methodology predicts and as Task 2's build
+already found for the same target. `editor` passed cleanly within the batch, no artifact this
+run.
+
+Verified `TMPlugInController.mm`'s plug-in loading is identifier-agnostic (see previous entry),
+so no code change was needed there -- confirmed again post-build by checking the two identifiers
+the running app's built bundle actually carries (below), which is what `loadPlugInAtPath:` reads
+at runtime.
+
+Both plug-ins confirmed in the built app: `TextMate.app/Contents/PlugIns/Dialog.tmplugin` and
+`Dialog2.tmplugin` present, `CFBundleIdentifier` reads `com.shelbydenike.plugin.Dialog` and
+`com.shelbydenike.plugin.Dialog2` respectively (`PlistBuddy`, not a grep of source).
+
+**Fresh-clone proof, the check that actually matters here:** `git clone --recursive` of this
+local repository (branch `phase-4/identity`, both new commits included) into a `mktemp -d` temp
+directory. Confirmed before building: `git submodule status` inside the clone shows exactly the
+4 real submodules (icons, CxxTest, Onigmo, kvdb) -- neither dialog path listed, nothing to fetch
+from `github.com/textmate/dialog*` -- and both `PlugIns/dialog*/PROVENANCE.md` plus the renamed
+`Info.plist` identifiers are present as ordinary files in the clone. `./bin/build TextMate` in
+that clone: `BUILD SUCCEEDED`, both `.tmplugin` bundles present with the correct
+`com.shelbydenike.plugin.*` identifiers -- proof a party who only has this git history, not this
+machine's working tree, gets a working build. Temp clone then deleted (`rm -rf`).
+
+**One deliberate wrinkle, handled:** `Xcode/Base.xcconfig` pins `SYMROOT`/`OBJROOT` to the fixed
+absolute path `$(HOME)/build/textmate-revived/xcode` (Phase 2 Task 6, to keep build output out of
+Spotlight) -- not relative to `$(SRCROOT)`, so the temp clone's build shared and briefly
+overwrote the same output directory the main tree's own verified build lived in, rather than
+writing somewhere self-contained under the temp directory. Source compilation itself was still
+correctly isolated (each tree's own `$(SRCROOT)`-relative files), so this doesn't weaken the
+fresh-clone proof, but to leave the shared build directory in a known-good state sourced from the
+real working tree (not a now-deleted temp path) rather than /tmp, re-ran `./bin/build TextMate`
+against the main tree once more after deleting the clone and re-verified both identifiers again
+against that final rebuild -- shown above.
+
+**Why:** This is the verification bar for Task 2b: proof, not assumption, that a party who never
+had this machine's working tree -- a fresh clone or CI -- gets a repository that no longer
+depends on the two unforked upstream submodules being reachable, builds clean, and ships both
+plug-ins under the new identity.
+
+### If interrupted here
+
+Task 2b is complete: both plug-ins vendored (commit `0d1a7e6e`), both identifiers renamed
+(commit `fce08a2c`), build verified, 25/25 test parity verified, fresh-clone build verified, temp
+clone deleted, main tree's build directory restored and re-verified. `git status --porcelain`
+clean except this STREAM.md entry, about to be committed. Nothing else queued for Task 2b. Next:
+per the Phase 4 plan, Task 3 (the privileged helper) or Task 4 (attribution/credits).
+
+## 2026-08-13 — Phase 4 Task 2b: Dialog/Dialog2 plug-in identifiers renamed
+
+**What:** Changed `CFBundleIdentifier` in `PlugIns/dialog/Info.plist:16` and
+`PlugIns/dialog-1.x/Info.plist:16` from `com.macromates.plugin.${TARGET_NAME}` to
+`com.shelbydenike.plugin.${TARGET_NAME}` -- a 1-line change in each, now possible because the
+previous commit vendored both out of their submodules. Confirmed no other file in the tree
+references `com.macromates.plugin` (repo-wide grep, clean). Read
+`Applications/TextMate/src/TMPlugInController.mm` in full: plug-in discovery
+(`loadAllPlugIns:`) scans `NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory,
+...)` plus the app's own `builtInPlugInsPath` for `*.tmplugin` bundles by file extension, not by
+identifier; `loadPlugInAtPath:` then reads `CFBundleIdentifier` back out of each bundle's own
+`Info.plist` at runtime (`[bundle objectForInfoDictionaryKey:@"CFBundleIdentifier"]`) and uses it
+only as (a) a dictionary key in `loadedPlugIns` to detect double-loads and (b) a lookup against
+the user's `disabledPlugIns` defaults array, which defaults to `@[ @"io.emmet.EmmetTextmate" ]`
+only -- nothing hardcodes `com.macromates.plugin.*` anywhere. Loading is identifier-agnostic by
+construction; this rename cannot break it.
+
+**Why:** Completes the rename Task 2 had to leave blocked -- both plug-ins now carry the same
+`com.shelbydenike.*` identity as the rest of the app.
+
+### If interrupted here
+
+Committed. Next: `./bin/build`, the 25-target parity check against
+`docs/benchmarks/2026-08-12-ninja-parity.md`, confirm both `.tmplugin` bundles land in the built
+`TextMate.app` with the new identifier, then a fresh `git clone --recursive` into a temp
+directory to prove a clean checkout builds without the two dropped submodules (delete the temp
+clone afterward).
+
+## 2026-08-13 — Phase 4 Task 2b: dialog submodules vendored, dropping the submodule registrations
+
+**What:** Recorded provenance (upstream URL, exact commit SHA, author, date, subject) for both
+`PlugIns/dialog` (`https://github.com/textmate/dialog.git` @ `fa2f59e3a`) and
+`PlugIns/dialog-1.x` (`https://github.com/textmate/dialog-1.x.git` @ `43df3148e`), wrote it into
+a new `PROVENANCE.md` in each directory, then de-submoduled both: `git rm --cached` the gitlink
+(keeps working-tree files on disk), deleted each directory's `.git` gitlink file, removed both
+stanzas from `.gitmodules`, removed both `submodule.PlugIns/dialog*` sections from `.git/config`,
+deleted `.git/modules/PlugIns/dialog` and `.git/modules/PlugIns/dialog-1.x`, then `git add`ed the
+now-ordinary tracked files. Verified: `git submodule status` shows 4 remaining (icons, CxxTest,
+Onigmo, kvdb), neither dialog path listed; `git diff --cached --summary` shows exactly two
+`delete mode 160000` (the old gitlinks) and 55 `create mode 100644` (identical file content,
+confirmed no executable bits in the original submodules to lose). File contents byte-for-byte
+unchanged from the recorded upstream commit -- no edits made besides adding `PROVENANCE.md`.
+Checked `.gitignore` and `project.yml` for submodule-path assumptions: neither needs a change
+(`.gitignore` never mentioned these paths; `project.yml`'s 31 `PlugIns/dialog*` references are
+plain source-file paths that resolve identically whether the directory is a submodule checkout
+or vendored files).
+
+**Why:** Task 2 left `PlugIns/dialog*` on `com.macromates.plugin.*` because both were git
+submodules pointing at upstream's own unforked repos -- editing `Info.plist` inside a submodule
+checkout produces a commit only this machine has, and `.gitmodules` still resolves to upstream,
+so a fresh clone or CI would silently fail to get the rename. The user chose vendoring over
+forking upstream: small, dormant repos, and it also drops 2 of the 6 remaining submodules.
+
+### If interrupted here
+
+Vendoring is staged but not yet committed. Next: commit this as its own increment (`git status
+--porcelain` first), then do the identifier rename (`com.macromates.plugin.${TARGET_NAME}` →
+`com.shelbydenike.plugin.${TARGET_NAME}` in both `PlugIns/*/Info.plist:16`) as a second commit,
+then verify `TMPlugInController.mm` doesn't hardcode the old identifier (initial read of
+`loadPlugInAtPath:`/`loadAllPlugIns:` shows it discovers `.tmplugin` bundles by directory scan +
+extension and reads `CFBundleIdentifier` dynamically from each bundle's own Info.plist -- used
+only as a dictionary key and against the user's `disabledPlugIns` defaults array, which defaults
+to `@[ @"io.emmet.EmmetTextmate" ]` -- so no hardcoded `com.macromates.plugin.*` match exists
+anywhere in the tree; confirm this holds after rebuilding), then `./bin/build`, the 25-target
+parity check, a fresh `git clone --recursive` build in a temp dir, and a check of the built
+`TextMate.app`'s two `.tmplugin` bundles for identifier + presence.
+
+## 2026-08-13 — Phase 4 Task 2: identity rename built, deployed, and verified end-to-end
+
+**What:** Built (`./bin/build TextMate`, `BUILD SUCCEEDED`) and ran all 25 baseline test targets
+individually against `docs/benchmarks/2026-08-12-ninja-parity.md`: **25/25 match exactly** --
+22 pass, `scm` fails the same documented `2 of 84` (hg/svn absent locally), `buffer` fails the
+same documented `3 of 26` (misspellings, no headless `NSSpellChecker` dictionary), `file` fails
+the same documented `1 of 11` (iconv TRANSLIT), `cf` crashes the same documented SIGBUS/exit 138.
+`command` and `editor` reproduced the doc's own noted batching artifact (looked hung when run
+back-to-back with others) and passed cleanly in seconds re-run individually, exactly as the doc
+already recorded.
+
+`bin/deploy-local`'s guard verified doing its job: with the old `com.macromates.TextMate` app
+still at `/Applications/TextMate.app`, deploy-local refused with "REFUSING TO REPLACE" (identifier
+mismatch). Moved the old app aside -- **not deleted** -- to
+`/Applications/TextMate (macromates 3.0.0-revived.10 backup).app`, then re-ran deploy-local, which
+installed cleanly. Installed app verified: `CFBundleIdentifier = com.shelbydenike.TextMate`,
+`CFBundleName = TextMate`, code signature valid.
+
+**Migration verified against real data, precisely** (Python `plistlib`, comparing the exact
+top-level-key set `MigratePreferencesDomain` iterates over -- not `defaults read`'s recursive
+line count, which over-counts nested array/dict contents): the real
+`~/Library/Preferences/com.macromates.TextMate.plist` has **37 top-level keys** (36 real settings
++ a `MigratedFromMacromates` marker already written there from Task 1's earlier same-domain
+no-op run, before this rename). Launched the newly installed app (`open`, not osascript/polling),
+and `~/Library/Preferences/com.shelbydenike.TextMate.plist` now has the **identical 37 keys**,
+identical values, zero missing, zero extra, zero mismatched. **All 36 real settings carried over,
+exactly matching the plan's stated expectation.**
+
+**`mate` verified with hard evidence, not just exit code:** `mate /tmp/.../verify.txt` exited 0
+against the already-running app (same PID throughout, no relaunch), and `lsof -p <pid>` confirmed
+that exact process held an open file descriptor on that exact file -- proof `mate.mm:59`'s
+`URLForApplicationWithBundleIdentifier:@"com.shelbydenike.TextMate"` found and used the real,
+running, renamed app.
+
+**Bundles verified three ways, none requiring GUI automation:** (1) source reading --
+`AppController.mm:518` calls `loadBundlesIndex` synchronously at launch, which unconditionally
+calls `createBundlesIndex:` and populates `bundles::set_index(...)` in memory regardless of
+whether the on-disk cache exists yet -- the new `~/Library/Caches/com.shelbydenike.TextMate/`
+being empty shortly after launch is expected (the on-disk `BundlesIndex.binary` write is a
+separate, debounced/on-quit path via `saveBundlesIndex:`, not a signal of whether bundles loaded);
+(2) `~/Library/Application Support/TextMate/Managed/Bundles/` -- the literal-string path, correctly
+unaffected by the identifier change -- still has all 54 bundles; (3) `lsof` on the running process
+shows an open handle on `~/Library/Application Support/TextMate/Global.tmProperties`, confirming
+the app is actively reading from that (unaffected) support directory at runtime. No crashes or
+errors for the process in the unified log over the full session.
+
+**Confirmed untouched, as required:** `grep -c "com.macromates" Applications/TextMate/Info.plist`
+= **38** (all UTI declarations survive; only the `CFBundleIdentifier` line, no longer matching,
+dropped out of the count -- was 39 before this change). `OakDocument.mm`'s xattr names
+(`com.macromates.bookmarks`, `.folded`, `.crc32`, `.selectionRange`, `.visibleIndex`,
+`.backup.*`) are byte-for-byte unchanged -- never touched.
+
+**Deliberately not done:** did not bump `CHANGELOG.md`/`APP_VERSION` or run a second
+build-and-redeploy cycle to re-stamp the version string. The plan's global constraint ("after each
+task: build, bump version, update changelog, deploy, verify") would normally call for this, but
+`bin/deploy-local`'s replace-in-place path for a *same-identifier* redeploy unconditionally shells
+out to `osascript -e 'tell application id ... to quit'` before removing the old copy -- exactly
+the class of Apple-Events call this task was explicitly warned hangs on an unacknowledged
+Automation permission prompt in this environment, and neither the deployed identifier, the
+migration, `mate`, nor bundle loading depend on which version string is baked in. Left for a
+deliberate follow-up, ideally the first time with a human present to clear the one-time
+Automation permission dialog. `/Applications/TextMate.app` currently reports
+`3.0.0-revived.10` with `com.shelbydenike.TextMate` -- correct identifier, stale-but-harmless
+version string.
+
+**Why:** This is the load-bearing verification for the whole task -- the plan's own risk table
+calls settings-reverting-silently and `mate`-can't-find-the-app the two most user-visible ways
+this rename could fail invisibly. Both are now checked against real data on a real machine, not
+assumed from reading code.
+
+### If interrupted here
+
+Task 2's core work (identifier rename, cache paths, `mate`/`gtm` lookups, build, 25/25 tests,
+deploy, migration, bundles) is done, committed (`eedef5cf`), and verified end-to-end. Two things
+remain open, both already flagged, neither blocking the rest of Phase 4: (1) Dialog/Dialog2
+(`PlugIns/dialog*`) still say `com.macromates.plugin.*` -- blocked on the git-submodule/upstream
+question recorded in the previous entry, needs a human decision (fork + repoint `.gitmodules`, or
+vendor the two plugins into the tree); (2) the version-bump-and-redeploy convention was skipped
+for the reason above -- safe to do manually whenever a human is present to clear the Automation
+prompt once. The old `com.macromates.TextMate` app is preserved at
+`/Applications/TextMate (macromates 3.0.0-revived.10 backup).app` (not deleted) until the rename
+is trusted. Next: Task 3 (the privileged helper) or Task 4 (attribution/credits), per the plan.
+
+
+## 2026-08-13 — Phase 4 Task 2: bundle identifiers changed to com.shelbydenike.* (Dialog/Dialog2 blocked on a submodule)
+
+**What:** Changed `CFBundleIdentifier` in `Applications/TextMate/Info.plist:12` and
+`Applications/QuickLookGenerator/Info.plist:12` from `com.macromates.${TARGET_NAME}` to
+`com.shelbydenike.${TARGET_NAME}`. Updated the dependents that must stay in sync with it: the
+`~/Library/Caches/com.macromates.TextMate/` cache directory hardcoded in
+`Applications/gtm/src/gtm.cc:104`, `Applications/QuickLookGenerator/src/generate.mm:38`,
+`Frameworks/BundlesManager/src/BundlesManager.mm:950,957`, `bin/gen_credits.rb:202`, and
+`bin/build:16,30`; the app-bundle lookup in `Applications/mate/src/mate.mm:59`
+(`URLForApplicationWithBundleIdentifier:`); and QuickLookGenerator's explicit prefs suite in
+`Applications/QuickLookGenerator/src/generate.mm:209` (`initWithSuiteName:`). Left the 38 UTI
+declarations and `txmt://` scheme in the same `Info.plist` untouched (only line 12 changed) and
+left every internal-chrome identifier alone (dispatch queues, log subsystems, error domain,
+pasteboard type, Touch Bar identifiers in both `OakTextView.mm` and
+`DocumentWindowController.mm`, Mach port names, `runner.mm`'s fallback-only cache-path string,
+the SCM svn driver's `com.macromates.TextMate.scm` lookup -- confirmed inert, since `scm` is
+`type: library.static` in `project.yml` and no bundle in this app ever declares that identifier,
+so it always falls through to `CFBundleGetMainBundle()` -- and Task 1's
+`PreferencesMigration.mm` source domain, which must stay pinned to the old identifier forever by
+design).
+
+**Blocked, not done:** `PlugIns/dialog/Info.plist:16` and `PlugIns/dialog-1.x/Info.plist:16`
+(Dialog / Dialog2 plug-in identifiers) are **git submodules** pointing at
+`https://github.com/textmate/dialog.git` and `https://github.com/textmate/dialog-1.x.git` --
+upstream's own repos, never forked under this project; `git log` on both paths shows every past
+change here is a pointer-bump to a commit upstream published, never an independent commit.
+`project.yml`'s `INFOPLIST_FILE` reads each submodule's plist directly at build time, so there is
+no build-setting indirection that can rename the identifier without editing that tracked file.
+Committing the edit only inside the local submodule checkout would produce a commit that exists
+on this machine alone -- `.gitmodules` still resolves to upstream, so a fresh clone or CI's `git
+submodule update` would fail to fetch it. That is a certain, silent break for the next checkout,
+not a hypothetical one. A real fix means either forking both repos under project control and
+repointing `.gitmodules`, or vendoring them into the tree and dropping the submodule -- a
+repo-topology decision the plan does not make and this task should not make unilaterally.
+Reverted both edits; both files are back to `com.macromates.plugin.${TARGET_NAME}`, tree clean.
+It is a 1-line change in each once someone decides where that commit should live.
+
+**Why:** `Applications/TextMate/Info.plist:12` is the app's real identity; everything else
+touched here is code that has to keep agreeing with it. Leaving any of it on the old identifier
+while the app itself moved would silently break QuickLook previews, `bin/gen_credits.rb`,
+`mate`, or bundle-index caching, each in a different, hard-to-notice way.
+
+### If interrupted here
+
+Committed. Next: `bin/build`, run all 25 baseline test targets against
+`docs/benchmarks/2026-08-12-ninja-parity.md`, verify Task 1's migration actually fires against
+the real `~/Library/Preferences/com.macromates.TextMate.plist` (back up first), verify `mate`
+finds the renamed app, then handle `bin/deploy-local`'s expected identifier-mismatch refusal by
+moving the old `/Applications/TextMate.app` aside (never deleting it) before installing the new
+one. Do not touch `PlugIns/dialog*` again without first resolving the submodule question above.
+
+
+## 2026-08-13 — Phase 4 Task 1: preferences migration (pre-rename release)
+
+**What:** Added `Applications/TextMate/src/PreferencesMigration.{h,mm}`:
+`MigratePreferencesDomain(source, destination)` copies every key persisted under `source` into
+`destination` that `destination` doesn't already have (per-key, never clobbers), then writes a
+`MigratedFromMacromates` marker into `destination` so later calls no-op immediately. Source is
+only ever read, never deleted. `MigrateLegacyPreferencesIfNeeded()` calls it with
+`source = "com.macromates.TextMate"` (hardcoded) and `destination = NSBundle.mainBundle.bundleIdentifier`
+(read at runtime, not hardcoded) — so today, before Task 2 changes `CFBundleIdentifier`, source
+and destination resolve to the literal same domain and the call is a true, verified no-op; once
+Task 2 lands, destination will resolve to `com.shelbydenike.TextMate` and the same code performs
+the real migration, with no changes needed to this file. Wired as the very first statement in
+`main()` (`Applications/TextMate/src/main.mm`), before `oak::application_t::set_support(...)` —
+earlier than the plan's suggested neighbourhood, deliberately, so no code path anywhere (app
+init, AppController, RegisterDefaults) can read a default before migration runs.
+
+New `Applications/TextMate/tests/t_preferences_migration.mm`, 5 tests, all against throwaway
+`*.PreferencesMigrationTest.*` domains (never the real `com.macromates.TextMate` domain):
+copies-into-empty-destination, never-clobbers-but-still-fills-gaps, marker-makes-second-run-a-true-noop,
+absent-source-is-clean-noop, and source-equals-destination-is-a-safe-noop (today's actual shipping
+state). Build wiring: new `PreferencesMigration` library.static target and `TextMate_test` tool
+target in `project.yml` (mirrors the existing `<framework>_test` pattern one level up, since this
+is the first test target for something under `Applications/` rather than `Frameworks/`);
+`Xcode/scripts/gen_test.sh` gained an `Applications/$name` fallback alongside its existing
+`Frameworks/$name` / `vendor/$name` search, needed for `gen_test.sh TextMate` to find
+`Applications/TextMate/tests/`. `TextMate.xcodeproj` regenerated via `xcodegen generate`.
+
+**Why:** `NSUserDefaults.standardUserDefaults` is keyed on `CFBundleIdentifier`. Task 2 will change
+it from `com.macromates.TextMate` to `com.shelbydenike.TextMate`; without this migration, every
+setting a user has would silently revert to defaults the moment that ships. This lands first, in
+its own release, so the code has actually run against a real old domain on a real machine before
+anything depends on it — verification (backup real plist, run, compare, restore) is next.
+
+### If interrupted here
+
+Code committed and unit-tested (5/5 pass, `./bin/build TextMate/test`). Full `TextMate` app also
+builds clean with the new dependency. Not yet done: (1) verify against the real
+`~/Library/Preferences/com.macromates.TextMate.plist` (back up first, restore after — do not
+leave it modified), (2) re-run all 25 baseline test targets against
+`docs/benchmarks/2026-08-12-ninja-parity.md` to confirm no regression. Task 2 (the actual
+`CFBundleIdentifier` rename) must not start until both are done and reported.
+
+
+## 2026-08-13 — Phase 3 merged; Phase 4 planned around a data-loss trap
+
+**What:** PR #5 merged to master (`851bec7c`) with a real merge commit. Phase 4 planned at
+`docs/superpowers/plans/2026-08-13-phase-4-identity.md`.
+
+**The recon finding that shapes the whole phase:** `com.macromates.*` in this tree is not one
+thing. It is three, with completely different migration semantics:
+
+1. **Identity — change these.** Bundle identifiers (app, QuickLookGenerator, Dialog, Dialog2),
+   six hardcoded cache paths under `~/Library/Caches/com.macromates.TextMate/`, app-bundle
+   lookups in `mate.mm:59` and `gtm.cc:104`, and the privileged helper's five launchd
+   identifiers (`constants.h:4-8`).
+2. **Data format — must NOT change.** Extended attributes written onto *the user's own
+   documents* (`com.macromates.bookmarks`, `.folded`, `.crc32`, `.selectionRange`,
+   `.visibleIndex`, `.backup.*`), the 38 `com.macromates.textmate.*` UTIs that every installed
+   bundle's `info.plist` references, and the `txmt://` URL scheme that external tools and links
+   across the internet use.
+3. **Internal chrome — leave alone.** Dispatch queue and log-subsystem names, error domain,
+   pasteboard type, Touch Bar identifiers, Mach port names. Renaming is churn with risk and no
+   benefit.
+
+**A naive `sed com.macromates → com.shelbydenike` would silently orphan every bookmark and code
+fold on every file the user has ever opened**, and break document-type associations with every
+installed bundle. The xattrs and the identifier live in the same tree and look identical to a
+grep; only their semantics differ.
+
+**What survives untouched:** `~/Library/Application Support/TextMate` is the literal string
+`TextMate`, not derived from the identifier (`main.mm:51`, `AppController.mm:505`,
+`tm_query.cc:32`, `generate.mm:30`). Bundles, themes, and gems need no migration — the single
+biggest piece of user state is safe.
+
+**What does need migrating:** `NSUserDefaults.standardUserDefaults` is implicitly keyed on the
+bundle identifier, so every setting reverts to defaults the moment it changes. Task 1 writes that
+migration and ships it in a release BEFORE the rename, so it has actually run against the old
+domain on a real machine before it is needed.
+
+**Why:** Phase 4 changes identity to `com.shelbydenike.*` without orphaning user state.
+
+### If interrupted here
+
+Phase 3 merged. `/Applications/TextMate.app` is v3.0.0-revived.9, zero build dependencies.
+Branch `phase-4/identity` created off master with the plan committed. Next: Task 1 (preferences
+migration — written and released BEFORE the identifier changes, never in the same build).
+
+
 ## 2026-08-13 — Phase 3 Task 4: `CrashReporter` deleted, `crash` kept (Phase 3 complete)
 
 **What:** Investigated both frameworks before touching either. `Frameworks/CrashReporter`

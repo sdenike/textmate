@@ -50,6 +50,19 @@ expand_plist() { "$scripts/expand_plist.sh" "$@"; }
 markdown()     { "$scripts/markdown.sh" "$@"; }
 utf16()        { "$scripts/utf16.sh" "$@"; }
 
+# InfoPlist.strings uses the same `${VAR}` syntax the plists do --
+# NSHumanReadableCopyright carries `${YEAR}` -- but rave's per-file dispatch
+# picked a transform by extension and sent .strings straight to utf16 with no
+# expansion, so the shipped copyright read a literal "2004-${YEAR}". Expand
+# first, then transcode. Files with no `${...}` in them pass through unchanged.
+expand_utf16() { # <src> <dst>
+	local tmp
+	tmp=$(mktemp -t InfoPlistStrings)
+	expand_plist "$1" "$tmp"
+	utf16 "$tmp" "$2"
+	rm -f "$tmp"
+}
+
 # capture TEXTMATE_VERSION -- same grep/sed one-liner as default.rave:8.
 app_version() {
 	grep -om1 '^## .* (v.*)$' "$SRCROOT/CHANGELOG.md" | sed 's/.*(v\(.*\))/\1/'
@@ -63,7 +76,7 @@ app_version() {
 assemble_plugin() { # <rave-source-dir>
 	local dir="$SRCROOT/$1"
 	expand_plist "$dir/Info.plist" "$contents/Info.plist"
-	utf16 "$dir/English.lproj/InfoPlist.strings" "$contents/Resources/English.lproj/InfoPlist.strings"
+	expand_utf16 "$dir/English.lproj/InfoPlist.strings" "$contents/Resources/English.lproj/InfoPlist.strings"
 }
 
 # QuickLookGenerator/default.rave:1-11 -- only `files Info.plist "."`.
@@ -92,7 +105,7 @@ assemble_textmate() {
 
 	# resources/* -- files, non-recursive top-level glob; each entry's own
 	# extension picks its transform, same as rave's per-file dispatch.
-	utf16 "$app/resources/English.lproj/InfoPlist.strings" \
+	expand_utf16 "$app/resources/English.lproj/InfoPlist.strings" \
 		"$contents/Resources/English.lproj/InfoPlist.strings"
 
 	mkdir -p "$contents/Resources/English.lproj"

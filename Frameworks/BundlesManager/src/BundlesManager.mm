@@ -947,14 +947,14 @@ namespace
 
 	for(auto path : bundles::locations())
 		bundlesPaths.push_back(path::join(path, "Bundles"));
-	bundlesIndexPath = path::join(path::home(), "Library/Caches/com.macromates.TextMate/BundlesIndex.binary");
+	bundlesIndexPath = path::join(path::home(), "Library/Caches/com.shelbydenike.TextMate/BundlesIndex.binary");
 	cache.set_content_filter(&prune_dictionary);
 
 	// LEGACY bundle index used prior to 2.0-alpha.9467 (pre-2013 binary
 	// plist format). cache.load expects the current NSKeyedArchiver format;
 	// the old plist will fail the version check and leave the cache empty,
 	// after which the FS walk in createBundlesIndex repopulates it.
-	std::string const oldPath = path::join(path::home(), "Library/Caches/com.macromates.TextMate/BundlesIndex.plist");
+	std::string const oldPath = path::join(path::home(), "Library/Caches/com.shelbydenike.TextMate/BundlesIndex.plist");
 	if(access(oldPath.c_str(), R_OK) == 0)
 	{
 		cache.load(oldPath);
