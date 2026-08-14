@@ -4,6 +4,57 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Phase 6 increment 2 planned; spec corrected against the SDK and the code
+
+**Branch:** `phase-6/liquid-glass-small-controls`, off master at `56d193b7`. Not merged.
+
+**What changed.** `docs/superpowers/plans/2026-08-14-liquid-glass-small-controls.md` is new — the
+plan for increment 2 — and the design spec gained two corrections, both from checking rather than
+assuming.
+
+**`OFBFinderTagsChooser` is out of increment 2.** The spec listed it as a small control. Reading it
+showed `FileBrowserViewController.mm:572` assigns it to an `NSMenuItem`'s `view`, so it is a
+menu-item view, not a control in a window. It has no background of its own *because* the menu draws
+one behind it; adding an `NSGlassEffectView` would put a second material inside a surface that
+already has one. Increment 2 keeps one target, `OakKeyEquivalentView`, which exercises every hard
+part at once — it paints both its background and its text in `drawRect:`, masks a focus ring by
+hand, reads the effective appearance, and hosts a sibling subview.
+
+**The spec gained a measured table of `NSGlassEffectView`'s Auto Layout behaviour.** The SDK header
+documents the contract but not how the view behaves under constraints, which is the only thing an
+adoption site needs. Measured against real AppKit, not inferred. The two that would otherwise cost
+an afternoon each: `contentView.superview` is a private `ContentHolderView` rather than the glass
+view, and a glass view with no `contentView` has a `fittingSize` of `0 × 0`, so a glass backdrop
+without content silently collapses. Also: setting `contentView` installs the fill constraints
+itself, so adding your own conflicts with them; `glassView.subviews` is always 2 even when empty;
+the default `cornerRadius` is 8, not 0.
+
+**Verification method for increments 2–6 is settled, and the obvious approach was wrong.**
+Passing `-AppleInterfaceStyle Dark` on the command line does *not* force appearance — the value
+lands in `NSArgumentDomain` and `stringForKey:` returns it, but AppKit takes `effectiveAppearance`
+from the system setting and ignores it, so both "appearances" would have rendered identically while
+the test passed. `NSApp.appearance` is the only mechanism that works, and the generated test runner
+creates no `NSApplication`, so the harness must call `sharedApplication` itself or the assignment is
+a silent no-op on nil.
+
+What does work: glass renders into an offscreen `cacheDisplayInRect:`. Rendering the same view with
+and without a glass subview differs by **0.4436** mean absolute RGB while the region outside the
+glass rect is bit-identical, and live `screencapture` of the same window agrees to within 0.015 —
+with no visible window, no activation policy, and no screen-recording permission. So the screenshots
+are a real test, they run headless, and they run under CI.
+
+**If interrupted here:** the SDD ledger is
+`.superpowers/sdd/2026-08-14-liquid-glass-small-controls/progress.md`; its pre-flight scan is clean
+and the verified baseline is `OakAppKit_test: 10 tests passed`. Task briefs 1 and 2 are written
+beside it. Task 1 (the snapshot harness, `Frameworks/OakAppKit/tests/t_glass_snapshot.mm`) was
+dispatched to an implementer and had not reported back. Resume by checking whether that file exists
+and whether the count reads 11; then Task 2 (the migration itself), Task 3 (render four PNGs at
+radius 8 and 12, light and dark), Task 4 (full suite against the parity doc), Task 5 (**maintainer
+picks the corner radius from the renders — this is the gate**), Task 6 (CHANGELOG, release,
+confirm the cask bump).
+
+---
+
 ## 2026-08-14 — SESSION CLOSE: Phases 5, 5a and Phase 6's foundation shipped
 
 **Read this first on resume.** Everything below is merged to master. Working tree clean.

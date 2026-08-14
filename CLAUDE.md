@@ -142,6 +142,29 @@ Three facts about the SDK that the constructors encode, each of which is easy to
   `contentInsets` has no counterpart property on `NSGlassEffectView` — it is advisory data for
   callers building constraints.
 
+The header documents that contract but says nothing about how the view behaves under Auto Layout,
+which is the only thing an adoption site needs. The spec's **"Verified behaviour of
+`NSGlassEffectView`"** table records that, measured against real AppKit rather than inferred. Read
+it before adopting glass anywhere. The two that otherwise cost an afternoon each: `contentView`'s
+`superview` is a private `ContentHolderView` and **not** the glass view, and a glass view with no
+`contentView` has a `fittingSize` of `0 × 0`, so a glass backdrop without content silently
+collapses.
+
+Two facts about verifying glass, both established by measurement on 2026-08-14 and both easy to get
+backwards:
+
+- **`-AppleInterfaceStyle Dark` on the command line does not force appearance.** The value does land
+  in `NSArgumentDomain` and `stringForKey:` returns it, but AppKit takes `effectiveAppearance` from
+  the system setting and ignores it — so a screenshot harness built on it renders both "appearances"
+  identically while passing. `NSApp.appearance` is the only mechanism that works, and the generated
+  test runner creates no `NSApplication`, so a harness must call `sharedApplication` itself or the
+  assignment is a silent no-op on nil.
+- **Glass does render into an offscreen `cacheDisplayInRect:`**, with no visible window, no
+  activation policy, and no screen-recording permission. The same view with and without a glass
+  subview differs by 0.44 mean absolute RGB inside the glass rect while the region outside it is
+  bit-identical, and live `screencapture` of the same window agrees to within 0.015. That is why the
+  Liquid Glass increments verify with a headless render test rather than manual screenshots.
+
 The deployment target is macOS 26.0, so never write `@available(macOS 26, *)` guards or
 `NSVisualEffectView` fallbacks around these — every branch would be dead code. Third-party examples
 (iTerm2's included) carry such guards; do not copy them.
