@@ -4,6 +4,46 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Signing works end to end; notarization rejected PrivilegedTool
+
+**Progress.** With build dependencies added, the release run got through building signed, locating
+the app, re-signing embedded Mach-Os, re-sealing nested bundles, re-signing the outer app, and
+`codesign --verify --deep --strict` plus the hardened-runtime assertion. It failed at **step 14,
+Notarize via notarytool**:
+
+```
+"status": "Invalid", "statusSummary": "Archive contains critical validation errors"
+path:    TextMate.app/Contents/Resources/PrivilegedTool
+message: The executable requests the com.apple.security.get-task-allow entitlement.
+```
+
+**Cause.** `get-task-allow` is the debug entitlement; Apple rejects any notarized archive
+containing it. Two sweeps were meant to cover this and neither reached the file:
+
+- *Re-sign every embedded Mach-O* globbed only `*/Frameworks/*`, `*/MacOS/*`, `*/SharedSupport/*`
+  and `*/PlugIns/*`. `Contents/Resources/` was not in the list.
+- *Re-seal nested bundles* handles `.tmplugin`, `.framework`, `.qlgenerator`, `.appex` — but
+  `PrivilegedTool` is a **bare Mach-O**, not a bundle.
+
+So it kept its build-time signature. Only the *outer* app is re-signed with
+`CS_GET_TASK_ALLOW=false`; that substitution never reached the nested executable. Note
+`CS_GET_TASK_ALLOW` appears nowhere in `Base.xcconfig` or `project.yml` — it exists only as a
+placeholder in `Applications/TextMate/Entitlements.plist` that `release.yml` seds. The entitlement
+on `PrivilegedTool` is Xcode's own auto-injected debug entitlement, not something the project asks
+for.
+
+**Fix.** Added `-o -path "*/Resources/*"` to the Mach-O sweep. `PrivilegedTool` is `type: tool` in
+`project.yml` with no entitlements of its own, so re-signing it without `--entitlements` strips the
+debug entitlement and removes nothing legitimate. The existing `file -b | grep Mach-O` guard keeps
+ordinary resource files untouched.
+
+**Unrelated:** `claude doctor` reported `Last update attempt: failed (install_failed)`, but
+`claude update` reports 2.1.232 is current — that failure was transient.
+
+**If interrupted here.** Fix committed; next release run needs triggering via `workflow_dispatch`.
+Still no tag and no release — `gh release list` is empty. Notarization is step 14 of 16, so the
+remaining unproven steps are stapling, Gatekeeper verification, the `.tbz`, and publishing.
+
 ## 2026-08-14 — Release secrets work; release.yml had no dependency install step
 
 **Secrets are in and correct.** All five set on `sdenike/textmate`. The release run past them:

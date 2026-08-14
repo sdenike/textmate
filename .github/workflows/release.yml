@@ -165,11 +165,22 @@ jobs:
               codesign --force --sign "$CS_IDENTITY" --options runtime --timestamp "$f"
               count=$((count+1))
             fi
+          # Resources/ is in this list because Applications/PrivilegedTool ships
+          # as a bare Mach-O at Contents/Resources/PrivilegedTool -- not a
+          # bundle, so the nested-bundle re-seal below never touches it either.
+          # Without it, notarization rejected the whole archive:
+          #   "The executable requests the com.apple.security.get-task-allow
+          #    entitlement" (Contents/Resources/PrivilegedTool, arm64)
+          # That is Xcode's auto-injected debug entitlement; the tool declares
+          # no entitlements of its own in project.yml, so re-signing here
+          # without --entitlements strips it and takes nothing legitimate away.
+          # The `file -b | grep Mach-O` guard skips ordinary resource files.
           done < <(find "$APP/Contents" -type f \
                      \( -path "*/Frameworks/*" \
                      -o -path "*/MacOS/*" \
                      -o -path "*/SharedSupport/*" \
-                     -o -path "*/PlugIns/*" \) -print0)
+                     -o -path "*/PlugIns/*" \
+                     -o -path "*/Resources/*" \) -print0)
           echo "Re-signed $count Mach-O files"
 
       - name: Re-seal nested bundles (after modifying their contents)
