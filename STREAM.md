@@ -4,6 +4,44 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — KNOWN GAP logged: bundles are outside the Ruby 2.6 constraint
+
+**Why this came up.** After the Phase 4 PR opened, the question was whether the plan needs to
+cover updating the bundles too. It does. Logged as a known gap rather than planned in detail —
+recorded here and in `CLAUDE.md`'s "Bundle delivery" section, **scheduled before Phase 5**.
+
+**Why before Phase 5.** Phase 5 is Developer ID signing, notarization and public releases. That is
+the point at which builds reach people who are not us. A signed, notarized app that pulls stock
+Ruby 1.8 bundles ships the bug to real users; fixing it while distribution is still local is far
+cheaper.
+
+**What the audit found.**
+
+- Only **three** bundles are forked: `MandatoryBundles.h` pins
+  `textmatelives/{bundle-support,text,source}.tmbundle`. A fourth mandatory bundle,
+  `themes.tmbundle` (`MandatoryBundles.h:53`), still points at **upstream `textmate/`**.
+- Everything else — roughly 50 bundles — is fetched stock via
+  `https://codeload.github.com/%@/%@/tar.gz/%@` (`BundleFetcher.mm:65`) from whatever
+  `AvailableBundles.plist` names.
+- **27 installed files** match Ruby 1.8 markers (`$KCODE`, `require 'jcode'`, 1.8 shebangs) across
+  Ruby, YAML, Java, Perl, Lua, Gist, Markdown, HTML. Un-triaged on purpose: `$KCODE` and
+  `require 'jcode'` genuinely raise under Ruby 2.6, but
+  `Bundle Development.tmbundle/Snippets/Ruby 1_8 Shebang.tmSnippet` is a template *for inserting* a
+  1.8 shebang — intentional content. The 27 is a search hit count, not a defect count.
+
+**Correction to a stale doc claim.** `CLAUDE.md` said local dev wires bundles in via symlinks from
+`~/src/github.com/textmatelives/bundles/`. Those repositories **do not exist on this machine**, so
+`bin/reset_bundles.sh` is inoperative here — the 54 entries in `Managed/Bundles/` are real
+directories downloaded via codeload, not symlinks. Corrected in `CLAUDE.md`.
+
+**Shape of the eventual work** (triage first — it is the only piece whose cost is known, and it
+sizes the other two): triage the 27 hits; fork and port whichever bundles genuinely break, and
+decide `themes.tmbundle`'s fate; then repoint `AvailableBundles.plist` at forked repositories,
+document an upstream re-merge path, and fix or delete `reset_bundles.sh`'s dead paths.
+
+**If interrupted here.** Nothing is in flight. The gap is documented in `CLAUDE.md` and here; no
+plan document has been written and no bundle has been touched.
+
 ## 2026-08-13 — Phase 4 Task 4 VERIFIED; `${YEAR}` copyright bug found and fixed
 
 **What.** Built `c0c327c0` (Task 4) and `8bc1a8f9` (Task 3) and ran the full test suite against
