@@ -2,6 +2,17 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.12)
+
+### Changed
+
+* The two bundled Dialog plug-ins now carry this project's identifiers and live
+  directly in the repository rather than as links to unmaintained upstream
+  repositories. Their origin — repository and exact revision — is recorded
+  alongside them, and the original copyright notices are unchanged.
+
+Cloning the project now pulls four external components instead of six.
+
 ## 2026-08-13 (v3.0.0-revived.11)
 
 The application now has its own identity, separate from the original TextMate.
