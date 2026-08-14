@@ -77,6 +77,33 @@ Two consequences, both of which the constructors now encode:
 The file browser's `OFBHeaderView` and `OFBActionsView` are the case that needs a non-zero value;
 what value is a screenshot question for increment 4, not a guess to bake in now.
 
+### Verified behaviour of `NSGlassEffectView`
+
+The header documents the contract; it does not document how the view behaves under Auto Layout,
+which is what every adoption site actually needs to know. The following was measured against the
+real AppKit on 2026-08-14 by constructing the views in a throwaway program, not inferred:
+
+| Question | Answer |
+|---|---|
+| `intrinsicContentSize` of a glass view | `(-1, -1)` — `NSViewNoIntrinsicMetric`. Glass has no size of its own. |
+| `fittingSize` with a `contentView` set | Exactly the content's fitting size. Setting `contentView` installs the constraints internally — **do not add your own glass↔content constraints.** |
+| `fittingSize` with no `contentView` | `0 × 0`. A bare glass surface used purely as a background **must** be given explicit size or position constraints, or it collapses. |
+| `contentView.superview` | **Not** the glass view — a private `ContentHolderView` sits between them. Code comparing `content.superview == glassView`, or walking exactly one level up, is wrong. |
+| `glassView.subviews` | Always 2, even when bare. Never test emptiness by counting subviews, and never index into them. |
+| Replacing `contentView` | Detaches the previous content and re-sizes correctly. The getter round-trips the exact object you set. |
+| Default `cornerRadius` | `8.0`, not zero. `OakGlassChromeMetrics().cornerRadius` deliberately overrides it. |
+| Default `style` / `tintColor` | `NSGlassEffectViewStyleRegular` / `nil`. |
+| `NSGlassEffectContainerView.spacing` default | `0`, and a bare container's `fittingSize` is `0 × 0` for the same reason as above. |
+
+The consequence for adoption is smaller than it looks: a control that already has an
+`intrinsicContentSize` gets glass almost for free, because content-driven sizing is automatic. A
+surface that wants glass purely as a backdrop is the case that needs constraints written by hand.
+
+One ordering fact from AppKit generally, not from glass: **a view's own `drawRect:` paints beneath
+its subviews.** Any surface that currently draws its text or symbols in `drawRect:` therefore
+cannot simply gain a glass subview behind them — the glass would cover the drawing. Those surfaces
+must move their content into the glass view's `contentView` instead.
+
 Deliberately **not** included: any colour abstraction or appearance manager. Glass handles
 light and dark itself. The existing `NSAppearanceNameAqua`/`DarkAqua` detection in
 `OakTextView.mm`, `OakToolTip.mm` and `OakKeyEquivalentView.mm` stays as it is. If the
@@ -89,7 +116,7 @@ Six increments, ordered by blast radius. Each ships as its own release.
 | # | Surface | Files | Risk |
 |---|---|---|---|
 | 1 | Foundation | `OakUIConstructionFunctions` | None — additive, no callers yet |
-| 2 | Small controls | `OakKeyEquivalentView`, `OFBFinderTagsChooser` | Low — self-contained, rarely visible |
+| 2 | Small controls | `OakKeyEquivalentView` | Low — self-contained, rarely visible |
 | 3 | Overlays | `OTVHUD`, `OakToolTip`, `OakChoiceMenu` | Low — transient, `Clear` style, no layout impact |
 | 4 | Chrome bars | `OTVStatusBar`, `HOStatusBar`, `OFBHeaderView`, `OFBActionsView` | Medium — always visible; needs the container |
 | 5 | Choosers and window | `OakChooser`, `OakPasteboardChooser`, `BundlesPreferences`, window chrome | Medium — window chrome is where regressions show |
@@ -98,6 +125,20 @@ Six increments, ordered by blast radius. Each ships as its own release.
 Increments 2 and 3 come first because they are where glass's behaviour is learned at near-zero
 cost. If `NSGlassEffectView` fights TextMate's layout assumptions, that surfaces on a tooltip
 rather than on the status bar.
+
+**`OFBFinderTagsChooser` was dropped from increment 2 on 2026-08-14**, once its code was read. It
+is not a control in a window — `FileBrowserViewController.mm:572` assigns it to an `NSMenuItem`'s
+`view`, so it lives inside a context menu. It has no background of its own precisely because the
+menu draws one behind it, and adding an `NSGlassEffectView` would put a second material layer
+inside a surface that already has one. A custom menu-item view's job is to blend into the menu's
+material, not to bring its own. If a later screenshot pass shows the chooser reading as flat
+against the surrounding menu, the fix is to match the menu's material — not to introduce glass
+here.
+
+That leaves increment 2 with one target, which is enough: `OakKeyEquivalentView` exercises every
+hard part at once — it paints its own background in `drawRect:`, draws its text there too, carries
+a focus ring it masks by hand, chooses colours from the effective appearance, and hosts a sibling
+subview (the clear button) that must stay above the new glass.
 
 This ordering has independent corroboration: iTerm2, a mature macOS application, has begun
 adopting `NSGlassEffectView` and applied it to its Open Quickly chooser, chat toolbar and a
