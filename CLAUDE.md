@@ -126,6 +126,68 @@ Do not assume the symlink wiring is in effect; check before relying on it.
 
 The `REST_API` macro and its `api.textmate.org` source were removed in PR #9; bundle delivery is now git-URL/codeload-based (`BundlesManager.mm` fetches via `BundleFetcher` from `codeload.github.com`, `BundleFetcher.mm:65`). `BundlesManager.mm` still polls every 3h via `NSBackgroundActivityScheduler`. Packaging for distribution is unresolved.
 
+### RESOLVED 2026-08-13 — mandatory bundles now come from our own forks
+
+The blocker below is fixed. Four forks were created under `sdenike`, all writable, and
+`MandatoryBundles.h` repointed at them:
+
+| Pin | Now | Forked from |
+|---|---|---|
+| Bundle Support | `sdenike/bundle-support.tmbundle` | textmatelives |
+| Text | `sdenike/text.tmbundle` | textmatelives |
+| Source | `sdenike/source.tmbundle` | textmatelives |
+| Themes | `sdenike/themes.tmbundle` | textmate (upstream) |
+
+Each fork's HEAD sat exactly at the previously pinned SHA, so the only content delta is our own
+two commits — no unintended upstream drift came along with the move. **The release no longer
+depends on any third-party repository.**
+
+`sdenike/bundle-support.tmbundle` now carries `Support/shared/bin/ruby18`, a shim beside the
+existing `ruby` one. It makes all 27 `#!/usr/bin/env ruby18` commands across 13 bundles run,
+translating 1.8's `-K` flag to `-EUTF-8` (dropping it is wrong — with `LANG` unset,
+`default_external` falls back to US-ASCII and non-ASCII text breaks). **It is a stopgap and the
+affected bundles still need forking and porting properly** — several also use `iconv`,
+`parsedate`, `Config::CONFIG`, `TimeoutError` and `Object#type`, which no shim can rescue. Read
+the shim's own header comment; it says the same thing.
+
+A single `sdenike/textmate-bundles` monorepo was considered and is **not possible** without
+rewriting `BundleFetcher`: it parses a bundle URL into owner/repo only, fetches
+`codeload.github.com/{owner}/{repo}/tar.gz/{ref}`, and requires `info.plist` at the tarball root.
+TextMate is one-bundle-per-repository by design.
+
+`bin/fetch_embedded_bundles.sh` now also scrubs `src/`. Bundle Support ships `find_app.cc` and a
+`default.rave` there; the prebuilt `find_app` binary ships separately, so they have no runtime
+use, and without the scrub every pin bump silently reintroduced a `.rave` file that `d07cc0c8`
+had deleted. (Note for later: that prebuilt `find_app` is a universal x86_64+arm64 binary we did
+not build. It is vendored upstream content rather than an x86_64 fallback added to our build, so
+it does not breach the arm64-only rule — but now that we own the fork, it could be rebuilt
+arm64-only.)
+
+### Historical — the blocker this replaced
+
+`MandatoryBundles.h` pins `textmatelives/{bundle-support,text,source}.tmbundle` as **mandatory**:
+bundles the app embeds so a fresh, offline launch still works, and which users cannot remove or
+repoint. Verified 2026-08-13 via the GitHub API: this account has **`push=false` and `admin=false`
+on all three**, and belongs to no organizations. They are themselves forks (`fork=true`) of the
+upstream `textmate/*` bundles.
+
+Consequences, all of which shape the eventual bundle phase:
+
+- Fixes to Bundle Support, Text or Source **cannot be upstreamed**. The embedded copies under
+  `Applications/TextMate/support/Bundles/` are generated artifacts (`fetch_embedded_bundles.sh`
+  `rm -rf`s and re-copies each from its pinned sha), so any local fix there is discarded the next
+  time that pin moves. See the warning comment on the Source pin.
+- The `ruby18` compatibility shim that would fix all 27 broken shebangs at once — one file beside
+  the existing `ruby` shim in `bundle-support.tmbundle/Support/shared/bin/` — cannot be shipped
+  for the same reason.
+- `AvailableBundles.plist`, the catalogue of installable bundles, also lives inside
+  `Bundle Support.tmbundle/Support/`. So even *hiding* bundles from the installer needs the same
+  write access as fixing them; it is not the cheaper option it appears to be.
+- The app's offline bootstrap depends on a third party's repositories.
+
+The fix, when the bundle phase starts: re-fork those three under an account we control and
+repoint these pins. Until then, treat the embedded copies as read-only generated output.
+
 ### KNOWN GAP — bundles are not covered by the Ruby 2.6 constraint
 
 The fork's "zero traces of Ruby 1.8" rule currently stops at the app boundary, and bundles are

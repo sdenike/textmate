@@ -22,35 +22,38 @@ struct TMMandatoryBundle
 };
 
 static struct TMMandatoryBundle const kTMMandatoryBundles[] = {
-	// branch: main
+	// branch: main — carries the ruby18 compatibility shim in
+	// Support/shared/bin/, which is what makes the many `#!/usr/bin/env ruby18`
+	// shebangs in *other* bundles run at all. That shim is a stopgap: those
+	// bundles still need forking and porting properly. See its header comment.
 	{
 		"0BB1F01A-4F0A-475A-ACDD-0F5578F2EFC3",
 		"Bundle Support",
-		"https://github.com/textmatelives/bundle-support.tmbundle",
-		"686adb59a5bec2ee7e8552c16a890034aef42e0e",
+		"https://github.com/sdenike/bundle-support.tmbundle",
+		"e828e72cc2b1fc7aefe8ad7b86cc056cd0be2add",
 		"Other",
 	},
 	// branch: main
 	{
 		"B7BC3FFD-6E4B-11D9-91AF-000D93589AF6",
 		"Text",
-		"https://github.com/textmatelives/text.tmbundle",
+		"https://github.com/sdenike/text.tmbundle",
 		"34ab58910c42f53798f19dd2cba3d7732a3e8d03",
 		"Other",
 	},
-	// branch: main
+	// branch: main — carries the ruby18 shebang fix for the Move to EOL macro
 	{
 		"4F45FDC0-62CA-4786-9134-8BC7C1F5606F",
 		"Source",
-		"https://github.com/textmatelives/source.tmbundle",
-		"2c873f8382fd11cda4a86b4159bc2977577568d3",
+		"https://github.com/sdenike/source.tmbundle",
+		"36685fda6c3b0ea63f360f95284c765b9e0d1e11",
 		"Other",
 	},
-	// branch: master (upstream textmate/themes.tmbundle — pure data, no Ruby)
+	// branch: master (fork of textmate/themes.tmbundle — pure data, no Ruby)
 	{
 		"A4380B27-F366-4C70-A542-B00D26ED997E",
 		"Themes",
-		"https://github.com/textmate/themes.tmbundle",
+		"https://github.com/sdenike/themes.tmbundle",
 		"e6e918506291b2dec178ad1b7e6f04653d25818c",
 		"Themes",
 	},

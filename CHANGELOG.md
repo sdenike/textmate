@@ -2,6 +2,64 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.15)
+
+The bundles this application depends on now come from repositories this project
+controls, and a long-standing class of broken bundle commands works again.
+
+### Changed
+
+* The four bundles TextMate cannot run without — Bundle Support, Text, Source
+  and Themes — are now fetched from this project's own forks rather than from
+  third-party repositories. Nothing about their contents changed in this move;
+  the same commits are pinned. It means fixes can actually be made and shipped.
+
+### Fixed
+
+* Many bundles carry commands beginning `#!/usr/bin/env ruby18`, a Ruby that
+  has not shipped with macOS in well over a decade. Every one of them failed
+  the moment you invoked it, before running any of its own code. A `ruby18`
+  compatibility shim now routes them to the same Ruby everything else uses, so
+  they run. This covers 27 such commands across 13 bundles, among them Java,
+  Python, Ruby, Perl, Lua, YAML, HTML, Markdown and Groovy.
+* The Source bundle's "Move to EOL and Insert Terminator" macro had the same
+  broken shebang and is fixed at the source, so it stays fixed.
+
+### Note
+
+* The shim is a stopgap, not a cure. Those bundles still need porting properly:
+  some of their commands also use Ruby libraries removed years ago (`iconv`,
+  `parsedate`) and methods that no longer exist, which no shim can rescue. The
+  shim gets them as far as failing on their real problems instead of failing on
+  a missing interpreter.
+
+## 2026-08-13 (v3.0.0-revived.14)
+
+Five bundled commands could never run. They asked for a Ruby interpreter that
+has not existed on macOS in years.
+
+### Fixed
+
+* The Avian bundle's Encrypt on Save, Decrypt, Compress Selected Items and Show
+  Images commands, and the Source bundle's "Move to EOL and Insert Terminator"
+  macro, began `#!/usr/bin/env ruby18`. There is no `ruby18` on any modern
+  macOS and no shim provides one, so all five failed immediately with
+  `env: ruby18: No such file or directory` — before a line of their Ruby ran.
+  They now use `ruby`, which resolves through the usual `${TM_RUBY:-/usr/bin/ruby}`
+  hook.
+* The four Avian commands also passed `-KU`, a Ruby 1.8 encoding flag that
+  today's Ruby warns about. They now pass `-EUTF-8`, which sets the same UTF-8
+  external and script encoding without the warning. Dropping the flag outright
+  was not an option: without it the external encoding falls back to US-ASCII
+  whenever `LANG` is unset, which would corrupt non-ASCII text.
+
+### Note
+
+* This covers only the bundles shipped inside the application. Bundles you
+  install yourself are downloaded copies of their upstream repositories, and
+  24 files across 13 of them have the same broken shebang. Fixing those means
+  forking those repositories; see "Bundle delivery" in `CLAUDE.md`.
+
 ## 2026-08-13 (v3.0.0-revived.13)
 
 The privileged helper that lets you open or save a file you don't own (a

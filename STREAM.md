@@ -4,6 +4,170 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Own bundle forks created; ruby18 shim ships (v3.0.0-revived.15)
+
+**What.** Forked the four mandatory bundles under `sdenike`, repointed `MandatoryBundles.h`,
+pushed a `ruby18` compatibility shim into our own Bundle Support fork, and upstreamed the Source
+macro fix so it is no longer wiped by pin bumps. The release depends on no third-party repository
+any more.
+
+| Pin | Now | SHA |
+|---|---|---|
+| Bundle Support | `sdenike/bundle-support.tmbundle` | `e828e72c` (shim added) |
+| Text | `sdenike/text.tmbundle` | `34ab5891` (unchanged) |
+| Source | `sdenike/source.tmbundle` | `36685fda` (shebang fixed) |
+| Themes | `sdenike/themes.tmbundle` | `e6e91850` (unchanged) |
+
+**Checked before trusting the move:** each fork's HEAD sat exactly at the previously pinned SHA,
+so `git log <oldpin>..HEAD` shows only our own commit in each case. No upstream drift rode along
+with the repoint.
+
+**The monorepo idea does not work.** `sdenike/textmate-bundles` holding everything was the ask,
+but `BundleFetcher` parses a URL into owner/repo only, fetches
+`codeload.github.com/{owner}/{repo}/tar.gz/{ref}`, and validates `info.plist` at the tarball root.
+One bundle per repository is baked in; a monorepo needs a fetcher rewrite. Hence four forks.
+
+**The shim, and why `-EUTF-8`.** `Support/shared/bin/ruby18` sits beside the existing `ruby` shim
+and routes to `${TM_RUBY:-/usr/bin/ruby}`. It rewrites any `-K` flag to `-EUTF-8`: Ruby 2.6 accepts
+`-K` but warns it is 1.8 compatibility, while dropping it is actively wrong — with `LANG` unset,
+which is normal for a bundle command, `default_external` falls back to US-ASCII and non-ASCII text
+breaks. Tested against all five shebang forms found in the wild; all five now execute, and the
+`-w -d` variant's `LoadError` chatter is `ruby -d`'s own output, reproduced by plain `ruby -d`.
+
+**This is a stopgap and that is recorded in three places** — the shim's header, the Bundle Support
+pin comment, and the changelog. The 13 affected bundles still need forking and porting: several
+also use `iconv`, `parsedate`, `Config::CONFIG`, `TimeoutError` and `Object#type`, which raise
+under 2.6 and which no shim can rescue. The shim gets them to the point of failing on their real
+incompatibilities instead of on a missing interpreter.
+
+**Bonus catch: the rave purge was being silently undone.** The first real re-fetch of Bundle
+Support since Phase 2 reintroduced `src/default.rave` and `find_app.cc` as untracked files —
+`d07cc0c8` deleted that directory from the repository, but `fetch_embedded_bundles.sh` only
+scrubbed `.github/` and `CocoaDialog.app/`, so the tarball put it back. `src/` is now scrubbed
+too. The prebuilt `find_app` binary ships in `Support/shared/bin`, so the sources have no runtime
+use. Two `.rave` files still exist in the vendored Dialog plug-ins from Task 2b — pre-existing,
+untouched here.
+
+**Verification.** Build SUCCEEDED. Shim present in the built app; a real `ruby18 -wKU` shebang
+executed through the built app's copy returns `ext=UTF-8` with non-ASCII intact. `src/` absent from
+the built app.
+
+**If interrupted here.** Committed on `fix/bundle-ruby18-shebangs` (PR #8), built but **not
+deployed** as .15 yet.
+
+## 2026-08-13 — BLOCKER found: no write access to the mandatory bundle repos. Deferring bundles.
+
+**Decision (maintainer).** Leave the remaining 24 broken files alone for now and carry on with the
+main build. Eventually stand up our **own** bundle repository with the updated bundles and repoint
+the pins at it, rather than depending on `textmatelives`.
+
+**Why the question came up.** The proposal was to comment the 13 affected bundles out of the
+installer so nobody installs them until they are fixed. Measured, that trades badly: **25 broken
+items out of ~700**, and 11 of the 13 ship grammars. Hiding them removes syntax highlighting for
+Java, Python, Ruby, HTML, Markdown, Perl, Lua, YAML, Groovy and Cron to suppress 3.6% of their
+items. Ruby alone is 2 broken of 201.
+
+**And hiding is not the cheap option.** `AvailableBundles.plist` lives inside
+`Bundle Support.tmbundle/Support/` — a sha-pinned, regenerated bundle — so editing the catalogue
+needs exactly the same write access as fixing the bundles outright.
+
+**The blocker.** Verified via the GitHub API: this account has `push=false`, `admin=false` on
+`textmatelives/{bundle-support,text,source}.tmbundle` and belongs to no organizations. Those three
+are pinned **mandatory** in `MandatoryBundles.h`. So the app's offline bootstrap depends on a third
+party's repositories, no fix to them can be upstreamed, and the one-file `ruby18` shim that would
+repair all 27 broken shebangs at once (a sibling of the existing `ruby` shim in
+`bundle-support.tmbundle/Support/shared/bin/`) cannot be shipped either.
+
+The Source pin's warning comment originally said to push the fix upstream. That was wrong and is
+corrected — it now records the access constraint and says to re-apply by hand after any pin bump.
+
+**The five shebang forms**, for whoever does the eventual fix: `ruby18` (12), `ruby18 -wKU` (9),
+`ruby18 -w` (4), `ruby18 -w -d` (1), `ruby18  -wKU` (1, double space).
+
+**Why this does not block Phase 5.** The breakage is inherited from upstream, lives in opt-in
+bundles, and is identical for upstream TextMate users. The app's own embedded bundles are clean.
+
+## 2026-08-13 — Bundle architecture mapped; do NOT extract the mandatory bundles
+
+**Why this came up.** The question was whether to pull all bundles out of the main repository into
+their own, letting users install what they want — and whether that would unblock working on the
+main build and revisiting bundles later.
+
+**The separation already exists.** The ~50 optional bundles are already independent upstream
+repositories; `Managed/Bundles/` only caches extracted tarballs of them. The in-app chooser is
+real: `Frameworks/Preferences/src/BundlesPreferences.mm`. Even the embedded bundles are generated
+from separate repositories — `bin/fetch_embedded_bundles.sh` materializes them from the SHAs in
+`MandatoryBundles.h`. The embedded copy is a first-launch offline bootstrap, not a source of truth.
+
+**Do not extract the four mandatory bundles.** `MandatoryBundles.h:3-4` states it outright: users
+cannot remove, disable or repoint Bundle Support, Text, Source or Themes. Bundle Support alone
+provides `TM_SUPPORT_PATH`, which **34 of 54 installed bundles and 208 files** depend on. Without
+them a fresh install has no grammars, no themes and no shared Ruby library.
+`BundleRegistry.mm`'s `ensureMandatoryBundlesOnDisk()` logs and continues rather than crashing —
+but that "graceful" path is an editor that cannot highlight anything.
+
+**Avian: keep it, and pin it.** Initially flagged as the extraction candidate because it is the
+fifth embedded bundle while only four are pinned, with no `.sha` marker and zero mentions in
+`MandatoryBundles.h`. That was premature — it is a working feature bundle, not a demo.
+`Import GZip`/`BZip2`/`PNG Image` are `callback.document.binary-import` filters with
+`contentMatch` magic-byte patterns and `hideFromUser = 1`, so opening a compressed file
+transparently decompresses it for viewing; `Show Images` and `Compress Selected Items` are
+`callback.file-browser.action-menu` entries; `Encrypt on Save` is a save hook on
+`attr.rev-path.crypt`. Dropping it regresses opening `.gz`/`.bz2`/`.png` to binary garbage. The
+real anomaly is that it is hand-maintained while its four siblings are regenerated — the fix is to
+pin it, not delete it. Deferred to the later bundle phase.
+
+**Phase 5 is unblocked.** Bundles were scheduled before Phase 5 on the grounds that a signed,
+notarized build would hand broken bundles to real users. The app's own bundles are now clean (zero
+`ruby18` in installed v3.0.0-revived.14). The remaining 24 files are in *optional* bundles fetched
+from upstream — equally broken for upstream TextMate users, i.e. inherited breakage in opt-in
+content, not something this fork's release introduces. Bundle work can follow the main build.
+
+**Source pin now carries a warning.** `MandatoryBundles.h` documents that the embedded
+Source.tmbundle holds an un-upstreamed shebang fix and that bumping the pin silently discards it,
+with the verification command to catch that.
+
+**If interrupted here.** Nothing in flight beyond PR #8, still open.
+
+## 2026-08-13 — ruby18 shebangs fixed in the shipped bundles (v3.0.0-revived.14)
+
+**What.** Rewrote the five `#!/usr/bin/env ruby18` shebangs in
+`Applications/TextMate/support/Bundles/` — four Avian commands and one Source macro. Built,
+verified, released as v3.0.0-revived.14.
+
+**The scope discovery that mattered.** The triage measured `~/Library/Application Support/TextMate/
+Managed/Bundles/`, which is downloaded tarballs with no git. But
+`Applications/TextMate/support/Bundles/` is **245 files tracked in this repository** — the five
+bundles embedded in the app (Avian, Bundle Support, Source, Text, Themes). Those are fixable here
+and now. `Avian.tmbundle` never appeared in the triage at all, because it ships inside the app and
+is not installed into `Managed/`; it carried four of the five bad shebangs.
+
+**Why `-EUTF-8` and not just dropping the flag.** Four of the five read
+`#!/usr/bin/env ruby18 -wKU`. Ruby 2.6 accepts `-K` but warns it "is for 1.8 compatibility and may
+cause odd behavior", so keeping it was not an option for a fork that bans 1.8. Dropping it was not
+an option either — measured with `LANG` unset, which is the realistic case for a bundle command,
+bare `-w` yields `Encoding.default_external = US-ASCII`, and any non-ASCII text the command
+touches would break. `-w -EUTF-8` reproduces `-wKU`'s UTF-8 external *and* script encoding exactly,
+with no warning. All three variants were measured against real files, not reasoned about.
+
+**Verification.** Build SUCCEEDED; zero `ruby18` remains anywhere in the built app's
+`SharedSupport/Bundles/`. All five changed files pass `plutil -lint`. Each script body was
+extracted from its plist and passed `ruby -c` under 2.6.10 — parsing matters, since a working
+shebang on 1.8-only syntax would just move the failure later. All five: Syntax OK.
+
+**Still outstanding.** 24 files across 13 bundles in `Managed/Bundles/` have the same shebang and
+cannot be durably fixed there — no git, and `BundlesManager`'s 3h poll re-fetches over any edit.
+That needs forks of 12 upstream bundle repositories, which creates public repositories under the
+maintainer's account, so it was not done unprompted. `Source.tmbundle` is the one overlap, already
+fixed here.
+
+**Deployed.** `bin/deploy-local` installed v3.0.0-revived.14 over .13; the installed app contains
+no `ruby18` anywhere in `SharedSupport/Bundles/`.
+
+**If interrupted here.** Committed on branch `fix/bundle-ruby18-shebangs`, built and deployed.
+Remaining: merge the PR, then decide whether to fork the 12 upstream bundle repositories to fix
+the other 24 shebangs.
+
 ## 2026-08-13 — Bundle Ruby-1.8 triage done; earlier claim in this log was wrong
 
 **What.** Ran the triage that the previous entry deferred. Every verdict was checked by executing
