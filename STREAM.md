@@ -4,6 +4,49 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Every test target silently ignored new tests. Fixed. (Task 2 of 5)
+
+**The important part of this entry is not the task.** While implementing Task 2, the implementer
+reported that `bin/build OakAppKit/test` had reused a stale generated runner and reported success
+without compiling its edited test. Reproduced directly: appended a test asserting `false`, rebuilt
+without clearing anything, and got
+
+```
+** BUILD SUCCEEDED **
+OakAppKit_test: 2 tests passed        <- the failing test was never compiled or run
+```
+
+**Cause.** Each `<name>_test` target's only source is the runner `gen_test.sh` generates into
+`$(DERIVED_FILE_DIR)`; that runner is what pulls in `tests/t_*.{cc,mm}`. All **28** of those script
+phases declared `outputFiles:` and none declared `inputFiles:`, so Xcode skipped regeneration
+whenever the output existed and never learned a test file had changed. **Adding or editing any test
+in this repository did nothing, while the suite reported green.** Anyone practising TDD here would
+have watched their red test pass.
+
+**Fix** (`f6f3ec51`): `basedOnDependencyAnalysis: false` on all 28 phases — the pattern this project
+already uses for its four resource-assembly phases. Same probe afterwards:
+
+```
+OakAppKit_test: 1 of 3 tests failed
+t_glass.mm:21: Assertion failed: false      <- build exits 1
+```
+
+Regression-checked `ns_test`, an untouched framework: 6 tests passed. Cost is a Ruby script globbing
+one directory per test build.
+
+**Scope of what this invalidates.** Framework *code* changes were always caught — those recompile
+the library and relink the test binary. The blind spot was changes to test files themselves. Past
+verification runs in this repo that only exercised existing tests against changed code remain
+trustworthy; any past claim that a *newly added* test passed does not.
+
+**Task 2 itself:** `OakCreateGlassContainer` added to `OakUIConstructionFunctions`, commit
+`3bf9695b`, 2 tests passing.
+
+**If interrupted here.** Tasks 1-2 complete, 3-5 not started. Resume from the SDD ledger at
+`.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md`, which records every ruling. Still
+**no `CHANGELOG.md` entry** for this increment: it is additive and a CHANGELOG push to master
+triggers a release.
+
 ## 2026-08-14 — Phase 6 execution started: OakAppKit_test now exists (Task 1 of 5)
 
 Branch `phase-6/liquid-glass-foundation`, executing

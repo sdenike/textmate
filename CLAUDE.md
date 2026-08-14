@@ -125,6 +125,16 @@ Runner flags (parsed by the generated runner via `getopt_long`, `bin/gen_test:15
 
 There is no name-based test filter. To run a subset, either run the test binary directly (`~/build/textmate-revived/xcode/Release/<name>_test -v`) or temporarily edit the test source.
 
+Each `<name>_test` target's **only** source is the runner `gen_test.sh` generates into
+`$(DERIVED_FILE_DIR)`; that runner is what pulls in `tests/t_*.{cc,mm}`. Until 2026-08-14 those 28
+script phases declared `outputFiles:` and no `inputFiles:`, so Xcode skipped regeneration whenever
+the output already existed and never noticed a test file had changed — **adding or editing a test
+did nothing while the suite reported green**. Reproduced at the time: appending a test asserting
+`false` still gave `** BUILD SUCCEEDED **` and `2 tests passed`. All 28 phases now carry
+`basedOnDependencyAnalysis: false`, the same pattern the resource-assembly phases use, so the runner
+is rebuilt on every test build. If you ever see a test you just wrote pass without running, check
+that key first.
+
 Tests that shell out to git must call `git init -b master` (not bare `git init`) — modern git's `init.defaultBranch` defaults to `main` and breaks tests that assume `master`.
 
 ## Bundle delivery
