@@ -1,10 +1,14 @@
 name: CI
 
 on:
+  # This repository's default branch is master. These read [main] until
+  # 2026-08-13, inherited from the textmatelives fork, which meant CI never ran
+  # on a single pull request here — only gitleaks (which already used master)
+  # reported a check.
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   # Delegates to the reusable workflow, which runs `build` and `test` as two

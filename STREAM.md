@@ -53,8 +53,45 @@ pulls automatically. So a first launch still fetches 41 bundles from a third par
 real scope of the deferred bundle phase, and it is much bigger than the 13 bundles with broken
 shebangs.
 
-**If interrupted here.** Changes committed on `fix/update-feed-points-at-fork`; PR opened. Nothing
-deployed as .16 yet.
+**Then: the release pipeline could never have fired.** Two inherited textmatelives assumptions in
+the workflows, both silent:
+
+1. `release.yml` triggered on `branches: [main]`. This repository's default branch is `master`, so
+   pushing `CHANGELOG.md` never started a release.
+2. Its guard was "Skip if not an **-undead** release", matching `*-undead*`. This fork versions as
+   `-revived`, so even a manual `workflow_dispatch` would have skipped with a notice.
+
+The workflow was half-migrated already — `if: github.repository == 'sdenike/textmate'` and the
+`textmate-revived` build path were updated, but the trigger and guard were not. Both fixed.
+
+**And CI has never run on a single pull request here.** `ci.yml` triggered on `main` for both
+`push` and `pull_request`, while `gitleaks.yml` correctly used `master`. That is why every PR in
+this session showed exactly one check (`scan`) — `build-and-test` was never invoked. Fixed.
+
+**The `.p12` question.** There is **no `.p12` anywhere** in the home directory. What exists are
+`AuthKey_*.p8` App Store Connect API keys under `~/.appstoreconnect/private_keys/` — a different
+credential, for API/notarytool authentication, not code signing. The signing identity lives in the
+login keychain (`Developer ID Application: Shelby DeNike (485WH9DHS4)`); a `.p12` is how it gets
+into CI and has to be exported once.
+
+`sdenike/hidden-revived` uses the same scheme under different secret names
+(`MACOS_CERTIFICATE`/`MACOS_CERTIFICATE_PASSWORD`/`APPLE_APP_PASSWORD` vs this repo's
+`MAC_CERTIFICATE_P12`/`MAC_CERTIFICATE_PWD`/`APPLE_ID_PWD`) — and it has **no secrets set either**;
+its one release run failed in 17 seconds. Verified via
+`gh api repos/<r>/actions/secrets` returning `{"total_count":0}` with a 200, not a 403 — the
+earlier `gh secret list` empty output could have been a scope problem, so it was re-checked
+explicitly.
+
+`docs/RELEASING.md` was still textmatelives' document: `-undead` versions, `main` branch,
+`textmatelives/textmate` URLs, and a "How users get the update" section describing an
+`api.github.com/releases/latest` poll the code does not do (it reads the git ref advertisement and
+*derives* the asset URL). Rewritten, with a new **First-time setup** section covering the `.p12`
+export, the app-specific password, the five `gh secret set` commands, deleting the exported `.p12`
+afterwards, and dry-running via `workflow_dispatch`.
+
+**If interrupted here.** Committed on `fix/update-feed-points-at-fork`, PR #9. Nothing blocks the
+next step except the maintainer adding those five secrets — that is the only remaining gate on a
+first signed, notarized release.
 
 ## 2026-08-13 — Own bundle forks created; ruby18 shim ships (v3.0.0-revived.15)
 
