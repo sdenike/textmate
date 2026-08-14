@@ -4,6 +4,34 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 4 Task 2b: Dialog/Dialog2 plug-in identifiers renamed
+
+**What:** Changed `CFBundleIdentifier` in `PlugIns/dialog/Info.plist:16` and
+`PlugIns/dialog-1.x/Info.plist:16` from `com.macromates.plugin.${TARGET_NAME}` to
+`com.shelbydenike.plugin.${TARGET_NAME}` -- a 1-line change in each, now possible because the
+previous commit vendored both out of their submodules. Confirmed no other file in the tree
+references `com.macromates.plugin` (repo-wide grep, clean). Read
+`Applications/TextMate/src/TMPlugInController.mm` in full: plug-in discovery
+(`loadAllPlugIns:`) scans `NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory,
+...)` plus the app's own `builtInPlugInsPath` for `*.tmplugin` bundles by file extension, not by
+identifier; `loadPlugInAtPath:` then reads `CFBundleIdentifier` back out of each bundle's own
+`Info.plist` at runtime (`[bundle objectForInfoDictionaryKey:@"CFBundleIdentifier"]`) and uses it
+only as (a) a dictionary key in `loadedPlugIns` to detect double-loads and (b) a lookup against
+the user's `disabledPlugIns` defaults array, which defaults to `@[ @"io.emmet.EmmetTextmate" ]`
+only -- nothing hardcodes `com.macromates.plugin.*` anywhere. Loading is identifier-agnostic by
+construction; this rename cannot break it.
+
+**Why:** Completes the rename Task 2 had to leave blocked -- both plug-ins now carry the same
+`com.shelbydenike.*` identity as the rest of the app.
+
+### If interrupted here
+
+Committed. Next: `./bin/build`, the 25-target parity check against
+`docs/benchmarks/2026-08-12-ninja-parity.md`, confirm both `.tmplugin` bundles land in the built
+`TextMate.app` with the new identifier, then a fresh `git clone --recursive` into a temp
+directory to prove a clean checkout builds without the two dropped submodules (delete the temp
+clone afterward).
+
 ## 2026-08-13 — Phase 4 Task 2b: dialog submodules vendored, dropping the submodule registrations
 
 **What:** Recorded provenance (upstream URL, exact commit SHA, author, date, subject) for both
