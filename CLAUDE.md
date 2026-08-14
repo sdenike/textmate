@@ -132,8 +132,15 @@ the output already existed and never noticed a test file had changed — **addin
 did nothing while the suite reported green**. Reproduced at the time: appending a test asserting
 `false` still gave `** BUILD SUCCEEDED **` and `2 tests passed`. All 28 phases now carry
 `basedOnDependencyAnalysis: false`, the same pattern the resource-assembly phases use, so the runner
-is rebuilt on every test build. If you ever see a test you just wrote pass without running, check
-that key first.
+is regenerated on every test build. If you ever see a test you just wrote pass without running,
+check that key first.
+
+`gen_test.sh` then **compares before replacing** — `cmp -s "$out~" "$out"` — and only moves the new
+runner into place when its contents differ. Both halves are needed and they fix opposite problems:
+the always-run phase stops a changed test being missed, while the comparison stops an unconditional
+`mv` bumping the generated file's mtime on every build, which would force a recompile and relink of
+every test target every time — a real cost on targets with large dependency lists (`document_test`,
+`FileBrowser_test`, `TextMate_test`). Remove either half and you trade one problem for the other.
 
 Tests that shell out to git must call `git init -b master` (not bare `git init`) — modern git's `init.defaultBranch` defaults to `main` and breaks tests that assume `master`.
 
