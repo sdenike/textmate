@@ -433,7 +433,30 @@ finding for both. `SoftwareUpdate_test` passes (`Frameworks/SoftwareUpdate` was 
 `Onigmo_test` also exists in `project.yml` and still passes, but is out of scope for this
 comparison: it postdates this document's ninja-derived 26-target inventory (added during the
 Xcode migration, no `vendor/Onigmo` equivalent ever existed under the rave/ninja build) and was
-never part of the baseline being matched here.
+never part of the baseline being matched here. `OakAppKit_test` is in the same category — added
+2026-08-14 for the Liquid Glass foundation, likewise never part of this baseline. It passes
+(8 tests).
+
+### Addendum 2026-08-14 — `command_test` is intermittent, not merely slow
+
+The paragraph above says `command` and `editor` "passed in seconds with no hang" when re-run
+individually. That undersells `command`. Measured on 2026-08-14 by running the **same already-built
+binary** three times in a row, unchanged, with TextMate.app not running:
+
+```
+run 1: exit=0    command_test: 4 tests passed
+run 2: exit=137  (hung, killed at the guard)
+run 3: exit=137  (hung, killed at the guard)
+```
+
+It is **flaky, not deterministic** — consistent with CI's stated reason for excluding it
+(`wait_for_command()` polls `NSApp`, which is nil in a test binary, so the completion path fires or
+does not depending on timing). A single run of `command_test` is therefore not evidence either way:
+one pass does not show health, and one hang does not show breakage. This was learned the hard way —
+a single passing run on `master` against a single hanging run on a branch briefly looked like a
+regression, and was not.
+
+Always run it under a bounded guard, and treat a hang as "no result" rather than a failure.
 
 **25 of 25 baseline targets match. The count drop from 26 to 25 is `network_test` being
 deleted, not a lost or skipped test.**
