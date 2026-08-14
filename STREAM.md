@@ -4,6 +4,55 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Phase 6 designed: Liquid Glass. Spec written, awaiting review
+
+**Spec:** `docs/superpowers/specs/2026-08-14-liquid-glass-design.md`. Design settled through
+brainstorming; **not yet approved, and no implementation plan written**.
+
+**Decisions, each with evidence rather than preference:**
+
+- **PR #1469 is out of scope.** +19,490/−5,877 across 550 files. It adds whole new applications
+  (CompareMate, SyntaxMate, QuickLookExtensions) and reintroduces 11 `.rave` files — the build
+  system Phase 2 deleted. There is no "UI part" that lifts out cleanly.
+- **Native `NSWindow` tabbing is rejected**, after initially being the maintainer's preference.
+  `DocumentWindowController` holds `NSArray<OakDocument*>` in **one** `NSWindow` with **one**
+  `fileBrowser`, and `restoreSession` iterates `session["projects"]`, one entry per window. **A
+  window in TextMate is a project, not a document.** Native tabbing means one project per tab —
+  open five files from a folder and get five file browsers onto it. TextMate already decided this
+  deliberately: `AppController.mm` sets `allowsAutomaticWindowTabbing = NO`.
+- **The custom tab bar is kept and modernised**: glass background, and its close/overflow/new-tab
+  controls are *already* standard `NSButton`/`OakRolloverButton`, so they need no change.
+
+**The maintainer's suggestion to look at iTerm2 paid off three times**, and is why the spec is
+better than it would have been:
+
+1. iTerm2 uses a custom `PSMTabBarControl`; `allowsAutomaticWindowTabbing` appears nowhere in
+   their tree. A mature app with well-regarded tabs made the same call, for the same structural
+   reason — their windows hold many sessions.
+2. **It corrected the foundation's API.** Their `iTermOpenQuicklyView.m` shows
+   `NSGlassEffectView` hosts content through `.contentView`, not by adding subviews, and that they
+   apply a dynamic light/dark `tintColor`. Getting that wrong would have been one mistake
+   propagated to all 12 call sites.
+3. **It corroborated the sequencing.** Their glass adoption covers the Open Quickly chooser, chat
+   toolbar and a text-field container — overlays and choosers — with the tab bar untouched.
+   Independently the same ordering the spec had chosen.
+
+Their code carries an `@available(macOS 26, *)` guard with an `NSVisualEffectView` fallback. That
+is dead code here: this fork's deployment target *is* macOS 26, so old paths get deleted rather
+than branched around.
+
+**Shape:** a three-constructor foundation in `OakUIConstructionFunctions` (already imported by 46
+files, so widening an existing seam), then six increments ordered by blast radius — small controls
+and overlays first, tab bar last — each shipping as its own release. Verification is screenshots in
+both appearances, reviewed by the maintainer, since no UI test infrastructure exists and a visual
+regression is invisible to the suite.
+
+**If interrupted here.** The spec awaits maintainer review. On approval the next step is the
+`writing-plans` skill to produce the implementation plan — no code until then. Release
+v3.0.0-revived.18 (the 40 missing framework images) was still in its `verify/test` job when this
+was written; once published it should be installed via **Check for Updates**, which now has a
+matching Team Identifier on both sides and has never been exercised successfully.
+
 ## 2026-08-14 — All 40 framework image assets were missing from the app (v3.0.0-revived.18)
 
 **Found by the maintainer noticing the literal word "Button" in the tab bar.** That is AppKit's
