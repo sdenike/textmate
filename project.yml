@@ -687,7 +687,7 @@ targets:
       - sdk: WebKit.framework
       - sdk: libsqlite3.tbd
       - sdk: libiconv.tbd
-  # OakAppKit: cxx_tests declares 2 files but bin/rave has no consumer for target[:cxx_tests] outside its own glob-expand step (bin/rave:137) -- the ninja build never compiles or runs them. Deliberately NOT translated: doing so would add tests the current build never ran, a behaviour change, not parity.
+  # OakAppKit: gui_dictionary.mm and gui_pop_out.mm predate the CxxTest->gen_test.sh migration and use the old `class X : public CxxTest::TestSuite` style, which gen_test.sh's t_*.{cc,mm}/test_* glob does not pick up, so they stay inert. OakAppKit_test below (added in Phase 6) runs only t_glass.mm.
   OakAppKit:
     type: library.static
     platform: macOS
@@ -722,6 +722,58 @@ targets:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme"
+  OakAppKit_test:
+    type: tool
+    platform: macOS
+    sources:
+      - path: "$(DERIVED_FILE_DIR)/_TOakAppKit.mm"
+        optional: true
+        buildPhase: sources
+    preBuildScripts:
+      - script: "\"$SRCROOT/Xcode/scripts/gen_test.sh\" OakAppKit"
+        name: "Generate CxxTest runner (OakAppKit)"
+        outputFiles:
+          - "$(DERIVED_FILE_DIR)/_TOakAppKit.mm"
+    settings:
+      base:
+        GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
+        HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
+    dependencies:
+      - target: OakAppKit
+      - target: OakFoundation
+      - target: text
+      - target: bundles
+      - target: OakSystem
+      - target: cf
+      - target: io
+      - target: ns
+      - target: plist
+      - target: regexp
+      - target: Onigmo
+      - target: crash
+      - target: scope
+      - target: file
+      - target: authorization
+      - target: command
+      - target: buffer
+      - target: parse
+      - target: selection
+      - target: settings
+      - target: encoding
+      - target: scm
+      - target: xdiff
+      - target: theme
+      - sdk: Cocoa.framework
+      - sdk: AppKit.framework
+      - sdk: Foundation.framework
+      - sdk: CoreFoundation.framework
+      - sdk: ApplicationServices.framework
+      - sdk: Security.framework
+      - sdk: Carbon.framework
+      - sdk: Quartz.framework
+      - sdk: libiconv.tbd
+      - sdk: libsqlite3.tbd
   file:
     type: library.static
     platform: macOS
