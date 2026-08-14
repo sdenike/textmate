@@ -4,6 +4,38 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — PR #9 merged on green CI; first Release run reaches the signing step
+
+**Merged.** PR #9 is on master as `f20b6625` after three CI rounds, each exposing the next latent
+failure — `multimarkdown` missing, then the deleted `network_test` still in the target list, then
+green: build 2m50s, test 7m54s across 19 targets, scan 12s. First green CI run this repository has
+ever had.
+
+**The Release workflow then fired on master for the first time**, because merging pushed
+`CHANGELOG.md` — precisely the trigger that was repaired. `v3.0.0-revived.16` passed the new
+`-revived` guard. Result:
+
+```
+verify / build  [success]
+verify / test   [success]
+release         [failure]  — step 6: Import signing certificate into temporary keychain
+```
+
+That is the ideal outcome for a run with no credentials. The release job's own fresh build-and-test
+gate passed, and it failed exactly where it must without secrets. **Empirically, the five secrets
+are the only thing left between this repository and a signed, notarized release** — everything
+upstream of signing is proven working, not assumed.
+
+**Nothing was published.** `git ls-remote --tags origin` and `gh release list` are both empty:
+tagging and release creation are steps 13-14, well downstream of the step-6 failure, so a
+credential-less run cannot leave a bad tag behind. Re-running after adding secrets is therefore
+safe and needs no cleanup.
+
+**If interrupted here.** Master is clean at `f20b6625`, v3.0.0-revived.16 deployed locally. The next
+action is the maintainer's: follow `docs/RELEASING.md`'s "First-time setup" to export the Developer
+ID identity as a `.p12` and set `MAC_CERTIFICATE_P12`, `MAC_CERTIFICATE_PWD`, `APPLE_ID`,
+`APPLE_ID_PWD` and `APPLE_TEAM_ID`, then re-run the Release workflow via `workflow_dispatch`.
+
 ## 2026-08-14 — First CI run in this repository's history; it failed, then was fixed
 
 **What.** Fixing the workflow branch triggers made CI actually run on a pull request for the first
