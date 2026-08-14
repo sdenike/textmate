@@ -2,6 +2,33 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.14)
+
+Five bundled commands could never run. They asked for a Ruby interpreter that
+has not existed on macOS in years.
+
+### Fixed
+
+* The Avian bundle's Encrypt on Save, Decrypt, Compress Selected Items and Show
+  Images commands, and the Source bundle's "Move to EOL and Insert Terminator"
+  macro, began `#!/usr/bin/env ruby18`. There is no `ruby18` on any modern
+  macOS and no shim provides one, so all five failed immediately with
+  `env: ruby18: No such file or directory` — before a line of their Ruby ran.
+  They now use `ruby`, which resolves through the usual `${TM_RUBY:-/usr/bin/ruby}`
+  hook.
+* The four Avian commands also passed `-KU`, a Ruby 1.8 encoding flag that
+  today's Ruby warns about. They now pass `-EUTF-8`, which sets the same UTF-8
+  external and script encoding without the warning. Dropping the flag outright
+  was not an option: without it the external encoding falls back to US-ASCII
+  whenever `LANG` is unset, which would corrupt non-ASCII text.
+
+### Note
+
+* This covers only the bundles shipped inside the application. Bundles you
+  install yourself are downloaded copies of their upstream repositories, and
+  24 files across 13 of them have the same broken shebang. Fixing those means
+  forking those repositories; see "Bundle delivery" in `CLAUDE.md`.
+
 ## 2026-08-13 (v3.0.0-revived.13)
 
 The privileged helper that lets you open or save a file you don't own (a

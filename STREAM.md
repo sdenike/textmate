@@ -4,6 +4,41 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — ruby18 shebangs fixed in the shipped bundles (v3.0.0-revived.14)
+
+**What.** Rewrote the five `#!/usr/bin/env ruby18` shebangs in
+`Applications/TextMate/support/Bundles/` — four Avian commands and one Source macro. Built,
+verified, released as v3.0.0-revived.14.
+
+**The scope discovery that mattered.** The triage measured `~/Library/Application Support/TextMate/
+Managed/Bundles/`, which is downloaded tarballs with no git. But
+`Applications/TextMate/support/Bundles/` is **245 files tracked in this repository** — the five
+bundles embedded in the app (Avian, Bundle Support, Source, Text, Themes). Those are fixable here
+and now. `Avian.tmbundle` never appeared in the triage at all, because it ships inside the app and
+is not installed into `Managed/`; it carried four of the five bad shebangs.
+
+**Why `-EUTF-8` and not just dropping the flag.** Four of the five read
+`#!/usr/bin/env ruby18 -wKU`. Ruby 2.6 accepts `-K` but warns it "is for 1.8 compatibility and may
+cause odd behavior", so keeping it was not an option for a fork that bans 1.8. Dropping it was not
+an option either — measured with `LANG` unset, which is the realistic case for a bundle command,
+bare `-w` yields `Encoding.default_external = US-ASCII`, and any non-ASCII text the command
+touches would break. `-w -EUTF-8` reproduces `-wKU`'s UTF-8 external *and* script encoding exactly,
+with no warning. All three variants were measured against real files, not reasoned about.
+
+**Verification.** Build SUCCEEDED; zero `ruby18` remains anywhere in the built app's
+`SharedSupport/Bundles/`. All five changed files pass `plutil -lint`. Each script body was
+extracted from its plist and passed `ruby -c` under 2.6.10 — parsing matters, since a working
+shebang on 1.8-only syntax would just move the failure later. All five: Syntax OK.
+
+**Still outstanding.** 24 files across 13 bundles in `Managed/Bundles/` have the same shebang and
+cannot be durably fixed there — no git, and `BundlesManager`'s 3h poll re-fetches over any edit.
+That needs forks of 12 upstream bundle repositories, which creates public repositories under the
+maintainer's account, so it was not done unprompted. `Source.tmbundle` is the one overlap, already
+fixed here.
+
+**If interrupted here.** Committed on branch `fix/bundle-ruby18-shebangs`; built but **not yet
+deployed**, and no PR opened yet.
+
 ## 2026-08-13 — Bundle Ruby-1.8 triage done; earlier claim in this log was wrong
 
 **What.** Ran the triage that the previous entry deferred. Every verdict was checked by executing
