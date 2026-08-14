@@ -22,8 +22,11 @@ need regenerating: `xcodegen generate --spec project.yml` only if `project.yml` 
 it, `bin/rave2yaml`, was deleted along with the `.rave` files it read.
 
 `xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build` produces
-the app; ⌘B works from inside Xcode too. Dependencies (`boost`, `google-sparsehash`,
-`multimarkdown`) are installed via Homebrew and are not checked automatically the way
+the app; ⌘B works from inside Xcode too. The only build dependency is `multimarkdown`, installed
+via Homebrew. (`boost` and `google-sparsehash` were listed here until 2026-08-14 but were removed
+from the tree in v3.0.0-revived.6 — `Base.xcconfig:81` records dropping `/opt/homebrew/include`
+along with them. Nothing includes either; the stale entry survived because boost happens to be
+installed on the maintainer's machine.) Dependencies are not checked automatically the way
 `./configure` used to check them — `Xcode/Base.xcconfig`'s `HEADER_SEARCH_PATHS` hardcodes
 `/opt/homebrew/include`, so a MacPorts prefix does not currently work. `capnp` is **not** a
 dependency — Cap'n Proto was removed by the textmatelives merge. `ragel` is also **not** a
