@@ -152,6 +152,16 @@ namespace **hides the global `to_s` overloads from unqualified lookup**, which b
 assertions elsewhere in the same file with a confusing error. Add `using ::to_s;` near the top when
 you introduce a local overload.
 
+**Never use `OAK_ASSERT_EQ` on a raw Objective-C object pointer.** Use `OAK_ASSERT(a == b)`. There
+is no `to_s` overload for `NSView*` and friends, so the comparison silently resolves to
+`bin/gen_test`'s generic `to_s(_T const&)`, which range-fors over the pointer. It compiles — you get
+only a `may not respond to 'countByEnumeratingWithState:objects:count:'` warning — but when that
+assertion *fails*, `to_s` throws `NSInvalidArgumentException`, and the generated runner catches only
+`std::exception const&`. The binary aborts with SIGABRT (exit 134) instead of reporting which test
+failed, so the assertion actively destroys the information it exists to give you. That warning is
+the tell. `OAK_ASSERT_EQ` is fine on numbers, `BOOL`, `std::string` and anything else with a real
+`to_s`.
+
 ## Bundle delivery
 
 Only **three** bundles are actually forked. `Frameworks/BundlesManager/src/MandatoryBundles.h` pins

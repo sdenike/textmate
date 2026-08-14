@@ -4,6 +4,40 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — An assertion that destroyed the information it existed to give (Task 3 fix round)
+
+`test_glass_background_hosts_content_via_contentView` used `OAK_ASSERT_EQ(view.contentView, content)`
+— two `NSView*`. There is no `to_s` overload for ObjC object pointers, so it silently resolved to
+`bin/gen_test`'s generic `to_s(_T const&)`, which range-fors over the pointer. It compiled, emitting
+only a `may not respond to 'countByEnumeratingWithState:objects:count:'` warning.
+
+The failure mode is the point: **when that assertion failed**, `to_s` threw
+`NSInvalidArgumentException`, the generated runner catches only `std::exception const&`, and the
+whole binary aborted with SIGABRT (exit 134) rather than reporting which test failed. An assertion
+macro that makes a failure *less* legible than no assertion at all. The reviewer did not merely spot
+it — it built a repro and confirmed exit 134.
+
+**That line was verbatim from the brief I wrote.** The implementer followed instructions exactly.
+Fixed to `OAK_ASSERT(view.contentView == content)` (`219132ae`), which is how the sibling container
+test already avoided the trap, and the warning — the visible tell — is now gone from the build log.
+The same round added the missing `translatesAutoresizingMaskIntoConstraints` test for
+`OakCreateGlassBackground`, which its sibling had and it did not. Re-review: both ADDRESSED, no new
+breakage, and no other `OAK_ASSERT_EQ` on a raw ObjC pointer anywhere in the file. **8 tests passing.**
+
+`CLAUDE.md` now carries the rule, since the reviewer confirmed this was the repo's first such usage
+and the warning is easy to wave past.
+
+**Parked with a ruling:** the reviewer is right that this test does not pin *our* constructor's
+contract — it exercises `NSGlassEffectView.contentView`'s own setter/getter, which Apple guarantees,
+and would pass for a bare `alloc/init`. Kept anyway: our constructor does not set `contentView`, so
+there is no behaviour of ours to pin; the test documents the usage the doc comment prescribes, which
+is exactly what twelve future call sites will get wrong.
+
+**If interrupted here.** Tasks 1-4 complete. Task 5 (parity) was at 22 of 27 targets, all matching
+baseline — `scm` 2/84, `buffer` 3/26, `cf` exit 138, rest passing — with `command`, `editor`,
+`file`, `Onigmo`, `OakAppKit` outstanding. Resume from
+`.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md`.
+
 ## 2026-08-14 — Liquid Glass foundation complete: all three constructors landed (Task 4 of 5)
 
 `OakGlassChromeMetrics` added, commit `52057e6a`. **7 tests passing.** The foundation the whole
