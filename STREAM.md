@@ -43,7 +43,25 @@ glass rect is bit-identical, and live `screencapture` of the same window agrees 
 with no visible window, no activation policy, and no screen-recording permission. So the screenshots
 are a real test, they run headless, and they run under CI.
 
-**Task 2 has landed — the recorder is on glass.** `776ed70c` modifies
+**The renders caught a silent regression the test suite could not.** `70d21a88` fixes it and
+`1e0f80df` adds the render test that found it.
+
+The migration had shrunk the control from 22 points tall to **16**, and every test still passed.
+Handing the display field to the glass as its `contentView` makes AppKit pin the field to fill the
+glass, so the field's own 16-point intrinsic height propagated up through the glass and beat the
+control's declared 22. It surfaced only because two renders came back byte-identical: at 16 points,
+corner radii of 8 and 12 both exceed half the height and clamp to the same pill. The brief's stop
+condition — *if any two renders are byte-identical, stop* — was written to catch a broken appearance
+override. It caught a layout bug instead.
+
+Five variants were measured against real AppKit before choosing the fix. The height is now pinned at
+**priority 999, not required**, which reproduces the original semantics: 22 is the control's natural
+height and a host that sets its own still wins (verified — a host forcing 30 gets 30, with the text
+still centred). A required constraint would have conflicted with any such host. A holder view
+between the glass and the field absorbs the stretching so the glyphs stay centred rather than being
+pulled to the full height.
+
+**Task 2 landed earlier — the recorder is on glass.** `776ed70c` modifies
 `Frameworks/OakAppKit/src/OakKeyEquivalentView.mm` and adds `t_key_equivalent_view.mm`, taking the
 suite to `OakAppKit_test: 16 tests passed`. This is the first application code in the fork to call a
 glass constructor. The control now installs an `NSGlassEffectView` as its first subview with the
@@ -77,9 +95,26 @@ committed; Task 1's review came back clean on both verdicts. Confirm state with:
 Note that `bin/build` itself never prints a pass count — it execs the runner without `-v` and the
 runner is silent on success. Its silence is not evidence that tests did not run.
 
-Remaining: Task 3 (render four PNGs at radius 8 and 12, light and dark — was dispatched alongside
-Task 2's review), Task 4 (full suite against the parity doc, plus exercising the control in the
-running app via ⌃⌘T), Task 5 (**maintainer picks the corner radius from the renders — this is the
+**The first batch of renders was unusable, and a second harness fix is in flight.** Looking at the
+actual images rather than their checksums showed two defects, both in the harness rather than the
+control:
+
+1. The text read **"Button"**. `OakCreateCloseButton` loads its image from the OakAppKit framework
+   bundle, which a bare test-runner binary does not have, so `NSButton` fell back to drawing its
+   default title — wide enough to cover the key-equivalent glyphs completely. A harness artefact
+   only; the image loads normally in the app.
+2. **The glass had nothing behind it.** `SnapshotView` hosted the control in a plain `NSView` with
+   no background, so the glass was refracting a void and came out a flat pale shape in both
+   appearances. Glass only shows its character over real content.
+
+The fix gives the host `windowBackgroundColor` — what the control actually sits on in the Bundle
+Item Chooser, so the render is representative rather than merely diagnostic — and strips every
+non-glass subview before snapshotting. **Checksums alone would never have caught either of these:**
+all four digests were distinct and all four images were the right size. Someone has to look.
+
+Remaining: finish the render fix, Task 4 (full suite against the parity doc, plus exercising the
+control in the running app via ⌃⌘T — the clear button's real appearance is checked there, since the
+harness cannot show it), Task 5 (**maintainer picks the corner radius from the renders — this is the
 gate; nothing ships before it**), Task 6 (CHANGELOG, release, confirm the cask bump).
 
 ---

@@ -165,6 +165,24 @@ backwards:
   bit-identical, and live `screencapture` of the same window agrees to within 0.015. That is why the
   Liquid Glass increments verify with a headless render test rather than manual screenshots.
 
+Two traps found while adopting glass on the first real control, both of which pass every test:
+
+- **Handing a view to `NSGlassEffectView.contentView` makes AppKit pin it to fill the glass**, so
+  the content's own intrinsic height propagates up and can override the *host* control's declared
+  size. `OakKeyEquivalentView` silently shrank from 22 points to 16 this way. If a control has an
+  `intrinsicContentSize` and gains a glass background, pin its size explicitly — at priority 999
+  rather than required, so a host that sets its own still wins — and put a plain holder view between
+  the glass and the real content so the content keeps its natural height instead of stretching.
+- **A test binary is not the app.** Images loaded from a framework bundle (`OakCreateCloseButton`'s,
+  for one) do not resolve in a bare test runner, and `NSButton` quietly falls back to drawing its
+  default "Button" title. Renders produced by `OakAppKit_test` are therefore representative of
+  layout and material, not of every subview. Check bundle-loaded imagery in the running app.
+
+Renders are verified by looking at them, not only by checking them. The first batch from the
+snapshot harness had four distinct checksums at exactly the right dimensions and was still useless —
+the glass had no backdrop to refract and a placeholder button covered the text. Checksums prove the
+render *varied*; only looking proves it is *right*.
+
 The deployment target is macOS 26.0, so never write `@available(macOS 26, *)` guards or
 `NSVisualEffectView` fallbacks around these — every branch would be dead code. Third-party examples
 (iTerm2's included) carry such guards; do not copy them.
