@@ -4,6 +4,40 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Liquid Glass foundation plan written; v.18 shipped and self-updated
+
+**v3.0.0-revived.18 published and installed via Check for Updates.** The maintainer ran the in-app
+updater and it downloaded, verified, installed and relaunched — the **first time that path has ever
+completed**. Verified afterwards: the running app is `3.0.0-revived.18` signed by
+`Developer ID Application: Shelby Denike (485WH9DHS4)`, all **40 of 40** framework images are at the
+Resources root including `CloseTemplate` and `TabOverflowThinTemplate`, and the tap cask
+auto-bumped to `.18`. The full chain — sign, notarize, publish, bump cask, self-update — now works
+end to end.
+
+**Plan:** `docs/superpowers/plans/2026-08-14-liquid-glass-foundation.md`. Five tasks, 31 steps, no
+placeholders.
+
+**Task 1 is a prerequisite the spec did not anticipate.** `Frameworks/OakAppKit/tests/` contains
+test files but **no `OakAppKit_test` target exists** — `bin/build OakAppKit/test` fails with "does
+not contain a target named", and the two files there (`gui_dictionary.mm`, `gui_pop_out.mm`) use
+the pre-migration `class X : public CxxTest::TestSuite` style that `gen_test.sh` does not glob. They
+have never run. There was no test cycle to do TDD against, so the plan creates the target, which
+leaves the framework testable afterwards rather than only for this work. It also adds `OakAppKit`
+to the `--no-parallel` list in both `bin/build` and CI, since these tests construct `NSView`s and
+Cocoa asserts `NSThread.isMainThread` — making it the eighth such framework.
+
+**The plan deliberately covers the foundation only.** Increments 2-6 are unplanned. The spec's own
+rationale is that increments 2-3 exist to *learn* how glass behaves against TextMate's layout —
+whether `NSGlassEffectView` fights manual frame arithmetic, how `contentView` hosting interacts
+with existing constraints, what tint each surface needs. Writing confident bite-sized steps for
+those now would mean inventing the answers. Each adoption increment gets planned after the
+foundation exists and its target file has been read.
+
+**If interrupted here.** Nothing implemented yet — the plan is written and committed, awaiting the
+maintainer's choice between subagent-driven and inline execution. The foundation increment is
+additive and ships nothing user-visible, so it must **not** get a `CHANGELOG.md` entry: a
+CHANGELOG push to master is what triggers a release.
+
 ## 2026-08-14 — v3.0.0-revived.18 was cancelled by a CI timeout; two causes, both fixed
 
 **The release did not publish.** Its `verify/test` job was cancelled, so `release` was skipped and
