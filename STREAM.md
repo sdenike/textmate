@@ -4,6 +4,47 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — FIRST SIGNED, NOTARIZED RELEASE PUBLISHED (v3.0.0-revived.16)
+
+**Shipped.** <https://github.com/sdenike/textmate/releases/tag/v3.0.0-revived.16> —
+`TextMate-3.0.0-revived.16.tbz`, 11,812,507 bytes. All three jobs green: `verify/build`,
+`verify/test`, `release`.
+
+**Verified independently**, by downloading the published asset rather than trusting the workflow's
+own assertions:
+
+```
+codesign --verify --deep --strict   valid on disk; satisfies its Designated Requirement
+codesign -dv                        flags=0x10000(runtime)   <- hardened runtime
+                                    Authority=Developer ID Application: Shelby Denike (485WH9DHS4)
+                                    Authority=Developer ID Certification Authority
+                                    Authority=Apple Root CA
+spctl --assess --type execute       accepted, source=Notarized Developer ID
+xcrun stapler validate              ticket stapled (so first launch works offline)
+```
+
+**What it took, from a pipeline that had never once run.** Five failures, each hiding the next:
+
+1. `ci.yml`/`release.yml` triggered on `main`; this repository uses `master` — nothing ever ran.
+2. `release.yml` guarded on `-undead` versions; this fork ships `-revived` — would have skipped.
+3. `build-and-test.yml` never installed `multimarkdown`, which `bin/gen_html:67` requires.
+4. Its `TESTS` list still named the `network_test` target deleted in `42e674ce`, aborting the step
+   and silently suppressing ten later targets.
+5. `release.yml` had no dependency-install step at all, so the signed build hit (3) again.
+6. Notarization rejected `Contents/Resources/PrivilegedTool` for
+   `com.apple.security.get-task-allow` — the Mach-O re-sign sweep never globbed `Resources/`, and
+   the nested-bundle re-seal only handles bundles, so a bare executable fell between them.
+
+**Phase 5's core objective is met**: Developer ID signing, notarization, and GitHub Releases
+delivery all work end to end, and the in-app updater points at this repository, so an installed
+v3.0.0-revived.16 can now actually receive updates.
+
+**If interrupted here.** Master clean; the release is public. Remaining Phase 5 surface: nothing
+blocking. Next phases — 5a (Homebrew tap, migrate `hidden-revived` onto it), 6 (Liquid Glass +
+PR #1469 UI), 7 (performance), 8 (shared modules), 9 (optional LSP). The bundle catalogue remains
+the largest known debt: **108 `AvailableBundles.plist` entries all pointing at `textmatelives`, 41
+of them installed by default on first launch.**
+
 ## 2026-08-14 — Signing works end to end; notarization rejected PrivilegedTool
 
 **Progress.** With build dependencies added, the release run got through building signed, locating
