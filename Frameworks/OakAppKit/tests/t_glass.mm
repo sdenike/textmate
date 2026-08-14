@@ -64,7 +64,19 @@ void test_glass_background_hosts_content_via_contentView ()
 	NSGlassEffectView* view = OakCreateGlassBackground(NSGlassEffectViewStyleRegular, nil);
 	NSView* content = [[NSView alloc] initWithFrame:NSZeroRect];
 	view.contentView = content;
-	OAK_ASSERT_EQ(view.contentView, content);
+	// Not OAK_ASSERT_EQ: two NSView* resolve to gen_test's generic to_s
+	// fallback, which range-fors over the pointer. It compiles (with a
+	// warning), but a failing assertion would throw NSInvalidArgumentException,
+	// which the runner's catch(std::exception const&) doesn't catch -- SIGABRT
+	// instead of a reported failure. test_glass_container_is_a_container
+	// already avoids the same trap the same way.
+	OAK_ASSERT(view.contentView == content);
+}
+
+void test_glass_background_does_not_autoresize ()
+{
+	NSGlassEffectView* view = OakCreateGlassBackground(NSGlassEffectViewStyleRegular, nil);
+	OAK_ASSERT_EQ(view.translatesAutoresizingMaskIntoConstraints, NO);
 }
 
 void test_glass_chrome_metrics_are_shared_constants ()
