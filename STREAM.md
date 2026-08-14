@@ -4,6 +4,45 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 4 Task 2b: dialog submodules vendored, dropping the submodule registrations
+
+**What:** Recorded provenance (upstream URL, exact commit SHA, author, date, subject) for both
+`PlugIns/dialog` (`https://github.com/textmate/dialog.git` @ `fa2f59e3a`) and
+`PlugIns/dialog-1.x` (`https://github.com/textmate/dialog-1.x.git` @ `43df3148e`), wrote it into
+a new `PROVENANCE.md` in each directory, then de-submoduled both: `git rm --cached` the gitlink
+(keeps working-tree files on disk), deleted each directory's `.git` gitlink file, removed both
+stanzas from `.gitmodules`, removed both `submodule.PlugIns/dialog*` sections from `.git/config`,
+deleted `.git/modules/PlugIns/dialog` and `.git/modules/PlugIns/dialog-1.x`, then `git add`ed the
+now-ordinary tracked files. Verified: `git submodule status` shows 4 remaining (icons, CxxTest,
+Onigmo, kvdb), neither dialog path listed; `git diff --cached --summary` shows exactly two
+`delete mode 160000` (the old gitlinks) and 55 `create mode 100644` (identical file content,
+confirmed no executable bits in the original submodules to lose). File contents byte-for-byte
+unchanged from the recorded upstream commit -- no edits made besides adding `PROVENANCE.md`.
+Checked `.gitignore` and `project.yml` for submodule-path assumptions: neither needs a change
+(`.gitignore` never mentioned these paths; `project.yml`'s 31 `PlugIns/dialog*` references are
+plain source-file paths that resolve identically whether the directory is a submodule checkout
+or vendored files).
+
+**Why:** Task 2 left `PlugIns/dialog*` on `com.macromates.plugin.*` because both were git
+submodules pointing at upstream's own unforked repos -- editing `Info.plist` inside a submodule
+checkout produces a commit only this machine has, and `.gitmodules` still resolves to upstream,
+so a fresh clone or CI would silently fail to get the rename. The user chose vendoring over
+forking upstream: small, dormant repos, and it also drops 2 of the 6 remaining submodules.
+
+### If interrupted here
+
+Vendoring is staged but not yet committed. Next: commit this as its own increment (`git status
+--porcelain` first), then do the identifier rename (`com.macromates.plugin.${TARGET_NAME}` →
+`com.shelbydenike.plugin.${TARGET_NAME}` in both `PlugIns/*/Info.plist:16`) as a second commit,
+then verify `TMPlugInController.mm` doesn't hardcode the old identifier (initial read of
+`loadPlugInAtPath:`/`loadAllPlugIns:` shows it discovers `.tmplugin` bundles by directory scan +
+extension and reads `CFBundleIdentifier` dynamically from each bundle's own Info.plist -- used
+only as a dictionary key and against the user's `disabledPlugIns` defaults array, which defaults
+to `@[ @"io.emmet.EmmetTextmate" ]` -- so no hardcoded `com.macromates.plugin.*` match exists
+anywhere in the tree; confirm this holds after rebuilding), then `./bin/build`, the 25-target
+parity check, a fresh `git clone --recursive` build in a temp dir, and a check of the built
+`TextMate.app`'s two `.tmplugin` bundles for identifier + presence.
+
 ## 2026-08-13 — Phase 4 Task 2: identity rename built, deployed, and verified end-to-end
 
 **What:** Built (`./bin/build TextMate`, `BUILD SUCCEEDED`) and ran all 25 baseline test targets
