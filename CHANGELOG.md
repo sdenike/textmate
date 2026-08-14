@@ -2,6 +2,32 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-13 (v3.0.0-revived.11)
+
+The application now has its own identity, separate from the original TextMate.
+
+### Changed
+
+* The app's internal identifier is now `com.shelbydenike.TextMate`. Your
+  settings carried over automatically via the migration shipped in the previous
+  release — nothing to do.
+* Your original settings are left in place untouched, so an older build can
+  still be installed if needed.
+
+### Deliberately unchanged
+
+Three things kept the original naming on purpose, because changing them would
+break your existing data or files elsewhere on your Mac:
+
+* **Bookmarks and code folds** are stored as extended attributes on the files
+  themselves. Renaming those would orphan every bookmark and fold in every file
+  you have ever opened.
+* **Document type identifiers**, which every installed bundle references.
+* **`txmt://` links**, which external tools and existing links rely on.
+
+Bundles, themes, and gems live in a folder named for the app rather than its
+identifier, so they were never affected.
+
 ## 2026-08-13 (v3.0.0-revived.10)
 
 Groundwork for the identity change. **No visible difference in this release** —
