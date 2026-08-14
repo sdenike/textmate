@@ -47,7 +47,12 @@ static NSWindow* PrepareWindow (NSView* view, NSString* appearanceName)
 	if(size.height < 1)
 		size.height = 22;
 
-	NSRect frame = NSMakeRect(0, 0, size.width, size.height);
+	// Inset the view from the window edge. Without this the glass runs edge to
+	// edge and its outline leaves the frame, which makes the one thing these
+	// renders exist to show -- the corner radius -- nearly impossible to see.
+	CGFloat const kPadding = 12;
+
+	NSRect frame = NSMakeRect(0, 0, size.width + kPadding * 2, size.height + kPadding * 2);
 	NSWindow* window = [[NSWindow alloc] initWithContentRect:frame styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
 	window.releasedWhenClosed = NO;
 
@@ -59,10 +64,10 @@ static NSWindow* PrepareWindow (NSView* view, NSString* appearanceName)
 	window.contentView = host;
 
 	OakAddAutoLayoutViewsToSuperview(@[ view ], host);
-	[view.leadingAnchor constraintEqualToAnchor:host.leadingAnchor].active   = YES;
-	[view.trailingAnchor constraintEqualToAnchor:host.trailingAnchor].active = YES;
-	[view.topAnchor constraintEqualToAnchor:host.topAnchor].active           = YES;
-	[view.bottomAnchor constraintEqualToAnchor:host.bottomAnchor].active     = YES;
+	[view.leadingAnchor constraintEqualToAnchor:host.leadingAnchor constant:kPadding].active    = YES;
+	[view.trailingAnchor constraintEqualToAnchor:host.trailingAnchor constant:-kPadding].active = YES;
+	[view.topAnchor constraintEqualToAnchor:host.topAnchor constant:kPadding].active            = YES;
+	[view.bottomAnchor constraintEqualToAnchor:host.bottomAnchor constant:-kPadding].active     = YES;
 
 	[host layoutSubtreeIfNeeded];
 	for(NSInteger i = 0; i < 40; ++i)
@@ -282,9 +287,10 @@ void test_key_equivalent_view_renders_in_both_appearances ()
 			NSString* name = [NSString stringWithFormat:@"key-equivalent-r%@-%@", radius,
 				[appearance isEqualToString:NSAppearanceNameAqua] ? @"light" : @"dark"];
 
+			// 180 x 22 plus PrepareWindow's 12pt padding on every side.
 			NSBitmapImageRep* rep = SnapshotView(MakeRecorder(@"@s", radius.doubleValue), appearance);
-			OAK_ASSERT_EQ(rep.pixelsWide, 180);
-			OAK_ASSERT_EQ(rep.pixelsHigh, 22);
+			OAK_ASSERT_EQ(rep.pixelsWide, 204);
+			OAK_ASSERT_EQ(rep.pixelsHigh, 46);
 
 			if(dir)
 			{
