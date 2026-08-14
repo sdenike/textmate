@@ -144,6 +144,14 @@ every test target every time — a real cost on targets with large dependency li
 
 Tests that shell out to git must call `git init -b master` (not bare `git init`) — modern git's `init.defaultBranch` defaults to `main` and breaks tests that assume `master`.
 
+**`bin/gen_test` wraps each test file in `namespace <filename> { … }`.** Two consequences worth
+knowing before they cost you an afternoon. `OAK_ASSERT_EQ` stringifies both operands on failure, so
+asserting on a type with no `to_s()` fails to compile — define an overload in the test file, as
+`t_OakCompareVersionStrings.mm` does for `NSComparisonResult`. But defining one inside that implicit
+namespace **hides the global `to_s` overloads from unqualified lookup**, which breaks unrelated
+assertions elsewhere in the same file with a confusing error. Add `using ::to_s;` near the top when
+you introduce a local overload.
+
 ## Bundle delivery
 
 Only **three** bundles are actually forked. `Frameworks/BundlesManager/src/MandatoryBundles.h` pins

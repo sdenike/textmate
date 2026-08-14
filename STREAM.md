@@ -4,6 +4,36 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Glass constructors 2 of 3 landed; two more build traps documented (Tasks 2-3)
+
+**Task 2** — `OakCreateGlassContainer`, commit `3bf9695b`. **Task 3** — `OakCreateGlassBackground`,
+commit `b8934940`. 6 tests passing, all verified registered in the generated runner.
+
+**The stale-runner fix needed a second half.** Setting `basedOnDependencyAnalysis: false` stopped
+changed tests being missed, but made an unconditional `mv` bump the runner's mtime every build,
+forcing a recompile and relink of every test target every time. The reviewer caught that; its
+suggested `cmp -s` guard was then **inert**, because `bin/gen_test:133` emitted `<%= Time.now %>`
+into the runner's version string, so two consecutive generations always differed. Confirmed by
+diffing them — the timestamp was the only delta. Dropped it (`0f17f727`); "generated just now"
+carries no information in a test runner's `--version`. Both properties now verified together: a
+no-op build leaves the mtime untouched, and appending a failing test still gives `1 of 3 tests
+failed`, exit 1. Fixing either half alone breaks the other.
+
+**A second gen_test trap, found by Task 3 and now in `CLAUDE.md`.** `bin/gen_test` wraps each test
+file in `namespace <filename> { … }`. `OAK_ASSERT_EQ` stringifies both operands on failure, so
+asserting on a type without `to_s()` will not compile — but defining an overload inside that
+implicit namespace **hides the global `to_s` overloads**, breaking unrelated assertions in the same
+file. Task 3 hit both in sequence: added `to_s(NSGlassEffectViewStyle)` following
+`t_OakCompareVersionStrings.mm`'s precedent, which then broke Task 2's autoresize test until
+`using ::to_s;` was added. Neither is scope creep — both are required to make the brief's own tests
+compile.
+
+**If interrupted here.** Task 4 (`OakGlassChromeMetrics`) is in flight; Task 5 (parity verification)
+not started. Tasks 3 and 4 are to be reviewed together as one unit — same shape, same files. The SDD
+ledger at `.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md` records every ruling and
+is the resume point. Still **no `CHANGELOG.md` entry**: this increment is additive and a CHANGELOG
+push to master triggers a release.
+
 ## 2026-08-14 — Every test target silently ignored new tests. Fixed. (Task 2 of 5)
 
 **The important part of this entry is not the task.** While implementing Task 2, the implementer
