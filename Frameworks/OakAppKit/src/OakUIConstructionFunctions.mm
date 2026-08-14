@@ -322,3 +322,8 @@ NSGlassEffectView* OakCreateGlassBackground (NSGlassEffectViewStyle style, NSCol
 		res.tintColor = tint;
 	return res;
 }
+
+OakGlassMetrics OakGlassChromeMetrics ()
+{
+	return { .cornerRadius = 12, .contentInsets = NSEdgeInsetsMake(8, 12, 8, 12) };
+}

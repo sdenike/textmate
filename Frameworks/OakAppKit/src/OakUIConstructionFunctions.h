@@ -38,6 +38,17 @@ NSGlassEffectContainerView* OakCreateGlassContainer ();
 // does not composite correctly.
 NSGlassEffectView* OakCreateGlassBackground (NSGlassEffectViewStyle style, NSColor* tint = nil);
 
+// Shared chrome geometry, so surfaces do not each invent their own. These are
+// starting values chosen to match macOS 26 system chrome; if screenshot review
+// during a later increment shows they are wrong, change them here once.
+struct OakGlassMetrics
+{
+	CGFloat cornerRadius;
+	NSEdgeInsets contentInsets;
+};
+
+OakGlassMetrics OakGlassChromeMetrics ();
+
 OakBackgroundFillView* OakCreateVerticalLine (OakBackgroundFillViewStyle style);
 void OakSetupKeyViewLoop (NSArray<NSView*>* views);
 void OakAddAutoLayoutViewsToSuperview (NSArray<NSView*>* views, NSView* superview);

@@ -66,3 +66,13 @@ void test_glass_background_hosts_content_via_contentView ()
 	view.contentView = content;
 	OAK_ASSERT_EQ(view.contentView, content);
 }
+
+void test_glass_chrome_metrics_are_shared_constants ()
+{
+	OakGlassMetrics metrics = OakGlassChromeMetrics();
+	OAK_ASSERT_EQ(metrics.cornerRadius, 12);
+	OAK_ASSERT_EQ(metrics.contentInsets.top, 8);
+	OAK_ASSERT_EQ(metrics.contentInsets.left, 12);
+	OAK_ASSERT_EQ(metrics.contentInsets.bottom, 8);
+	OAK_ASSERT_EQ(metrics.contentInsets.right, 12);
+}
