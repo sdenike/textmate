@@ -4,6 +4,48 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Bundle architecture mapped; do NOT extract the mandatory bundles
+
+**Why this came up.** The question was whether to pull all bundles out of the main repository into
+their own, letting users install what they want — and whether that would unblock working on the
+main build and revisiting bundles later.
+
+**The separation already exists.** The ~50 optional bundles are already independent upstream
+repositories; `Managed/Bundles/` only caches extracted tarballs of them. The in-app chooser is
+real: `Frameworks/Preferences/src/BundlesPreferences.mm`. Even the embedded bundles are generated
+from separate repositories — `bin/fetch_embedded_bundles.sh` materializes them from the SHAs in
+`MandatoryBundles.h`. The embedded copy is a first-launch offline bootstrap, not a source of truth.
+
+**Do not extract the four mandatory bundles.** `MandatoryBundles.h:3-4` states it outright: users
+cannot remove, disable or repoint Bundle Support, Text, Source or Themes. Bundle Support alone
+provides `TM_SUPPORT_PATH`, which **34 of 54 installed bundles and 208 files** depend on. Without
+them a fresh install has no grammars, no themes and no shared Ruby library.
+`BundleRegistry.mm`'s `ensureMandatoryBundlesOnDisk()` logs and continues rather than crashing —
+but that "graceful" path is an editor that cannot highlight anything.
+
+**Avian: keep it, and pin it.** Initially flagged as the extraction candidate because it is the
+fifth embedded bundle while only four are pinned, with no `.sha` marker and zero mentions in
+`MandatoryBundles.h`. That was premature — it is a working feature bundle, not a demo.
+`Import GZip`/`BZip2`/`PNG Image` are `callback.document.binary-import` filters with
+`contentMatch` magic-byte patterns and `hideFromUser = 1`, so opening a compressed file
+transparently decompresses it for viewing; `Show Images` and `Compress Selected Items` are
+`callback.file-browser.action-menu` entries; `Encrypt on Save` is a save hook on
+`attr.rev-path.crypt`. Dropping it regresses opening `.gz`/`.bz2`/`.png` to binary garbage. The
+real anomaly is that it is hand-maintained while its four siblings are regenerated — the fix is to
+pin it, not delete it. Deferred to the later bundle phase.
+
+**Phase 5 is unblocked.** Bundles were scheduled before Phase 5 on the grounds that a signed,
+notarized build would hand broken bundles to real users. The app's own bundles are now clean (zero
+`ruby18` in installed v3.0.0-revived.14). The remaining 24 files are in *optional* bundles fetched
+from upstream — equally broken for upstream TextMate users, i.e. inherited breakage in opt-in
+content, not something this fork's release introduces. Bundle work can follow the main build.
+
+**Source pin now carries a warning.** `MandatoryBundles.h` documents that the embedded
+Source.tmbundle holds an un-upstreamed shebang fix and that bumping the pin silently discards it,
+with the verification command to catch that.
+
+**If interrupted here.** Nothing in flight beyond PR #8, still open.
+
 ## 2026-08-13 — ruby18 shebangs fixed in the shipped bundles (v3.0.0-revived.14)
 
 **What.** Rewrote the five `#!/usr/bin/env ruby18` shebangs in
