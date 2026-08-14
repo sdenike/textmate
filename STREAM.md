@@ -4,6 +4,41 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Release secrets work; release.yml had no dependency install step
+
+**Secrets are in and correct.** All five set on `sdenike/textmate`. The release run past them:
+
+```
+verify / build  [success]
+verify / test   [success]
+release         [failure]  — step 7: Build signed TextMate.app
+```
+
+Step 6, **Import signing certificate into temporary keychain, now passes** — the `.p12`, its
+password and the notarization credentials are all valid. That was the previous stopping point.
+
+**The new failure.** `PhaseScriptExecution Assemble resources (TextMate)` again — the same
+`multimarkdown` problem fixed earlier for `build-and-test.yml`. Cause: **`release.yml` has no
+dependency install step whatsoever.** The `release` job deliberately builds its own app rather than
+reusing `verify`'s artifact, so it needs the dependencies in its own right and never had them.
+Added `brew install mercurial subversion multimarkdown` before the certificate import.
+
+**`docs/RELEASING.md` was wrong about this too** — it listed "4. Install deps via Homebrew
+(`:85-87`)" describing a step that did not exist. When rewriting that document earlier I corrected
+its fork-specific details (branch, version suffix, URLs, the update mechanism) but took its
+step-by-step description of the workflow on trust rather than checking it line by line. Corrected,
+with a note about why the gap was invisible.
+
+**Pattern worth naming:** every one of these — `main` vs `master`, `-undead` vs `-revived`, missing
+`multimarkdown` in two separate workflows, the deleted `network_test`, this missing install step —
+was latent for the same reason. A pipeline that cannot run cannot fail, so its rot is silent and
+its documentation drifts unchallenged. Each fix has bought exactly one more step of progress, which
+is the expected shape when unwinding an inherited pipeline that has never once executed.
+
+**If interrupted here.** Fix committed; the next release run needs triggering via
+`workflow_dispatch`. No tag or release exists yet — `git ls-remote --tags origin` and
+`gh release list` are both still empty, and tagging is step 15, well downstream of the failure.
+
 ## 2026-08-14 — PR #9 merged on green CI; first Release run reaches the signing step
 
 **Merged.** PR #9 is on master as `f20b6625` after three CI rounds, each exposing the next latent

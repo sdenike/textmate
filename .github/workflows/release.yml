@@ -88,6 +88,16 @@ jobs:
             echo "should_release=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # This job builds its own app rather than reusing verify's artifact, so it
+      # needs the build dependencies in its own right. It had no install step at
+      # all, which only became visible once the workflow could actually run:
+      # bin/gen_html:67 searches for multimarkdown alone, so the Assemble
+      # resources phase failed with "Unable to find a markdown compiler".
+      # Kept in step with build-and-test.yml's list.
+      - name: Install build dependencies
+        if: steps.tagcheck.outputs.should_release == 'true'
+        run: brew install mercurial subversion multimarkdown
+
       - name: Import signing certificate into temporary keychain
         if: steps.tagcheck.outputs.should_release == 'true'
         env:

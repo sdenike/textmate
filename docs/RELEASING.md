@@ -70,7 +70,11 @@ in this job):
    `-revived`, the run skips (no release).
 3. **Skip if the tag already exists** on `origin` (`:70-83`). Re-running for an
    already-released version is a no-op.
-4. **Install deps** via Homebrew (`:85-87`).
+4. **Install build dependencies** via Homebrew — `mercurial subversion
+   multimarkdown`. This step did not exist until 2026-08-14, despite this
+   document having always claimed it did; the omission was invisible while the
+   workflow could not run, and surfaced as "Unable to find a markdown compiler"
+   on the first release attempt with working credentials.
 5. **Import the Developer ID certificate** from secrets into an ephemeral
    keychain and resolve the signing identity (`:89-118`).
 6. **Build the signed app**: a single `xcodebuild -scheme TextMate -configuration
