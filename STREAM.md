@@ -4,6 +4,48 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Bundle Ruby-1.8 triage done; earlier claim in this log was wrong
+
+**What.** Ran the triage that the previous entry deferred. Every verdict was checked by executing
+the construct against the real system Ruby (2.6.10p210) rather than reasoning about it, which is
+what caught the error below.
+
+**Correction to the previous entry.** It named `$KCODE` and `require 'jcode'` as the real
+breakage. **Both are absent from the installed bundles entirely** — as are `ftools`, `generator`
+and `soap`. The original scan's 27 hits were 26 files carrying a `ruby18` shebang plus one
+`RUBY_VERSION` branch; the alternation just made it look like the other markers had matched. The
+same wrong claim went into `CLAUDE.md` and the Phase 4 PR body. `CLAUDE.md` is now corrected and
+says so explicitly; the PR body is historical and was left alone.
+
+**What is actually broken: a shebang, not a language feature.** 24 files across 13 bundles start
+`#!/usr/bin/env ruby18`. No `ruby18` exists on `PATH`, and — the decisive check —
+`bundle-support.tmbundle/Support/shared/bin/` ships a `ruby` shim but **no `ruby18` shim**, so the
+`${TM_RUBY:-/usr/bin/ruby}` indirection does not rescue them. They name a different interpreter and
+die at `env: ruby18: No such file or directory` before any Ruby parses.
+
+Java 4 · Python 4 · YAML 3 · Active4D 2 · Lua 2 · Perl 2 · Gist 1 · Markdown 1 · Ruby 1 ·
+Source 1 · Groovy 1 · HTML 1 · Cron 1.
+
+The Python four are `Templates/*/info.plist` whose `<key>command</key>` *is* the `ruby18` script —
+so "new file from template" fails, which is a first-run-visible path. Two hits are deliberately
+**not** counted as breakage: `Ruby.tmbundle/Tests/rubylexer/regtest.rb` is a test fixture, and
+`Bundle Development.tmbundle/Snippets/Ruby 1_8 Shebang.tmSnippet` stores the shebang under
+`<key>content</key>` — it inserts one rather than running one. Worth revisiting, since a fork that
+bans 1.8 shipping a shortcut for writing 1.8 shebangs is its own small absurdity.
+
+**Library breakage, overlapping the above — do not sum the sets.** Confirmed fatal by execution:
+`require 'iconv'` (3 files) and `require 'parsedate'` (1) both `cannot load such file`;
+`Config::CONFIG` (1) and `TimeoutError` (3) both `NameError`; `Object#type` `NoMethodError` (~5).
+Confirmed *harmless*, warning only: `Fixnum`/`Bignum` (11), `Hash#index` (18) — both still run.
+
+**Honest limit on two numbers.** The `Object#type` (~5) and `String#each` (~19) counts come from
+loose regexes that also match `Array#each`, `IO#each` and `String#index`, all of which are fine.
+They are upper bounds needing per-file confirmation, not findings. Recorded that way in
+`CLAUDE.md` rather than quoted as fact.
+
+**If interrupted here.** Triage is committed on branch `docs/bundle-ruby-triage`; no bundle file
+has been modified. Next piece is mechanical: fix the 24 shebangs, which is most of the problem.
+
 ## 2026-08-13 — KNOWN GAP logged: bundles are outside the Ruby 2.6 constraint
 
 **Why this came up.** After the Phase 4 PR opened, the question was whether the plan needs to
