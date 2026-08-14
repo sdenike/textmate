@@ -72,4 +72,14 @@ done
 out="$DERIVED_FILE_DIR/_T${name}${ext}"
 
 "$SRCROOT/bin/gen_test" "${tests[@]+"${tests[@]}"}" > "$out~"
-mv "$out~" "$out"
+# Only replace the runner when its contents actually changed. This script runs on
+# every build (its phase is basedOnDependencyAnalysis: false, so that adding or
+# editing a test is never missed), and an unconditional mv would bump the
+# generated file's mtime every time -- forcing a recompile and relink of every
+# test target on every build. Comparing first keeps the correctness that setting
+# bought while restoring incremental builds.
+if cmp -s "$out~" "$out"; then
+	rm -f "$out~"
+else
+	mv "$out~" "$out"
+fi

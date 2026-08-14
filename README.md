@@ -1,8 +1,4 @@
-# TextMate
-
-<p align="center">
-  <img src="docs/images/tml_banner_800px.png" alt="TextMate Lives" width="1000">
-</p>
+# TextMate Revived
 
 > This is an **unaffiliated, community-maintained fork** of [TextMate](https://github.com/textmate/textmate)
 > by MacroMates ApS / Allan Odgaard. It is not endorsed by, sponsored by, or otherwise affiliated
@@ -11,101 +7,126 @@
 
 ## About this fork
 
-I ❤️ TextMate.
+TextMate, brought forward to macOS 26 on Apple silicon.
 
-I have been using it almost everyday since I bought it (way back in I think 2008?) and while many friends and colleagues moved on to Sublime, then Atom then VS Code etc. I stayed with TextMate. I just like TextMate. Even with its many quirks over the last few years, I stuck with it -- it is a trusted ally. I still think when it comes to editing, it has features that many folks fail to appreciate.
+Upstream's last release predates Apple silicon Macs and today's macOS. This fork exists to keep the
+editor building, signed, notarized and installable on current hardware, without changing what
+TextMate is. The visible differences are meant to be the absence of problems: it launches on a
+modern Mac, it updates itself, and it installs with `brew`.
 
-I have always wanted to contribute and help get it back up to speed, but to be honest, I am not much of a macOS programmer and TextMate is a fairly sophisticated app. You can probably see where this is heading: *vibe coded fixes.*
+What that has meant in practice: replacing the retired `rave`/`ninja` build with a committed Xcode
+project, removing dependencies the editor no longer needed, moving off Ruby 1.8-era assumptions to
+the system Ruby 2.6.10, migrating the HTML output from `WebView` to `WKWebView`, and taking on the
+fork's own identity for bundle identifiers and the privileged helper so it can coexist with an
+official install.
 
-Now, I recognize that some folks may not be keen on this practice and so I make no assumptions or prognostications and I will not storm Allan Odgaard with unsolicited PRs, but I have a bunch of changes that I think could help put TM back in a great place for the other folks out there that still enjoy using it.
-
-@sorbits if you are still out there, thank you for TextMate. I hope that this message finds you well and that you do not find the work distasteful or offensive.
-
-Long live TextMate!
+Long live TextMate.
 
 ## Requirements
 
-- Apple Silicon (arm64); Intel Macs are not supported.
+- Apple Silicon (arm64). Intel Macs are not supported.
 - macOS 26 or later.
 - System Ruby 2.6.10 (`/usr/bin/ruby`) for bundle commands. Override with `TM_RUBY` if needed.
 
-## Download
+## Install
 
-Grab the latest signed and notarized build from the [Releases page](https://github.com/textmatelives/textmate/releases).
+```sh
+brew tap sdenike/tap
+brew install --cask textmate-revived
+```
+
+That tap serves every application from this account, so you only need to tap it once.
+
+Or download the signed, notarized build directly from the
+[Releases page](https://github.com/sdenike/textmate/releases). The app updates itself from there —
+Check for Updates installs an update only if it carries the same Developer ID as the copy you are
+running.
 
 ## Feedback
 
-For fork-specific bugs, feature requests, and discussion, [file an issue](https://github.com/textmatelives/textmate/issues). Patches are welcome too — [open a pull request](https://github.com/textmatelives/textmate/pulls), with or without a matching issue.
+For fork-specific bugs, feature requests, and discussion,
+[file an issue](https://github.com/sdenike/textmate/issues). Patches are welcome —
+[open a pull request](https://github.com/sdenike/textmate/pulls), with or without a matching issue.
 
-For questions about TextMate proper (history, design, upstream behaviour), see the [upstream project](https://github.com/textmate/textmate).
+For questions about TextMate proper (history, design, upstream behaviour), see the
+[upstream project](https://github.com/textmate/textmate).
 
 ## Screenshot
 
 <p align="center">
-  <img src="docs/images/screenshot_undead.png" alt="textmate" width="1000">
+  <img src="docs/images/screenshot.png" alt="TextMate Revived" width="1000">
 </p>
 
 # Building
 
 ## Setup
 
-To build TextMate, you need the following:
+You need:
 
  * [Xcode][]         — 26 or later; provides `xcodebuild` and opens `TextMate.xcodeproj`
- * [boost][]         — portable C++ source libraries
- * [multimarkdown][] — marked-up plain text compiler
- * [sparsehash][]    — a cache friendly `hash_map`
-
-The non-Xcode dependencies are installed via [Homebrew][]:
+ * [multimarkdown][] — renders the About, Legal and Contributions pages during the build
 
 ```sh
-brew install boost google-sparsehash multimarkdown
+brew install multimarkdown
 ```
 
-(`Xcode/Base.xcconfig`'s header search path is Homebrew-specific — a MacPorts prefix is not
-currently wired in.)
+That is the whole list. Earlier versions of this file also asked for `boost` and
+`google-sparsehash`; both were removed in v3.0.0-revived.6 and nothing in the tree includes them.
 
-After installing dependencies, make sure you have a full checkout (including submodules), then build from the command line:
+Optionally, `brew install mercurial subversion` — the `scm` test suite skips its Mercurial and
+Subversion cases without them, so 2 of its 84 tests fail on a machine that has neither. Nothing
+else needs them.
+
+`Xcode/Base.xcconfig`'s header search path is Homebrew-specific; a MacPorts prefix is not currently
+wired in.
+
+Then:
 
 ```sh
-git clone --recursive https://github.com/textmatelives/textmate.git
+git clone --recursive https://github.com/sdenike/textmate.git
 cd textmate
-xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build
+bin/build
 ```
 
-or open `TextMate.xcodeproj` in Xcode and press ⌘B. `bin/build` wraps the same `xcodebuild`
-invocation and additionally works around two environment issues that can break Xcode's
-Ruby-based script phases (a leaked Ruby version manager, a root-owned credits cache) — see
-`CLAUDE.md` for details.
+**Prefer `bin/build` over a bare `xcodebuild`.** It wraps the same invocation and works around two
+environment problems that break Xcode's Ruby script phases with errors pointing at the wrong
+culprit — a leaked Ruby version manager, and a root-owned credits cache. See `CLAUDE.md`.
+
+Opening `TextMate.xcodeproj` in Xcode and pressing ⌘B works too.
 
 `TextMate.xcodeproj` is committed, generated from the checked-in `project.yml` by [XcodeGen][].
-XcodeGen itself is needed only to regenerate the project after editing `project.yml`, not to build.
+XcodeGen is needed only to regenerate the project after editing `project.yml`, not to build.
+
+## Tests
+
+```sh
+bin/build <framework>/test      # e.g. bin/build scm/test
+```
+
+Four targets fail or crash for known environmental reasons on a developer machine, documented in
+`docs/benchmarks/2026-08-12-ninja-parity.md`. That document is the baseline any change should be
+compared against.
 
 ## Building from within TextMate
 
 Self-hosted building (pressing ⌘B inside a running TextMate.app to rebuild TextMate itself)
-previously worked via the optional [Ninja bundle](https://github.com/textmate/ninja.tmbundle)
-and `.tm_properties`' `TM_NINJA_TARGET`. Neither ninja nor that mapping exist anymore — build
-from Xcode or the command line instead (see above).
+previously worked via the optional [Ninja bundle](https://github.com/textmate/ninja.tmbundle) and
+`.tm_properties`' `TM_NINJA_TARGET`. Neither ninja nor that mapping exist anymore — build from Xcode
+or the command line instead.
 
-## Build Targets
+## Cleaning
 
-```sh
-xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build
-```
-
-or equivalently `bin/build`. To clean, use Xcode's own Product → Clean Build Folder, or delete
-`~/build/textmate-revived/xcode`.
+Use Xcode's Product → Clean Build Folder, or delete `~/build/textmate-revived/xcode`. Build output
+deliberately lives outside the working copy so Spotlight does not index a second launchable
+`TextMate.app`.
 
 # Legal
 
-The source for TextMate is released under the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+The source for TextMate is released under the GNU General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any later version.
 
 TextMate is a trademark of Allan Odgaard.
 
-[boost]:         http://www.boost.org/
 [multimarkdown]: http://fletcherpenney.net/multimarkdown/
-[Homebrew]:      http://brew.sh/
-[sparsehash]:    https://code.google.com/p/sparsehash/
 [Xcode]:         https://developer.apple.com/xcode/
 [XcodeGen]:      https://github.com/yonaskolb/XcodeGen

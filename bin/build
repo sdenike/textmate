@@ -60,7 +60,7 @@ if [[ "$TARGET" == */test ]]; then
 	# (found by testing: passes bare/parallel, fails 1/9 under forced
 	# --no-parallel).
 	case " $FRAMEWORK " in
-		" buffer "|" document "|" BundlesManager "|" FileBrowser "|" ns "|" encoding "|" SoftwareUpdate ")
+		" buffer "|" document "|" BundlesManager "|" FileBrowser "|" ns "|" encoding "|" SoftwareUpdate "|" OakAppKit ")
 			exec "$BIN" --no-parallel ;;
 	esac
 	exec "$BIN"

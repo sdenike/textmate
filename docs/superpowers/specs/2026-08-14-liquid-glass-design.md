@@ -55,9 +55,27 @@ shared seam already imported by 46 files, so this widens a seam rather than inve
 subviews directly. Callers set `glassView.contentView = someView`. Encoding this in the
 constructors is most of their value: getting it wrong at 12 call sites would be 12 bugs.
 
-**The container is not optional where glass elements are adjacent.** Two neighbouring
-`NSGlassEffectView`s each sample the backdrop independently, and the seam between them is
-visible. The file browser's `OFBHeaderView` and `OFBActionsView` are exactly this case.
+**The container merges adjacent glass elements — but only if you ask it to.** An earlier draft of
+this spec said a container alone was enough, and that two neighbouring `NSGlassEffectView`s would
+otherwise seam. That was wrong, and the SDK header says so plainly. Corrected 2026-08-14 after a
+review checked it:
+
+> `contentView` — "Elevates the z-order of **descendants of `contentView`**… **Merges descendants
+> together** if the views are sufficiently similar and within the proximity specified in `spacing`."
+>
+> `spacing` — "The default value, zero, is sufficient for batch processing eligible glass effect
+> views, while **avoiding distortion and merging effects** for other views in close proximity."
+
+Two consequences, both of which the constructors now encode:
+
+1. **Merging requires a non-zero `spacing`.** A default container batches for performance and
+   deliberately does *not* merge nearby glass. `OakCreateGlassContainer(spacing)` takes it as a
+   parameter defaulting to `0`, so a caller that wants merging must say so.
+2. **Content goes in the container's `contentView`**, not as direct subviews — merging and z-order
+   elevation apply to `contentView`'s descendants only.
+
+The file browser's `OFBHeaderView` and `OFBActionsView` are the case that needs a non-zero value;
+what value is a screenshot question for increment 4, not a guess to bake in now.
 
 Deliberately **not** included: any colour abstraction or appearance manager. Glass handles
 light and dark itself. The existing `NSAppearanceNameAqua`/`DarkAqua` detection in

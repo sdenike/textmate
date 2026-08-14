@@ -4,6 +4,249 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Final review found the spec's own explanation was wrong; fixed (`0aa31d5c`)
+
+The whole-branch review returned three Important findings, all in API shape, all fixed in one wave.
+**10 tests passing**, full app builds.
+
+**The spec was wrong about why the container exists.** It claimed a `NSGlassEffectContainerView`
+alone stops adjacent glass surfaces seaming. The SDK header says the opposite:
+
+> `spacing` — "The default value, zero, is sufficient for batch processing eligible glass effect
+> views, while **avoiding distortion and merging effects** for other views in close proximity."
+>
+> `contentView` — "**Merges descendants together** if the views are sufficiently similar and within
+> the proximity specified in `spacing`."
+
+So a default container batches for performance and deliberately does **not** merge, and merging
+applies to descendants of `contentView`, not direct subviews. Both now encoded:
+`OakCreateGlassContainer(CGFloat spacing = 0)` takes the parameter, and both facts are in the
+header comment and the corrected spec. Had this shipped as written, increment 4 would have wrapped
+the file browser's header and actions bars in a container, seen no merging, and hunted the wrong
+cause.
+
+**Also fixed:** `OakGlassChromeMetrics().cornerRadius` was carried but never applied —
+`OakCreateGlassBackground` now applies it, instead of twelve call sites each having to remember;
+and `contentInsets` is documented as advisory data for callers' constraints, since
+`NSGlassEffectView` has no such property. The tint test asserted only non-nil and used a *static*
+colour while the header demands a dynamic one — now asserts the value with `isEqual:` against a
+dynamic colour, since test code is exemplar code for adopters.
+
+**My arithmetic error, caught by the implementer.** I told it to expect 11 tests; my own four items
+add two to eight. It reported 10, flagged the contradiction, and refused to pad a phantom test to
+match the number. That is the right instinct — a test invented to satisfy a stated count tests
+nothing.
+
+**If interrupted here.** All plan tasks and the final fix wave are complete; nothing merged, nothing
+released, branch not pushed. Remaining before merge: push and let the PR's CI run — it has **never**
+executed any of this, and the branch changes build behaviour for all 28 test targets and adds a
+target CI has never built. The PR body must name the repo-wide build fix as a change distinct from
+the Liquid Glass foundation. Rulings are in
+`.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md`.
+
+## 2026-08-14 — Liquid Glass foundation done: 5/5 tasks, 25/25 parity (Task 5)
+
+Branch `phase-6/liquid-glass-foundation`, 13 commits `d805ce4a..a04e6dc4`. Full app build succeeds.
+**25 of 25 baseline targets match** `docs/benchmarks/2026-08-12-ninja-parity.md`: `scm` 2/84,
+`buffer` 3/26, `file` 1/11, `cf` exit 138, the other 21 pass. Plus `Onigmo` 2 and the new
+`OakAppKit` 8.
+
+**A regression I diagnosed and then had to un-diagnose.** `command_test` hung three times on this
+branch while passing once on `master`, which looked like something I had broken. It was not. Running
+the **same already-built binary** three times gave `exit 0 / 4 tests passed`, then two hangs — so
+it is flaky, and my master A/B was a single sample that happened to land on the passing side. The
+cause is the one CI already documents: `wait_for_command()` polls `NSApp`, nil in a test binary, so
+the completion path fires or does not depending on timing. The parity document described this target
+as merely slow; it now carries an addendum saying one run of it is not evidence in either direction.
+
+**What this branch delivers beyond the plan**, and not by scope creep — these surfaced because it
+was the first genuine TDD done in this repository:
+
+1. **Tests silently did not run when changed** (28 targets). Adding or editing a test did nothing
+   while the suite reported green.
+2. **The generated runner then churned on every build**, forcing a recompile and relink of every
+   test target. That was my own fix trading one defect for another; the reviewer caught it, and its
+   proposed `cmp` guard was itself inert until `<%= Time.now %>` came out of `bin/gen_test`.
+3. `CLAUDE.md` now documents three traps that cost real time today: the stale runner, `gen_test`'s
+   implicit `namespace <filename>{…}` wrapping and its `to_s` shadowing, and why `OAK_ASSERT_EQ`
+   must never be used on a raw Objective-C object pointer.
+
+**If interrupted here.** All five tasks complete and reviewed; the final whole-branch review is in
+flight. Nothing is merged and nothing is released — this increment is additive, ships no
+user-visible change, and deliberately has **no `CHANGELOG.md` entry**, since a CHANGELOG push to
+master triggers the release workflow. Every ruling made on the maintainer's behalf is in
+`.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md`, which is also the resume point.
+Next after merge: plan increment 2 (small controls) against a foundation that now exists.
+
+## 2026-08-14 — An assertion that destroyed the information it existed to give (Task 3 fix round)
+
+`test_glass_background_hosts_content_via_contentView` used `OAK_ASSERT_EQ(view.contentView, content)`
+— two `NSView*`. There is no `to_s` overload for ObjC object pointers, so it silently resolved to
+`bin/gen_test`'s generic `to_s(_T const&)`, which range-fors over the pointer. It compiled, emitting
+only a `may not respond to 'countByEnumeratingWithState:objects:count:'` warning.
+
+The failure mode is the point: **when that assertion failed**, `to_s` threw
+`NSInvalidArgumentException`, the generated runner catches only `std::exception const&`, and the
+whole binary aborted with SIGABRT (exit 134) rather than reporting which test failed. An assertion
+macro that makes a failure *less* legible than no assertion at all. The reviewer did not merely spot
+it — it built a repro and confirmed exit 134.
+
+**That line was verbatim from the brief I wrote.** The implementer followed instructions exactly.
+Fixed to `OAK_ASSERT(view.contentView == content)` (`219132ae`), which is how the sibling container
+test already avoided the trap, and the warning — the visible tell — is now gone from the build log.
+The same round added the missing `translatesAutoresizingMaskIntoConstraints` test for
+`OakCreateGlassBackground`, which its sibling had and it did not. Re-review: both ADDRESSED, no new
+breakage, and no other `OAK_ASSERT_EQ` on a raw ObjC pointer anywhere in the file. **8 tests passing.**
+
+`CLAUDE.md` now carries the rule, since the reviewer confirmed this was the repo's first such usage
+and the warning is easy to wave past.
+
+**Parked with a ruling:** the reviewer is right that this test does not pin *our* constructor's
+contract — it exercises `NSGlassEffectView.contentView`'s own setter/getter, which Apple guarantees,
+and would pass for a bare `alloc/init`. Kept anyway: our constructor does not set `contentView`, so
+there is no behaviour of ours to pin; the test documents the usage the doc comment prescribes, which
+is exactly what twelve future call sites will get wrong.
+
+**If interrupted here.** Tasks 1-4 complete. Task 5 (parity) was at 22 of 27 targets, all matching
+baseline — `scm` 2/84, `buffer` 3/26, `cf` exit 138, rest passing — with `command`, `editor`,
+`file`, `Onigmo`, `OakAppKit` outstanding. Resume from
+`.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md`.
+
+## 2026-08-14 — Liquid Glass foundation complete: all three constructors landed (Task 4 of 5)
+
+`OakGlassChromeMetrics` added, commit `52057e6a`. **7 tests passing.** The foundation the whole
+phase rests on now exists in `Frameworks/OakAppKit/src/OakUIConstructionFunctions`:
+
+```objc
+NSGlassEffectContainerView* OakCreateGlassContainer ();
+NSGlassEffectView*          OakCreateGlassBackground (NSGlassEffectViewStyle style, NSColor* tint = nil);
+struct OakGlassMetrics { CGFloat cornerRadius; NSEdgeInsets contentInsets; };
+OakGlassMetrics             OakGlassChromeMetrics ();
+```
+
+All three are **deliberately uncalled** — increments 2-6 of the phase are their consumers. A reviewer
+applying YAGNI would flag them; that is pre-adjudicated in the SDD ledger.
+
+**Task 4 needed no `to_s` overload** — its `CGFloat`/`NSEdgeInsets` fields resolved against the
+existing numeric overloads. Worth noting because Task 3 had to discover the namespace-shadowing trap
+the hard way; carrying that discovery into Task 4's brief meant it did not repeat the search.
+
+**If interrupted here.** Task 5 (parity verification across all 25 baseline targets plus `Onigmo`
+and the new `OakAppKit`) is running; the combined Tasks 3+4 review is in flight. The four known-bad
+targets must reproduce identically — `scm` 2/84, `buffer` 3/26, `file` 1/11, `cf` SIGBUS 138 — and
+this is the first parity run whose results are trustworthy, since before today's fix a changed test
+could silently not run. Resume from
+`.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md`. Still **no `CHANGELOG.md`
+entry**: additive increment, and a CHANGELOG push to master triggers a release.
+
+## 2026-08-14 — Glass constructors 2 of 3 landed; two more build traps documented (Tasks 2-3)
+
+**Task 2** — `OakCreateGlassContainer`, commit `3bf9695b`. **Task 3** — `OakCreateGlassBackground`,
+commit `b8934940`. 6 tests passing, all verified registered in the generated runner.
+
+**The stale-runner fix needed a second half.** Setting `basedOnDependencyAnalysis: false` stopped
+changed tests being missed, but made an unconditional `mv` bump the runner's mtime every build,
+forcing a recompile and relink of every test target every time. The reviewer caught that; its
+suggested `cmp -s` guard was then **inert**, because `bin/gen_test:133` emitted `<%= Time.now %>`
+into the runner's version string, so two consecutive generations always differed. Confirmed by
+diffing them — the timestamp was the only delta. Dropped it (`0f17f727`); "generated just now"
+carries no information in a test runner's `--version`. Both properties now verified together: a
+no-op build leaves the mtime untouched, and appending a failing test still gives `1 of 3 tests
+failed`, exit 1. Fixing either half alone breaks the other.
+
+**A second gen_test trap, found by Task 3 and now in `CLAUDE.md`.** `bin/gen_test` wraps each test
+file in `namespace <filename> { … }`. `OAK_ASSERT_EQ` stringifies both operands on failure, so
+asserting on a type without `to_s()` will not compile — but defining an overload inside that
+implicit namespace **hides the global `to_s` overloads**, breaking unrelated assertions in the same
+file. Task 3 hit both in sequence: added `to_s(NSGlassEffectViewStyle)` following
+`t_OakCompareVersionStrings.mm`'s precedent, which then broke Task 2's autoresize test until
+`using ::to_s;` was added. Neither is scope creep — both are required to make the brief's own tests
+compile.
+
+**If interrupted here.** Task 4 (`OakGlassChromeMetrics`) is in flight; Task 5 (parity verification)
+not started. Tasks 3 and 4 are to be reviewed together as one unit — same shape, same files. The SDD
+ledger at `.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md` records every ruling and
+is the resume point. Still **no `CHANGELOG.md` entry**: this increment is additive and a CHANGELOG
+push to master triggers a release.
+
+## 2026-08-14 — Every test target silently ignored new tests. Fixed. (Task 2 of 5)
+
+**The important part of this entry is not the task.** While implementing Task 2, the implementer
+reported that `bin/build OakAppKit/test` had reused a stale generated runner and reported success
+without compiling its edited test. Reproduced directly: appended a test asserting `false`, rebuilt
+without clearing anything, and got
+
+```
+** BUILD SUCCEEDED **
+OakAppKit_test: 2 tests passed        <- the failing test was never compiled or run
+```
+
+**Cause.** Each `<name>_test` target's only source is the runner `gen_test.sh` generates into
+`$(DERIVED_FILE_DIR)`; that runner is what pulls in `tests/t_*.{cc,mm}`. All **28** of those script
+phases declared `outputFiles:` and none declared `inputFiles:`, so Xcode skipped regeneration
+whenever the output existed and never learned a test file had changed. **Adding or editing any test
+in this repository did nothing, while the suite reported green.** Anyone practising TDD here would
+have watched their red test pass.
+
+**Fix** (`f6f3ec51`): `basedOnDependencyAnalysis: false` on all 28 phases — the pattern this project
+already uses for its four resource-assembly phases. Same probe afterwards:
+
+```
+OakAppKit_test: 1 of 3 tests failed
+t_glass.mm:21: Assertion failed: false      <- build exits 1
+```
+
+Regression-checked `ns_test`, an untouched framework: 6 tests passed. Cost is a Ruby script globbing
+one directory per test build.
+
+**Scope of what this invalidates.** Framework *code* changes were always caught — those recompile
+the library and relink the test binary. The blind spot was changes to test files themselves. Past
+verification runs in this repo that only exercised existing tests against changed code remain
+trustworthy; any past claim that a *newly added* test passed does not.
+
+**Task 2 itself:** `OakCreateGlassContainer` added to `OakUIConstructionFunctions`, commit
+`3bf9695b`, 2 tests passing.
+
+**If interrupted here.** Tasks 1-2 complete, 3-5 not started. Resume from the SDD ledger at
+`.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md`, which records every ruling. Still
+**no `CHANGELOG.md` entry** for this increment: it is additive and a CHANGELOG push to master
+triggers a release.
+
+## 2026-08-14 — Phase 6 execution started: OakAppKit_test now exists (Task 1 of 5)
+
+Branch `phase-6/liquid-glass-foundation`, executing
+`docs/superpowers/plans/2026-08-14-liquid-glass-foundation.md` subagent-driven. Task 1 committed as
+`4cd0e5a8`.
+
+**What Task 1 did.** Added the `OakAppKit_test` target to `project.yml`, regenerated
+`TextMate.xcodeproj`, added a placeholder `Frameworks/OakAppKit/tests/t_glass.mm`, and wired
+`OakAppKit` into the `--no-parallel` lists in `bin/build` and CI plus CI's `TESTS=` string. The
+framework had test files but no target, so `bin/build OakAppKit/test` failed outright and there was
+no test cycle to do TDD against.
+
+**`--no-parallel` is now eight frameworks, not seven** — `CLAUDE.md` updated. These tests construct
+`NSView`s and Cocoa asserts `NSThread.isMainThread`. Note `gen_test.sh`'s own comment still names
+seven, because `OakAppKit_test` postdates the ninja baseline it describes.
+
+**A plan defect that implementation found.** The brief's dependency list omitted `Quartz.framework`
+and `libsqlite3.tbd` and the target would not link. The list had been derived from OakAppKit's
+`HEADER_SEARCH_PATHS` roots — which describes what *compiles*, not what *links*. `-ObjC` forces the
+whole static archive to load, so every transitive SDK dependency of OakAppKit applies to anything
+linking it. Ruling: accept the addition. This is precisely the kind of gap a fresh implementer
+catches and a plan author does not.
+
+**Verified rather than taken on trust:** `bin/build OakAppKit/test` → BUILD SUCCEEDED;
+`OakAppKit_test -v` → `1 test passed`. The IDE's "file not found" and "OAK_ASSERT undeclared"
+diagnostics on `t_glass.mm` are **false positives** — clangd lacks the target's
+`HEADER_SEARCH_PATHS`; the header resolves through the symlink
+`Xcode/include/OakAppKit/OakAppKit/OakUIConstructionFunctions.h`.
+
+**If interrupted here.** Task 1 is committed and under review; Tasks 2–5 are not started. The SDD
+ledger at `.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md` is the resume point — it
+records which tasks are complete and every ruling made. **Do not add a `CHANGELOG.md` entry for this
+increment**: it is additive, ships nothing user-visible, and a CHANGELOG push to master triggers a
+release.
+
 ## 2026-08-14 — Liquid Glass foundation plan written; v.18 shipped and self-updated
 
 **v3.0.0-revived.18 published and installed via Check for Updates.** The maintainer ran the in-app

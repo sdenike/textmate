@@ -22,8 +22,11 @@ need regenerating: `xcodegen generate --spec project.yml` only if `project.yml` 
 it, `bin/rave2yaml`, was deleted along with the `.rave` files it read.
 
 `xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build` produces
-the app; ⌘B works from inside Xcode too. Dependencies (`boost`, `google-sparsehash`,
-`multimarkdown`) are installed via Homebrew and are not checked automatically the way
+the app; ⌘B works from inside Xcode too. The only build dependency is `multimarkdown`, installed
+via Homebrew. (`boost` and `google-sparsehash` were listed here until 2026-08-14 but were removed
+from the tree in v3.0.0-revived.6 — `Base.xcconfig:81` records dropping `/opt/homebrew/include`
+along with them. Nothing includes either; the stale entry survived because boost happens to be
+installed on the maintainer's machine.) Dependencies are not checked automatically the way
 `./configure` used to check them — `Xcode/Base.xcconfig`'s `HEADER_SEARCH_PATHS` hardcodes
 `/opt/homebrew/include`, so a MacPorts prefix does not currently work. `capnp` is **not** a
 dependency — Cap'n Proto was removed by the textmatelives merge. `ragel` is also **not** a
@@ -121,11 +124,46 @@ Each framework's `<name>_test` Xcode target generates its runner via an `Xcode/s
 Runner flags (parsed by the generated runner via `getopt_long`, `bin/gen_test:155-189`):
 - `-v` verbose, `-m` measure, `-r N` repeat, `-b` benchmarks, `-p`/`--parallel`, `--no-parallel` (`-P` is not actually wired despite the runner's own usage text — its getopt string is `"bmpr:vhV"`)
 
-Seven frameworks' test runners are `.mm` (buffer, document, BundlesManager, FileBrowser, ns, encoding, SoftwareUpdate — `gen_test.sh`'s own comment names them) and call Cocoa APIs that assert `NSThread.isMainThread`; `bin/build` and CI pass `--no-parallel` for exactly those seven, matching what ninja's `RunTest` rule did. **Do not force it universally** — `settings_test`'s `t_track_paths.cc` depends on real wall-clock time passing between filesystem operations across concurrently running tests and reliably fails 1/9 under forced serial execution despite passing under the (parallel) default; found by testing, not assumed.
+**Eight** frameworks' test runners are `.mm` (buffer, document, BundlesManager, FileBrowser, ns, encoding, SoftwareUpdate, and OakAppKit) and call Cocoa APIs that assert `NSThread.isMainThread`; `bin/build` and CI pass `--no-parallel` for exactly those eight. The first seven match what ninja's `RunTest` rule did; `OakAppKit_test` was added 2026-08-14 for the Liquid Glass work and postdates that baseline, so `gen_test.sh`'s own comment still names only seven. **Do not force it universally** — `settings_test`'s `t_track_paths.cc` depends on real wall-clock time passing between filesystem operations across concurrently running tests and reliably fails 1/9 under forced serial execution despite passing under the (parallel) default; found by testing, not assumed.
 
 There is no name-based test filter. To run a subset, either run the test binary directly (`~/build/textmate-revived/xcode/Release/<name>_test -v`) or temporarily edit the test source.
 
+Each `<name>_test` target's **only** source is the runner `gen_test.sh` generates into
+`$(DERIVED_FILE_DIR)`; that runner is what pulls in `tests/t_*.{cc,mm}`. Until 2026-08-14 those 28
+script phases declared `outputFiles:` and no `inputFiles:`, so Xcode skipped regeneration whenever
+the output already existed and never noticed a test file had changed — **adding or editing a test
+did nothing while the suite reported green**. Reproduced at the time: appending a test asserting
+`false` still gave `** BUILD SUCCEEDED **` and `2 tests passed`. All 28 phases now carry
+`basedOnDependencyAnalysis: false`, the same pattern the resource-assembly phases use, so the runner
+is regenerated on every test build. If you ever see a test you just wrote pass without running,
+check that key first.
+
+`gen_test.sh` then **compares before replacing** — `cmp -s "$out~" "$out"` — and only moves the new
+runner into place when its contents differ. Both halves are needed and they fix opposite problems:
+the always-run phase stops a changed test being missed, while the comparison stops an unconditional
+`mv` bumping the generated file's mtime on every build, which would force a recompile and relink of
+every test target every time — a real cost on targets with large dependency lists (`document_test`,
+`FileBrowser_test`, `TextMate_test`). Remove either half and you trade one problem for the other.
+
 Tests that shell out to git must call `git init -b master` (not bare `git init`) — modern git's `init.defaultBranch` defaults to `main` and breaks tests that assume `master`.
+
+**`bin/gen_test` wraps each test file in `namespace <filename> { … }`.** Two consequences worth
+knowing before they cost you an afternoon. `OAK_ASSERT_EQ` stringifies both operands on failure, so
+asserting on a type with no `to_s()` fails to compile — define an overload in the test file, as
+`t_OakCompareVersionStrings.mm` does for `NSComparisonResult`. But defining one inside that implicit
+namespace **hides the global `to_s` overloads from unqualified lookup**, which breaks unrelated
+assertions elsewhere in the same file with a confusing error. Add `using ::to_s;` near the top when
+you introduce a local overload.
+
+**Never use `OAK_ASSERT_EQ` on a raw Objective-C object pointer.** Use `OAK_ASSERT(a == b)`. There
+is no `to_s` overload for `NSView*` and friends, so the comparison silently resolves to
+`bin/gen_test`'s generic `to_s(_T const&)`, which range-fors over the pointer. It compiles — you get
+only a `may not respond to 'countByEnumeratingWithState:objects:count:'` warning — but when that
+assertion *fails*, `to_s` throws `NSInvalidArgumentException`, and the generated runner catches only
+`std::exception const&`. The binary aborts with SIGABRT (exit 134) instead of reporting which test
+failed, so the assertion actively destroys the information it exists to give you. That warning is
+the tell. `OAK_ASSERT_EQ` is fine on numbers, `BOOL`, `std::string` and anything else with a real
+`to_s`.
 
 ## Bundle delivery
 

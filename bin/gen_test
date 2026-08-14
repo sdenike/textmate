@@ -130,7 +130,7 @@ static double const AppVersion = 1.0;
 
 static void write_version (FILE* io)
 {
-  fprintf(io, "%s %.1f (<%= Time.now %>)\n", getprogname(), AppVersion);
+  fprintf(io, "%s %.1f\n", getprogname(), AppVersion);
 }
 
 static void write_usage (FILE* io)
