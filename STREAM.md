@@ -4,6 +4,33 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — v3.0.0-revived.18 was cancelled by a CI timeout; two causes, both fixed
+
+**The release did not publish.** Its `verify/test` job was cancelled, so `release` was skipped and
+`.17` remained latest. Two compounding causes:
+
+1. **`timeout-minutes: 15` was too tight.** The job ran **15m21s** and was killed mid-step at the
+   limit.
+2. **Every release ran the test suite twice, concurrently.** A `CHANGELOG.md` push to master
+   triggers `ci.yml` (push to master, no path filter) *and* `release.yml` (push + `paths:
+   CHANGELOG.md`), and **both call the same reusable `build-and-test.yml`**. The evidence is
+   direct: for commit `9c6de4c`, CI's test job finished in **9m09s** while the release run's
+   identical job hit the timeout at **15m21s**. Same tests, same commit, same runner image — the
+   difference is contention between the two concurrent runs.
+
+**Fixes.** Timeouts raised 15 → 30 minutes for both `build` and `test`, since 15 was marginal even
+uncontended. And `ci.yml` now carries `paths-ignore: [CHANGELOG.md]`: a CHANGELOG-only push *is* a
+release, and `release.yml`'s verify job already runs the same suite, so CI duplicating it is pure
+waste. `paths-ignore` skips only when **every** changed path matches, so a commit touching
+CHANGELOG.md alongside code still gets CI — the case that matters is not weakened.
+
+Worth noting what did *not* cause it: no `concurrency:` block exists in any workflow, so nothing
+cancelled it by policy, and the cancellation was not manual.
+
+**If interrupted here.** The .18 fix (40 missing framework images) is committed on master but
+**unreleased** — no `v3.0.0-revived.18` tag exists, and `CHANGELOG.md` still has .18 at the top, so
+re-running Release via `workflow_dispatch` will pick it up and publish correctly.
+
 ## 2026-08-14 — Phase 6 designed: Liquid Glass. Spec written, awaiting review
 
 **Spec:** `docs/superpowers/specs/2026-08-14-liquid-glass-design.md`. Design settled through

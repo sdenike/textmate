@@ -7,6 +7,17 @@ on:
   # reported a check.
   push:
     branches: [master]
+    # A CHANGELOG.md-only push to master is a release: release.yml triggers on
+    # exactly that path and its verify job already runs this same reusable
+    # workflow. Without this, both fire at once for the same commit, run the
+    # full suite twice concurrently, and contend -- which is what cancelled the
+    # v3.0.0-revived.18 release. Its test job hit the timeout at 15m21s while
+    # CI's identical job for the same commit finished in 9m09s.
+    #
+    # paths-ignore skips only when EVERY changed path matches, so a commit
+    # touching CHANGELOG.md alongside code still gets CI.
+    paths-ignore:
+      - CHANGELOG.md
   pull_request:
     branches: [master]
 
