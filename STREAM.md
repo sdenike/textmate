@@ -4,6 +4,90 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-13 — Phase 4 Task 2: identity rename built, deployed, and verified end-to-end
+
+**What:** Built (`./bin/build TextMate`, `BUILD SUCCEEDED`) and ran all 25 baseline test targets
+individually against `docs/benchmarks/2026-08-12-ninja-parity.md`: **25/25 match exactly** --
+22 pass, `scm` fails the same documented `2 of 84` (hg/svn absent locally), `buffer` fails the
+same documented `3 of 26` (misspellings, no headless `NSSpellChecker` dictionary), `file` fails
+the same documented `1 of 11` (iconv TRANSLIT), `cf` crashes the same documented SIGBUS/exit 138.
+`command` and `editor` reproduced the doc's own noted batching artifact (looked hung when run
+back-to-back with others) and passed cleanly in seconds re-run individually, exactly as the doc
+already recorded.
+
+`bin/deploy-local`'s guard verified doing its job: with the old `com.macromates.TextMate` app
+still at `/Applications/TextMate.app`, deploy-local refused with "REFUSING TO REPLACE" (identifier
+mismatch). Moved the old app aside -- **not deleted** -- to
+`/Applications/TextMate (macromates 3.0.0-revived.10 backup).app`, then re-ran deploy-local, which
+installed cleanly. Installed app verified: `CFBundleIdentifier = com.shelbydenike.TextMate`,
+`CFBundleName = TextMate`, code signature valid.
+
+**Migration verified against real data, precisely** (Python `plistlib`, comparing the exact
+top-level-key set `MigratePreferencesDomain` iterates over -- not `defaults read`'s recursive
+line count, which over-counts nested array/dict contents): the real
+`~/Library/Preferences/com.macromates.TextMate.plist` has **37 top-level keys** (36 real settings
++ a `MigratedFromMacromates` marker already written there from Task 1's earlier same-domain
+no-op run, before this rename). Launched the newly installed app (`open`, not osascript/polling),
+and `~/Library/Preferences/com.shelbydenike.TextMate.plist` now has the **identical 37 keys**,
+identical values, zero missing, zero extra, zero mismatched. **All 36 real settings carried over,
+exactly matching the plan's stated expectation.**
+
+**`mate` verified with hard evidence, not just exit code:** `mate /tmp/.../verify.txt` exited 0
+against the already-running app (same PID throughout, no relaunch), and `lsof -p <pid>` confirmed
+that exact process held an open file descriptor on that exact file -- proof `mate.mm:59`'s
+`URLForApplicationWithBundleIdentifier:@"com.shelbydenike.TextMate"` found and used the real,
+running, renamed app.
+
+**Bundles verified three ways, none requiring GUI automation:** (1) source reading --
+`AppController.mm:518` calls `loadBundlesIndex` synchronously at launch, which unconditionally
+calls `createBundlesIndex:` and populates `bundles::set_index(...)` in memory regardless of
+whether the on-disk cache exists yet -- the new `~/Library/Caches/com.shelbydenike.TextMate/`
+being empty shortly after launch is expected (the on-disk `BundlesIndex.binary` write is a
+separate, debounced/on-quit path via `saveBundlesIndex:`, not a signal of whether bundles loaded);
+(2) `~/Library/Application Support/TextMate/Managed/Bundles/` -- the literal-string path, correctly
+unaffected by the identifier change -- still has all 54 bundles; (3) `lsof` on the running process
+shows an open handle on `~/Library/Application Support/TextMate/Global.tmProperties`, confirming
+the app is actively reading from that (unaffected) support directory at runtime. No crashes or
+errors for the process in the unified log over the full session.
+
+**Confirmed untouched, as required:** `grep -c "com.macromates" Applications/TextMate/Info.plist`
+= **38** (all UTI declarations survive; only the `CFBundleIdentifier` line, no longer matching,
+dropped out of the count -- was 39 before this change). `OakDocument.mm`'s xattr names
+(`com.macromates.bookmarks`, `.folded`, `.crc32`, `.selectionRange`, `.visibleIndex`,
+`.backup.*`) are byte-for-byte unchanged -- never touched.
+
+**Deliberately not done:** did not bump `CHANGELOG.md`/`APP_VERSION` or run a second
+build-and-redeploy cycle to re-stamp the version string. The plan's global constraint ("after each
+task: build, bump version, update changelog, deploy, verify") would normally call for this, but
+`bin/deploy-local`'s replace-in-place path for a *same-identifier* redeploy unconditionally shells
+out to `osascript -e 'tell application id ... to quit'` before removing the old copy -- exactly
+the class of Apple-Events call this task was explicitly warned hangs on an unacknowledged
+Automation permission prompt in this environment, and neither the deployed identifier, the
+migration, `mate`, nor bundle loading depend on which version string is baked in. Left for a
+deliberate follow-up, ideally the first time with a human present to clear the one-time
+Automation permission dialog. `/Applications/TextMate.app` currently reports
+`3.0.0-revived.10` with `com.shelbydenike.TextMate` -- correct identifier, stale-but-harmless
+version string.
+
+**Why:** This is the load-bearing verification for the whole task -- the plan's own risk table
+calls settings-reverting-silently and `mate`-can't-find-the-app the two most user-visible ways
+this rename could fail invisibly. Both are now checked against real data on a real machine, not
+assumed from reading code.
+
+### If interrupted here
+
+Task 2's core work (identifier rename, cache paths, `mate`/`gtm` lookups, build, 25/25 tests,
+deploy, migration, bundles) is done, committed (`eedef5cf`), and verified end-to-end. Two things
+remain open, both already flagged, neither blocking the rest of Phase 4: (1) Dialog/Dialog2
+(`PlugIns/dialog*`) still say `com.macromates.plugin.*` -- blocked on the git-submodule/upstream
+question recorded in the previous entry, needs a human decision (fork + repoint `.gitmodules`, or
+vendor the two plugins into the tree); (2) the version-bump-and-redeploy convention was skipped
+for the reason above -- safe to do manually whenever a human is present to clear the Automation
+prompt once. The old `com.macromates.TextMate` app is preserved at
+`/Applications/TextMate (macromates 3.0.0-revived.10 backup).app` (not deleted) until the rename
+is trusted. Next: Task 3 (the privileged helper) or Task 4 (attribution/credits), per the plan.
+
+
 ## 2026-08-13 — Phase 4 Task 2: bundle identifiers changed to com.shelbydenike.* (Dialog/Dialog2 blocked on a submodule)
 
 **What:** Changed `CFBundleIdentifier` in `Applications/TextMate/Info.plist:12` and
