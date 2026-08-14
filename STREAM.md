@@ -4,6 +4,46 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Final review found the spec's own explanation was wrong; fixed (`0aa31d5c`)
+
+The whole-branch review returned three Important findings, all in API shape, all fixed in one wave.
+**10 tests passing**, full app builds.
+
+**The spec was wrong about why the container exists.** It claimed a `NSGlassEffectContainerView`
+alone stops adjacent glass surfaces seaming. The SDK header says the opposite:
+
+> `spacing` — "The default value, zero, is sufficient for batch processing eligible glass effect
+> views, while **avoiding distortion and merging effects** for other views in close proximity."
+>
+> `contentView` — "**Merges descendants together** if the views are sufficiently similar and within
+> the proximity specified in `spacing`."
+
+So a default container batches for performance and deliberately does **not** merge, and merging
+applies to descendants of `contentView`, not direct subviews. Both now encoded:
+`OakCreateGlassContainer(CGFloat spacing = 0)` takes the parameter, and both facts are in the
+header comment and the corrected spec. Had this shipped as written, increment 4 would have wrapped
+the file browser's header and actions bars in a container, seen no merging, and hunted the wrong
+cause.
+
+**Also fixed:** `OakGlassChromeMetrics().cornerRadius` was carried but never applied —
+`OakCreateGlassBackground` now applies it, instead of twelve call sites each having to remember;
+and `contentInsets` is documented as advisory data for callers' constraints, since
+`NSGlassEffectView` has no such property. The tint test asserted only non-nil and used a *static*
+colour while the header demands a dynamic one — now asserts the value with `isEqual:` against a
+dynamic colour, since test code is exemplar code for adopters.
+
+**My arithmetic error, caught by the implementer.** I told it to expect 11 tests; my own four items
+add two to eight. It reported 10, flagged the contradiction, and refused to pad a phantom test to
+match the number. That is the right instinct — a test invented to satisfy a stated count tests
+nothing.
+
+**If interrupted here.** All plan tasks and the final fix wave are complete; nothing merged, nothing
+released, branch not pushed. Remaining before merge: push and let the PR's CI run — it has **never**
+executed any of this, and the branch changes build behaviour for all 28 test targets and adds a
+target CI has never built. The PR body must name the repo-wide build fix as a change distinct from
+the Liquid Glass foundation. Rulings are in
+`.superpowers/sdd/2026-08-14-liquid-glass-foundation/progress.md`.
+
 ## 2026-08-14 — Liquid Glass foundation done: 5/5 tasks, 25/25 parity (Task 5)
 
 Branch `phase-6/liquid-glass-foundation`, 13 commits `d805ce4a..a04e6dc4`. Full app build succeeds.
