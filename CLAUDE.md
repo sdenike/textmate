@@ -178,6 +178,20 @@ Two traps found while adopting glass on the first real control, both of which pa
   default "Button" title. Renders produced by `OakAppKit_test` are therefore representative of
   layout and material, not of every subview. Check bundle-loaded imagery in the running app.
 
+**This development machine has Reduce Transparency enabled** — `com.apple.universalaccess
+reduceTransparency = 1`, and `NSWorkspace.accessibilityDisplayShouldReduceTransparency` returns
+`YES`. macOS flattens every vibrancy and glass material at the compositor when it is on. Check it
+before drawing any conclusion from a screenshot taken here:
+
+```sh
+defaults read com.apple.universalaccess reduceTransparency
+```
+
+Glass still renders as a distinct rounded surface with the setting on, so screenshots from this
+machine confirm geometry, layout and control placement. They **cannot** confirm that a surface looks
+translucent, and a flat-looking material here is not evidence that the material is wrong. A claim
+about how glass *looks* needs a machine with the setting off.
+
 Renders are verified by looking at them, not only by checking them. The first batch from the
 snapshot harness had four distinct checksums at exactly the right dimensions and was still useless —
 the glass had no backdrop to refract and a placeholder button covered the text. Checksums prove the

@@ -185,9 +185,27 @@ No consumer depends on the superclass — a grep for `.material`, `.blendingMode
 `.maskImage` on `statusBar`, `headerView` and `actionsView` across `Frameworks/` and `Applications/`
 returns nothing — so the header change is safe.
 
-**`NSVisualEffectMaterialTitlebar` does not silently become Liquid Glass on macOS 26.** Verified by
-screenshotting the running application, built against the macOS 26 SDK: the editor status bar renders
-flat and opaque. The migration is real work with a real visible result, not a recompile.
+**Retracted 2026-08-15.** An earlier revision of this section claimed that
+`NSVisualEffectMaterialTitlebar` "does not silently become Liquid Glass on macOS 26", citing a
+screenshot of the running application in which the status bar rendered flat and opaque.
+
+**That screenshot proved nothing of the kind, and the claim was wrong to make.** The development
+machine has **Reduce Transparency enabled** (`com.apple.universalaccess reduceTransparency = 1`;
+`NSWorkspace.accessibilityDisplayShouldReduceTransparency` returns `YES`), and macOS flattens every
+vibrancy and glass material at the compositor when it is on. The bar was flat because *all* materials
+are flat on that machine — not because the material failed to map to glass. Whether
+`NSVisualEffectMaterialTitlebar` maps to Liquid Glass on macOS 26 **remains unverified**, and it
+cannot be settled by looking at this machine.
+
+Two things that follow, both of which matter more than the retracted claim:
+
+- **Any visual review of this phase performed on this machine is inconclusive about translucency.**
+  Glass still renders as a distinct rounded surface with Reduce Transparency on — the increment 2
+  renders show that clearly, and the measured 0.44 mean-RGB difference between glass and no glass
+  held there — but its *translucency* does not appear. Screenshots from this machine can confirm
+  geometry, layout and control placement. They cannot confirm that a surface looks like glass.
+- **The migration is still worth doing regardless**, because the setting is per-machine and per-user.
+  What it changes is who can review the result, not whether the result is correct.
 
 ### The tab bar
 

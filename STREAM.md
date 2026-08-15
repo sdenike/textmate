@@ -4,6 +4,37 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — Editor status bar on glass; and Reduce Transparency invalidates a claim I made
+
+**Task 2 landed:** `cf0aa263` moves `OTVStatusBar` off `NSVisualEffectView` onto a plain `NSView`
+hosting `OakWrapInGlass`. `OakAppKit_test: 24 tests passed`, application builds, and a window-only
+screenshot confirms every control is present and correctly placed — line/column, the grammar popup,
+tab size, the bundle-item and symbol controls, the macro dot — at unchanged height.
+
+**The finding that matters more: this machine has Reduce Transparency enabled.**
+`com.apple.universalaccess reduceTransparency = 1`, and
+`NSWorkspace.accessibilityDisplayShouldReduceTransparency` returns `YES`. macOS flattens every
+vibrancy and glass material at the compositor when that is on.
+
+**This retracts a claim committed in `a6a5b169`.** That commit put in the spec that
+`NSVisualEffectMaterialTitlebar` "does not silently become Liquid Glass on macOS 26", citing a
+screenshot of the flat status bar as proof. The screenshot proved nothing — the bar was flat because
+*everything* is flat on this machine. Whether that material maps to glass on macOS 26 is still
+unverified and cannot be settled here. Retracted in the spec, and `CLAUDE.md` now carries the check
+to run before trusting any screenshot taken on this machine.
+
+What survives: glass still renders as a distinct rounded surface with the setting on — the increment
+2 renders show it, and the measured 0.44 mean-RGB difference between glass and no-glass held there.
+So screenshots from here confirm **geometry, layout and control placement**, and cannot confirm
+**translucency**. Every visual sign-off in this phase so far falls in the first category.
+
+Two Task 2 checks are genuinely unverified for environmental reasons, both documented rather than
+papered over: controls were not click-tested (the screen was locked, and macOS does not deliver
+synthetic input while locked), and glassiness was not confirmed (Reduce Transparency). Neither
+implicates the diff — no target/action wiring was touched — but neither is proven.
+
+---
+
 ## 2026-08-15 — Increment 4 planned and started: the chrome bars
 
 **Branch:** `phase-6/liquid-glass-chrome-bars`, off master at `43858aee`. Plan committed as
