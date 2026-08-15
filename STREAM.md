@@ -4,6 +4,47 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — PR #1469's author corrected us, and he was right
+
+**`1f0ff406` retracts a false claim this project published about someone else's work.**
+
+The Liquid Glass spec said PR #1469 (`textmate/textmate`) "reintroduces 11 `.rave` files — the build
+system Phase 2 deleted." Georg Seifert (@schriftgestalt), its author, replied on commit `7cf1ff90`:
+
+> removing the .rave build system was the first thing I did. My fork build with Xcode all the way.
+
+Checked against the GitHub API rather than taken on either side's word:
+
+| | |
+|---|---|
+| `.rave` files in the #1469 diff | **63**, every one status `removed` |
+| Xcode project | PR **adds** `Applications/TextMate/TextMate.xcodeproj/project.pbxproj` |
+| Upstream `textmate/textmate` master | still ships `.rave` — which is why they appear in the diff at all |
+
+He is right and the spec was wrong. **The mistake was reading a list of filenames without reading
+each entry's `status`.** A deleted file appears in a PR's file list exactly as an added one does. That
+is the same failure mode as the artwork audit earlier today — counting what exists without checking
+which ones ship — and it is worth naming twice, because both times the check *looked* like evidence.
+
+He reached Xcode independently, and before this fork did.
+
+**He has offered to open a PR containing only the UI work**, which is exactly Phase 6's scope. That
+is the maintainer's call to accept; it is not something to answer on their behalf, so it is recorded
+here and left open.
+
+### Session links removed from public places
+
+At the maintainer's instruction, `Claude-Session:` trailers and bare session URLs are no longer added
+to commit messages or PR bodies. Stripped from the bodies of PRs #12, #13 and #14 and verified zero
+remaining.
+
+**Not removed: the 53 commit messages on `master` that already carry them.** Doing so means rewriting
+published history — every SHA changes, the `v3.0.0-revived.4` … `.21` tags break, and any existing
+clone is invalidated. That is a deliberate, destructive operation and needs an explicit decision, not
+a side effect of a formatting request.
+
+---
+
 ## 2026-08-15 — Last two .rave files deleted; credential audit; two bugs from maintainer testing
 
 **`56e021cb` deletes `PlugIns/dialog/default.rave` and `PlugIns/dialog-1.x/default.rave`** — the last
