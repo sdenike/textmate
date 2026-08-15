@@ -91,6 +91,9 @@ static void show_command_error (std::string const& message, oak::uuid_t const& u
 	scm::info_ptr                          _documentSCMInfo;
 	std::map<std::string, std::string>     _documentSCMVariables;
 	std::vector<std::string>               _documentScopeAttributes; // attr.os-version, attr.untitled / attr.rev-path + kSettingsScopeAttributesKey
+
+	NSView*                                _tabBarContainer;
+	NSLayoutConstraint*                    _tabBarLeadingConstraint;
 }
 @property (nonatomic) NSTitlebarAccessoryViewController* titlebarViewController;
 @property (nonatomic) ProjectLayoutView*          layoutView;
@@ -205,11 +208,32 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 		self.window.delegate           = self;
 		self.window.releasedWhenClosed = NO;
 
+		// The tab bar shares the titlebar row with the traffic-light buttons.
+		// NSLayoutAttributeRight is what puts it there -- the default, Bottom,
+		// gives the accessory its own strip below the titlebar. A Right accessory
+		// does NOT stretch its view to the window's width -- measured: neither an
+		// Auto Layout width constraint nor NSViewWidthSizable has any effect, only
+		// the view's frame does -- so tabBarContainer is frame-sized here and kept
+		// in sync with the window in windowDidResize:. It spans from x = 0, so it
+		// sits underneath the buttons unless its content is inset. iTerm2 does the
+		// same thing (iTermRootTerminalView.m:1145).
+		_tabBarContainer = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, NSWidth(self.window.frame), self.tabBarView.intrinsicContentSize.height)];
+		OakAddAutoLayoutViewsToSuperview(@[ self.tabBarView ], _tabBarContainer);
+		_tabBarLeadingConstraint = [self.tabBarView.leadingAnchor constraintEqualToAnchor:_tabBarContainer.leadingAnchor];
+		_tabBarLeadingConstraint.active = YES;
+		[self.tabBarView.trailingAnchor constraintEqualToAnchor:_tabBarContainer.trailingAnchor].active = YES;
+		[self.tabBarView.topAnchor constraintEqualToAnchor:_tabBarContainer.topAnchor].active           = YES;
+		[self.tabBarView.bottomAnchor constraintEqualToAnchor:_tabBarContainer.bottomAnchor].active     = YES;
+
+		// The window title would otherwise sit behind the tabs.
+		self.window.titleVisibility = NSWindowTitleHidden;
+
 		_titlebarViewController = [[NSTitlebarAccessoryViewController alloc] init];
-		self.tabBarView.frameSize = self.tabBarView.intrinsicContentSize;
-		_titlebarViewController.view = self.tabBarView;
-		_titlebarViewController.fullScreenMinHeight = NSHeight(self.tabBarView.frame);
+		_titlebarViewController.layoutAttribute     = NSLayoutAttributeRight;
+		_titlebarViewController.view                = _tabBarContainer;
+		_titlebarViewController.fullScreenMinHeight = self.tabBarView.intrinsicContentSize.height;
 		[self.window addTitlebarAccessoryViewController:_titlebarViewController];
+		[self updateTabBarLeadingInset];
 
 		OakAddAutoLayoutViewsToSuperview(@[ self.layoutView ], self.window.contentView);
 		self.window.initialFirstResponder = self.textView;
@@ -248,6 +272,16 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	// When option-clicking to close all windows then
 	// messages are sent to our window after windowWillClose:
 	__autoreleasing __attribute__ ((unused)) NSWindow* delayRelease = self.window;
+}
+
+- (void)updateTabBarLeadingInset
+{
+	// Zero in full screen: the traffic lights are gone, so an inset would push
+	// the first tab right for no reason. Otherwise clear the rightmost button
+	// with the same 8pt of air iTerm2 leaves.
+	NSButton* zoomButton = [self.window standardWindowButton:NSWindowZoomButton];
+	BOOL haveButtons = zoomButton && !zoomButton.isHiddenOrHasHiddenAncestor;
+	_tabBarLeadingConstraint.constant = haveButtons ? NSMaxX(zoomButton.frame) + 8 : 0;
 }
 
 // ======================================
@@ -328,6 +362,24 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	self.selectedDocument    = nil;
 	self.fileBrowserVisible  = NO; // Make window frame small as we no longer respond to savableWindowFrame
 	self.identifier          = nil; // This removes us from AllControllers and causes a release
+}
+
+- (void)windowDidEnterFullScreen:(NSNotification*)aNotification
+{
+	[self updateTabBarLeadingInset];
+}
+
+- (void)windowDidExitFullScreen:(NSNotification*)aNotification
+{
+	[self updateTabBarLeadingInset];
+}
+
+- (void)windowDidResize:(NSNotification*)aNotification
+{
+	// A Right-attribute titlebar accessory sizes from its view's frame, and
+	// neither an Auto Layout width constraint nor NSViewWidthSizable has any
+	// effect on it -- both measured. So the width is maintained by hand.
+	_tabBarContainer.frameSize = NSMakeSize(NSWidth(self.window.frame), NSHeight(_tabBarContainer.frame));
 }
 
 - (void)showWindow:(id)sender
