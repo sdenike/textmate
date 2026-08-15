@@ -4,6 +4,58 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — Tab close button always visible; iTerm2's titlebar tabs use the mechanism we already have
+
+**`fb8d25f2` — the tab close button no longer hides until hover.** Maintainer request. The mechanism
+was a KVO binding: `closeButtonAlphaValue` returned 1 only when `_mouseInside || _modified ||
+_voiceOverEnabled`. It now returns 1 whenever there is a tab item, and
+`keyPathsForValuesAffectingCloseButtonAlphaValue` narrows to `tabItem` accordingly. The modified
+state still changes the button's *image* via `updateCloseButtonImage`; that was never driven from
+the alpha.
+
+**It costs no horizontal room, contrary to the initial survey's warning.** The button is created and
+constrained whatever its alpha — it sits in the `H:|-(3@53)-[close]-(>=3@53)-[title]-(>=6@53)-|`
+chain and already contributed to each tab's `fittingSize` — so only opacity changed, and opacity does
+not participate in Auto Layout. Confirmed by screenshotting three open tabs with nothing hovered:
+widths unchanged.
+
+### Titlebar tabs — researched, and it corrects something said earlier in this session
+
+The maintainer asked about moving tabs into the titlebar row the way iTerm2 and Obsidian do, to
+reclaim a row of chrome. Mid-conversation I claimed this would mean replacing TextMate's mechanism
+with `NSWindowStyleMaskFullSizeContentView` plus a hidden title. **That was wrong.**
+
+| | Mechanism |
+|---|---|
+| iTerm2 | `NSTitlebarAccessoryViewController` — `sources/Hacks/iTermTitlebarAccessoryNanny.swift:51-63` |
+| TextMate today | `NSTitlebarAccessoryViewController` — `DocumentWindowController.mm:208-212` |
+
+**The same AppKit mechanism, already in place.** Both even set `fullScreenMinHeight` on it. The
+difference is configuration:
+
+- iTerm2 sets `_tabBarControl.insets` from `leftInsetForWindowButtons`
+  (`iTermRootTerminalView.m:1145`) — 2.5, 9 or 6 points depending on tab style — to clear the traffic
+  lights. That inset only makes sense if the accessory shares a row with those buttons, which is
+  precisely the visual difference.
+- Tab position is a preference, `kPreferenceKeyTabPosition`, over
+  `PSMTab_TopTab/BottomTab/LeftTab/RightTab`.
+- Full screen hides the bar entirely unless `kPreferenceKeyShowFullscreenTabBar` is set.
+
+**Not verified, and not to be assumed:** the exact configuration that puts their accessory in the
+traffic-light row rather than below the title. The inset code is strong circumstantial evidence, not
+proof. **Pin that down before writing the plan** — guessing is how you get a window that looks right
+until someone enters full screen or uses a notched display.
+
+Also relevant when that increment is written: TextMate hides the accessory entirely when the window
+holds one document or fewer (`DocumentWindowController.mm:389`, `:1576`, gated on
+`kUserDefaultsDisableTabBarCollapsingKey`). Titlebar tabs have to keep working with that collapse.
+
+**If interrupted here:** increment 4 Task 3 — `HOStatusBar`, `OFBHeaderView`, `OFBActionsView` — is
+still outstanding and is the next thing in the current plan. Titlebar tabs are a separate,
+unplanned increment.
+
+---
+
 ## 2026-08-15 — Editor status bar on glass; and Reduce Transparency invalidates a claim I made
 
 **Task 2 landed:** `cf0aa263` moves `OTVStatusBar` off `NSVisualEffectView` onto a plain `NSView`

@@ -2,6 +2,15 @@ Title: Release Notes
 
 # Changes
 
+## Unreleased
+
+### Changed
+
+* Each tab's close button is now always visible, rather than fading in when the
+  pointer happens to be over the tab. Closing a tab used to mean aiming at it,
+  waiting for the button to appear, then aiming again. Tab widths are unchanged —
+  the button always occupied that space, it was simply invisible.
+
 ## 2026-08-14 (v3.0.0-revived.20)
 
 The first surface to adopt macOS 26's Liquid Glass material.
