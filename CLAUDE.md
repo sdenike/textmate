@@ -142,6 +142,47 @@ Three facts about the SDK that the constructors encode, each of which is easy to
   `contentInsets` has no counterpart property on `NSGlassEffectView` — it is advisory data for
   callers building constraints.
 
+The header documents that contract but says nothing about how the view behaves under Auto Layout,
+which is the only thing an adoption site needs. The spec's **"Verified behaviour of
+`NSGlassEffectView`"** table records that, measured against real AppKit rather than inferred. Read
+it before adopting glass anywhere. The two that otherwise cost an afternoon each: `contentView`'s
+`superview` is a private `ContentHolderView` and **not** the glass view, and a glass view with no
+`contentView` has a `fittingSize` of `0 × 0`, so a glass backdrop without content silently
+collapses.
+
+Two facts about verifying glass, both established by measurement on 2026-08-14 and both easy to get
+backwards:
+
+- **`-AppleInterfaceStyle Dark` on the command line does not force appearance.** The value does land
+  in `NSArgumentDomain` and `stringForKey:` returns it, but AppKit takes `effectiveAppearance` from
+  the system setting and ignores it — so a screenshot harness built on it renders both "appearances"
+  identically while passing. `NSApp.appearance` is the only mechanism that works, and the generated
+  test runner creates no `NSApplication`, so a harness must call `sharedApplication` itself or the
+  assignment is a silent no-op on nil.
+- **Glass does render into an offscreen `cacheDisplayInRect:`**, with no visible window, no
+  activation policy, and no screen-recording permission. The same view with and without a glass
+  subview differs by 0.44 mean absolute RGB inside the glass rect while the region outside it is
+  bit-identical, and live `screencapture` of the same window agrees to within 0.015. That is why the
+  Liquid Glass increments verify with a headless render test rather than manual screenshots.
+
+Two traps found while adopting glass on the first real control, both of which pass every test:
+
+- **Handing a view to `NSGlassEffectView.contentView` makes AppKit pin it to fill the glass**, so
+  the content's own intrinsic height propagates up and can override the *host* control's declared
+  size. `OakKeyEquivalentView` silently shrank from 22 points to 16 this way. If a control has an
+  `intrinsicContentSize` and gains a glass background, pin its size explicitly — at priority 999
+  rather than required, so a host that sets its own still wins — and put a plain holder view between
+  the glass and the real content so the content keeps its natural height instead of stretching.
+- **A test binary is not the app.** Images loaded from a framework bundle (`OakCreateCloseButton`'s,
+  for one) do not resolve in a bare test runner, and `NSButton` quietly falls back to drawing its
+  default "Button" title. Renders produced by `OakAppKit_test` are therefore representative of
+  layout and material, not of every subview. Check bundle-loaded imagery in the running app.
+
+Renders are verified by looking at them, not only by checking them. The first batch from the
+snapshot harness had four distinct checksums at exactly the right dimensions and was still useless —
+the glass had no backdrop to refract and a placeholder button covered the text. Checksums prove the
+render *varied*; only looking proves it is *right*.
+
 The deployment target is macOS 26.0, so never write `@available(macOS 26, *)` guards or
 `NSVisualEffectView` fallbacks around these — every branch would be dead code. Third-party examples
 (iTerm2's included) carry such guards; do not copy them.
@@ -180,13 +221,29 @@ every test target every time — a real cost on targets with large dependency li
 
 Tests that shell out to git must call `git init -b master` (not bare `git init`) — modern git's `init.defaultBranch` defaults to `main` and breaks tests that assume `master`.
 
-**`bin/gen_test` wraps each test file in `namespace <filename> { … }`.** Two consequences worth
+**`bin/gen_test` wraps each test file in `namespace <filename> { … }`.** Four consequences worth
 knowing before they cost you an afternoon. `OAK_ASSERT_EQ` stringifies both operands on failure, so
 asserting on a type with no `to_s()` fails to compile — define an overload in the test file, as
 `t_OakCompareVersionStrings.mm` does for `NSComparisonResult`. But defining one inside that implicit
 namespace **hides the global `to_s` overloads from unqualified lookup**, which breaks unrelated
 assertions elsewhere in the same file with a confusing error. Add `using ::to_s;` near the top when
 you introduce a local overload.
+
+Third, and absolute: **a test file cannot declare an Objective-C class.** Objective-C forbids
+`@interface` and `@implementation` inside a C++ namespace, and the wrap is unconditional with no
+escape hatch (`bin/gen_test:14,17-19,29`). A tree-wide grep confirms no `t_*.mm` anywhere declares
+one. A test needing a custom `NSView` subclass has to get it from the framework under test, or the
+test has to be restructured to avoid one — reaching for a separate non-globbed source file means a
+`project.yml` change, so exhaust the alternatives first.
+
+Fourth — the one that bites when you copy an assertion between files — **a `to_s` overload defined
+in one test file is invisible to its siblings in the same target**, because each lives in its own
+namespace. The symptom is `no viable 'begin' function`, from the generic `to_s(_T const&)` fallback
+trying to iterate the operand, and it reads as though the assertion itself is wrong when the
+identical line compiles fine one file over. Found 2026-08-14 moving
+`OAK_ASSERT_EQ(view.style, NSGlassEffectViewStyleRegular)` from `t_glass.mm`, which defines the
+overload, into `t_key_equivalent_view.mm`, which does not. Prefer `OAK_ASSERT(a == b)` over
+duplicating the overload into the second file.
 
 **Never use `OAK_ASSERT_EQ` on a raw Objective-C object pointer.** Use `OAK_ASSERT(a == b)`. There
 is no `to_s` overload for `NSView*` and friends, so the comparison silently resolves to

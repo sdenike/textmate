@@ -4,6 +4,155 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Liquid Glass increment 2 shipped as v3.0.0-revived.20
+
+**Increment 2 is complete and released.** `OakKeyEquivalentView` — the key-equivalent recorder in
+the Bundle Item Chooser — is the first surface in the fork to call a glass constructor. Corner
+radius settled at **8**, a deliberate local override of `OakGlassChromeMetrics().cornerRadius` (12):
+the control is a fixed 22 points tall, so anything from 11 up clamps to a full capsule, and a small
+recessed input reading as a capsule would be the only one in that chooser. Documented at the call
+site.
+
+**Verification, all of it re-run at the end rather than trusted from earlier in the increment:**
+
+| Check | Result |
+|---|---|
+| Full suite, 28 targets | 23 clean; 4 failures all matching the parity doc exactly; `command_test` hit its known hang and was killed by a 15-minute timeout |
+| `OakAppKit_test` | 21 tests passed (was 10 before the increment) |
+| Application build | `** BUILD SUCCEEDED **` |
+| Launch smoke test | window opened, process stayed up, no crash |
+| Clear-button artwork | all six `Close*Template` PNGs present in `TextMate.app/Contents/Resources/` |
+
+That last row is the check the harness structurally cannot do. `NSImage Additions.mm:9` resolves
+artwork with `[NSBundle bundleForClass:]`, which lands on the app bundle in the real app (OakAppKit
+is statically linked) but on the bare test binary under the runner — which is exactly why renders
+from the harness showed `NSButton`'s default "Button" title where the clear button should be. The
+artwork is fine; only the test binary cannot see it.
+
+**Next: increment 4, not increment 3.** The spec ordered overlays before chrome bars so glass could
+be learned cheaply on a tooltip. That learning has already happened, and on a control that exercised
+more edge cases than a tooltip would have — content-size propagation through `contentView`, the
+capture limitation, appearance resolution. The maintainer wants a change they can see, and increment
+4 (`OTVStatusBar`, `HOStatusBar`, `OFBHeaderView`, `OFBActionsView`) is the first one that is on
+screen at all times. Increment 3's overlays fold in afterwards.
+
+---
+
+## 2026-08-14 — Phase 6 increment 2 planned; spec corrected against the SDK and the code
+
+**Branch:** `phase-6/liquid-glass-small-controls`, off master at `56d193b7`. Not merged.
+
+**What changed.** `docs/superpowers/plans/2026-08-14-liquid-glass-small-controls.md` is new — the
+plan for increment 2 — and the design spec gained two corrections, both from checking rather than
+assuming.
+
+**`OFBFinderTagsChooser` is out of increment 2.** The spec listed it as a small control. Reading it
+showed `FileBrowserViewController.mm:572` assigns it to an `NSMenuItem`'s `view`, so it is a
+menu-item view, not a control in a window. It has no background of its own *because* the menu draws
+one behind it; adding an `NSGlassEffectView` would put a second material inside a surface that
+already has one. Increment 2 keeps one target, `OakKeyEquivalentView`, which exercises every hard
+part at once — it paints both its background and its text in `drawRect:`, masks a focus ring by
+hand, reads the effective appearance, and hosts a sibling subview.
+
+**The spec gained a measured table of `NSGlassEffectView`'s Auto Layout behaviour.** The SDK header
+documents the contract but not how the view behaves under constraints, which is the only thing an
+adoption site needs. Measured against real AppKit, not inferred. The two that would otherwise cost
+an afternoon each: `contentView.superview` is a private `ContentHolderView` rather than the glass
+view, and a glass view with no `contentView` has a `fittingSize` of `0 × 0`, so a glass backdrop
+without content silently collapses. Also: setting `contentView` installs the fill constraints
+itself, so adding your own conflicts with them; `glassView.subviews` is always 2 even when empty;
+the default `cornerRadius` is 8, not 0.
+
+**Verification method for increments 2–6 is settled, and the obvious approach was wrong.**
+Passing `-AppleInterfaceStyle Dark` on the command line does *not* force appearance — the value
+lands in `NSArgumentDomain` and `stringForKey:` returns it, but AppKit takes `effectiveAppearance`
+from the system setting and ignores it, so both "appearances" would have rendered identically while
+the test passed. `NSApp.appearance` is the only mechanism that works, and the generated test runner
+creates no `NSApplication`, so the harness must call `sharedApplication` itself or the assignment is
+a silent no-op on nil.
+
+What does work: glass renders into an offscreen `cacheDisplayInRect:`. Rendering the same view with
+and without a glass subview differs by **0.4436** mean absolute RGB while the region outside the
+glass rect is bit-identical, and live `screencapture` of the same window agrees to within 0.015 —
+with no visible window, no activation policy, and no screen-recording permission. So the screenshots
+are a real test, they run headless, and they run under CI.
+
+**The renders caught a silent regression the test suite could not.** `70d21a88` fixes it and
+`1e0f80df` adds the render test that found it.
+
+The migration had shrunk the control from 22 points tall to **16**, and every test still passed.
+Handing the display field to the glass as its `contentView` makes AppKit pin the field to fill the
+glass, so the field's own 16-point intrinsic height propagated up through the glass and beat the
+control's declared 22. It surfaced only because two renders came back byte-identical: at 16 points,
+corner radii of 8 and 12 both exceed half the height and clamp to the same pill. The brief's stop
+condition — *if any two renders are byte-identical, stop* — was written to catch a broken appearance
+override. It caught a layout bug instead.
+
+Five variants were measured against real AppKit before choosing the fix. The height is now pinned at
+**priority 999, not required**, which reproduces the original semantics: 22 is the control's natural
+height and a host that sets its own still wins (verified — a host forcing 30 gets 30, with the text
+still centred). A required constraint would have conflicted with any such host. A holder view
+between the glass and the field absorbs the stretching so the glyphs stay centred rather than being
+pulled to the full height.
+
+**Task 2 landed earlier — the recorder is on glass.** `776ed70c` modifies
+`Frameworks/OakAppKit/src/OakKeyEquivalentView.mm` and adds `t_key_equivalent_view.mm`, taking the
+suite to `OakAppKit_test: 16 tests passed`. This is the first application code in the fork to call a
+glass constructor. The control now installs an `NSGlassEffectView` as its first subview with the
+display string hosted in that view's `contentView`; `drawRect:` is deleted outright, `isOpaque`
+returns `NO` so glass has a backdrop to sample, and the focus ring follows the glass's corner radius
+instead of a square. Corner radius is provisionally 8, pending the renders.
+
+**A trap worth knowing, now in `CLAUDE.md`.**
+`OAK_ASSERT_EQ(view.style, NSGlassEffectViewStyleRegular)` compiles in `t_glass.mm` and fails in a
+new test file, because `bin/gen_test` wraps each test file in its own namespace and the `to_s`
+overload for that enum lives in the first file. The generic `to_s(_T const&)` fallback then tries to
+iterate the enum, and the error — `no viable 'begin' function` — reads as though the assertion is
+wrong rather than misplaced. Use `OAK_ASSERT(a == b)`.
+
+**Task 1 landed earlier.** `765eb320` adds the snapshot harness,
+`Frameworks/OakAppKit/tests/t_glass_snapshot.mm` (129 lines, one file). It exposes `SnapshotView`,
+`WriteSnapshotIfRequested` and `MeanDifference` for Task 3 to reuse, and its own test asserts that
+glass actually rendered — a floor of 0.02 against a measured 0.44, so it fails outright if the
+capture path ever stops seeing glass. Its implementer had not yet filed its report when this entry
+was written, so the reported test count is unconfirmed here; it should read `11 tests passed`.
+
+**If interrupted here:** the SDD ledger is
+`.superpowers/sdd/2026-08-14-liquid-glass-small-controls/progress.md`, and it carries the rulings
+behind both brief corrections. Briefs 1–3 are written beside it. Tasks 1 and 2 are complete and
+committed; Task 1's review came back clean on both verdicts. Confirm state with:
+
+```sh
+~/build/textmate-revived/xcode/Release/OakAppKit_test -v --no-parallel   # expect 16, or 17 after Task 3
+```
+
+Note that `bin/build` itself never prints a pass count — it execs the runner without `-v` and the
+runner is silent on success. Its silence is not evidence that tests did not run.
+
+**The first batch of renders was unusable, and a second harness fix is in flight.** Looking at the
+actual images rather than their checksums showed two defects, both in the harness rather than the
+control:
+
+1. The text read **"Button"**. `OakCreateCloseButton` loads its image from the OakAppKit framework
+   bundle, which a bare test-runner binary does not have, so `NSButton` fell back to drawing its
+   default title — wide enough to cover the key-equivalent glyphs completely. A harness artefact
+   only; the image loads normally in the app.
+2. **The glass had nothing behind it.** `SnapshotView` hosted the control in a plain `NSView` with
+   no background, so the glass was refracting a void and came out a flat pale shape in both
+   appearances. Glass only shows its character over real content.
+
+The fix gives the host `windowBackgroundColor` — what the control actually sits on in the Bundle
+Item Chooser, so the render is representative rather than merely diagnostic — and strips every
+non-glass subview before snapshotting. **Checksums alone would never have caught either of these:**
+all four digests were distinct and all four images were the right size. Someone has to look.
+
+Remaining: finish the render fix, Task 4 (full suite against the parity doc, plus exercising the
+control in the running app via ⌃⌘T — the clear button's real appearance is checked there, since the
+harness cannot show it), Task 5 (**maintainer picks the corner radius from the renders — this is the
+gate; nothing ships before it**), Task 6 (CHANGELOG, release, confirm the cask bump).
+
+---
+
 ## 2026-08-14 — SESSION CLOSE: Phases 5, 5a and Phase 6's foundation shipped
 
 **Read this first on resume.** Everything below is merged to master. Working tree clean.

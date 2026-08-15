@@ -435,7 +435,17 @@ comparison: it postdates this document's ninja-derived 26-target inventory (adde
 Xcode migration, no `vendor/Onigmo` equivalent ever existed under the rave/ninja build) and was
 never part of the baseline being matched here. `OakAppKit_test` is in the same category — added
 2026-08-14 for the Liquid Glass foundation, likewise never part of this baseline. It passes
-(8 tests).
+(**21 tests** as of v3.0.0-revived.20; it was 8 when first added, then 10 after the foundation
+increment, and Liquid Glass increment 2 took it to 21).
+
+Note that `bin/build` never prints a pass count — it execs the runner without `-v`, and the runner is
+silent on success. To see counts, run the built binary directly:
+
+```sh
+~/build/textmate-revived/xcode/Release/<name>_test -v --no-parallel
+```
+
+A silent `bin/build` is not evidence that the tests did not run.
 
 ### Addendum 2026-08-14 — `command_test` is intermittent, not merely slow
 

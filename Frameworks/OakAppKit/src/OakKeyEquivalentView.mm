@@ -7,10 +7,13 @@
 #import <text/utf8.h>
 
 static NSString* const kRecordingPlaceholderString = @"…";
+static CGFloat const kControlHeight = 22;
 
 @interface OakKeyEquivalentView ()
 {
 	OakRolloverButton* _clearButton;
+	NSGlassEffectView* _glassView;
+	NSTextField* _displayField;
 	id _eventMonitor;
 	void* _hotkeyToken;
 }
@@ -22,13 +25,59 @@ static NSString* const kRecordingPlaceholderString = @"…";
 - (id)initWithFrame:(NSRect)aRect
 {
 	if(self = [super initWithFrame:aRect])
+	{
 		self.disableGlobalHotkeys = YES;
+
+		_displayField                           = [NSTextField labelWithString:@""];
+		_displayField.alignment                 = NSTextAlignmentCenter;
+		_displayField.font                      = OakControlFont();
+		_displayField.textColor                 = NSColor.labelColor;
+		_displayField.cell.accessibilityElement = NO; // this class answers for itself; see accessibilityAttributeValue:
+
+		_glassView = OakCreateGlassBackground(NSGlassEffectViewStyleRegular);
+
+		// Deliberately overrides OakGlassChromeMetrics().cornerRadius, which is 12.
+		// That value was chosen for chrome bars; this control is a fixed 22 points
+		// tall, so anything from 11 up clamps to a full capsule, and a small
+		// recessed input reading as a capsule would be the only one in the Bundle
+		// Item Chooser. 8 is also NSGlassEffectView's own default. Settled by
+		// review of the renders the snapshot harness produces at both radii.
+		_glassView.cornerRadius = 8;
+
+		// The glass pins its contentView to fill itself, so handing it the
+		// field directly would stretch the field and push the glyphs off centre.
+		// A holder takes the stretching; the field keeps its natural height.
+		_displayField.translatesAutoresizingMaskIntoConstraints = NO;
+		NSView* fieldHolder = [[NSView alloc] initWithFrame:NSZeroRect];
+		fieldHolder.translatesAutoresizingMaskIntoConstraints = NO;
+		[fieldHolder addSubview:_displayField];
+		[_displayField.leadingAnchor constraintEqualToAnchor:fieldHolder.leadingAnchor].active   = YES;
+		[_displayField.trailingAnchor constraintEqualToAnchor:fieldHolder.trailingAnchor].active = YES;
+		[_displayField.centerYAnchor constraintEqualToAnchor:fieldHolder.centerYAnchor].active   = YES;
+		_glassView.contentView = fieldHolder;
+
+		// Added first, so the clear button that setShowClearButton: appends
+		// later is always above it.
+		OakAddAutoLayoutViewsToSuperview(@[ _glassView ], self);
+		[_glassView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor].active   = YES;
+		[_glassView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor].active = YES;
+		[_glassView.topAnchor constraintEqualToAnchor:self.topAnchor].active           = YES;
+		[_glassView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor].active     = YES;
+
+		// Priority 999, not required: 22 is this control's natural height, but a
+		// host that sets its own must still win, as it did before the control
+		// had a glass background. Without this the field's 16pt intrinsic height
+		// propagates up through the glass and shrinks the control.
+		NSLayoutConstraint* height = [self.heightAnchor constraintEqualToConstant:kControlHeight];
+		height.priority = 999;
+		height.active   = YES;
+	}
 	return self;
 }
 
 - (NSSize)intrinsicContentSize
 {
-	return NSMakeSize(NSViewNoIntrinsicMetric, 22);
+	return NSMakeSize(NSViewNoIntrinsicMetric, kControlHeight);
 }
 
 - (CGFloat)baselineOffsetFromBottom
@@ -68,7 +117,7 @@ static NSString* const kRecordingPlaceholderString = @"…";
 	if(_displayString == aString || [_displayString isEqualToString:aString])
 		return;
 	_displayString = aString;
-	[self setNeedsDisplay:YES];
+	_displayField.stringValue = aString ?: @"";
 }
 
 - (void)setShowClearButton:(BOOL)flag
@@ -109,6 +158,7 @@ static NSString* const kRecordingPlaceholderString = @"…";
 	_recording = flag;
 	self.showClearButton = OakNotEmptyString(self.eventString) && !self.recording;
 	self.displayString = _recording ? kRecordingPlaceholderString : [NSString stringWithCxxString:ns::glyphs_for_event_string(to_s(self.eventString))];
+	_displayField.textColor = _recording ? NSColor.secondaryLabelColor : NSColor.labelColor;
 
 	if(self.recording)
 	{
@@ -162,7 +212,7 @@ static NSString* const kRecordingPlaceholderString = @"…";
 
 - (BOOL)isOpaque
 {
-	return YES;
+	return NO;
 }
 
 - (BOOL)acceptsFirstMouse:(NSEvent*)anEvent
@@ -198,38 +248,9 @@ static NSString* const kRecordingPlaceholderString = @"…";
 		[super keyDown:anEvent];
 }
 
-- (void)drawRect:(NSRect)aRect
-{
-	NSRect frame = [self bounds];
-
-	NSColor* frameColor      = NSColor.lightGrayColor;
-	NSColor* backgroundColor = NSColor.whiteColor;
-
-	if(@available(macos 10.14, *))
-	{
-		if([[NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]] isEqualToString:NSAppearanceNameDarkAqua])
-			frameColor = NSColor.tertiaryLabelColor;
-		backgroundColor = NSColor.controlColor;
-	}
-
-	[frameColor set];
-	NSFrameRect(frame);
-
-	[backgroundColor set];
-	NSRectFill(NSIntersectionRect(aRect, NSInsetRect(frame, 1, 1)));
-
-	NSDictionary* stringAttributes = @{
-		NSForegroundColorAttributeName: self.recording ? [NSColor secondaryLabelColor] : [NSColor labelColor],
-		NSFontAttributeName:            OakControlFont()
-	};
-
-	NSSize size = [self.displayString sizeWithAttributes:stringAttributes];
-	[self.displayString drawAtPoint:NSMakePoint(NSMidX([self visibleRect]) - size.width / 2, NSMidY([self visibleRect]) - size.height / 2) withAttributes:stringAttributes];
-}
-
 - (void)drawFocusRingMask
 {
-	NSRectFill([self bounds]);
+	[[NSBezierPath bezierPathWithRoundedRect:self.bounds xRadius:_glassView.cornerRadius yRadius:_glassView.cornerRadius] fill];
 }
 
 - (NSRect)focusRingMaskBounds

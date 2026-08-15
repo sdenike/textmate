@@ -2,6 +2,22 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-14 (v3.0.0-revived.20)
+
+The first surface to adopt macOS 26's Liquid Glass material.
+
+### Changed
+
+* The key equivalent recorder — the field that records a shortcut in the Bundle
+  Item Chooser (⌃⌘T, when you search by key equivalent) — now draws its
+  background with the system's glass material instead of painting its own border
+  and fill. Its focus ring follows the new rounded outline, and its colours come
+  from the system rather than from hardcoded greys.
+
+  This is a deliberately small first step. The surfaces you look at constantly —
+  the status bar, the file browser's header, the choosers and the tab bar — come
+  in later releases.
+
 ## 2026-08-14 (v3.0.0-revived.19)
 
 ### Changed
