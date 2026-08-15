@@ -46,3 +46,30 @@ void test_wrap_in_glass_keeps_the_bar_sized_by_its_content ()
 	OAK_ASSERT_EQ(bar.fittingSize.width, 300);
 	OAK_ASSERT_EQ(bar.fittingSize.height, 24);
 }
+
+void test_wrap_in_glass_preserves_fitting_height ()
+{
+	// FileBrowserView adds the header's fittingSize.height to the file list's
+	// top content inset, so a bar that changes height when wrapped silently
+	// shifts the list. Wrapping must be height-neutral.
+	NSView* plain = [[NSView alloc] initWithFrame:NSZeroRect];
+	plain.translatesAutoresizingMaskIntoConstraints = NO;
+	NSView* plainContent = [[NSView alloc] initWithFrame:NSZeroRect];
+	plainContent.translatesAutoresizingMaskIntoConstraints = NO;
+	[plainContent.heightAnchor constraintEqualToConstant:24].active = YES;
+	OakAddAutoLayoutViewsToSuperview(@[ plainContent ], plain);
+	[plainContent.topAnchor constraintEqualToAnchor:plain.topAnchor].active       = YES;
+	[plainContent.bottomAnchor constraintEqualToAnchor:plain.bottomAnchor].active = YES;
+
+	NSView* wrapped = [[NSView alloc] initWithFrame:NSZeroRect];
+	wrapped.translatesAutoresizingMaskIntoConstraints = NO;
+	NSView* holder = OakWrapInGlass(wrapped, NSGlassEffectViewStyleRegular);
+	NSView* wrappedContent = [[NSView alloc] initWithFrame:NSZeroRect];
+	wrappedContent.translatesAutoresizingMaskIntoConstraints = NO;
+	[wrappedContent.heightAnchor constraintEqualToConstant:24].active = YES;
+	OakAddAutoLayoutViewsToSuperview(@[ wrappedContent ], holder);
+	[wrappedContent.topAnchor constraintEqualToAnchor:holder.topAnchor].active       = YES;
+	[wrappedContent.bottomAnchor constraintEqualToAnchor:holder.bottomAnchor].active = YES;
+
+	OAK_ASSERT_EQ(wrapped.fittingSize.height, plain.fittingSize.height);
+}

@@ -3,7 +3,7 @@
 - (void)goForward:(id)sender;
 @end
 
-@interface HOStatusBar : NSVisualEffectView
+@interface HOStatusBar : NSView
 @property (nonatomic, weak) id              delegate;
 
 @property (nonatomic) NSString*             statusText;

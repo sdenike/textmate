@@ -1,4 +1,4 @@
-@interface OFBActionsView : NSVisualEffectView
+@interface OFBActionsView : NSView
 @property (nonatomic) NSButton* createButton;
 @property (nonatomic) NSPopUpButton* actionsPopUpButton;
 @property (nonatomic) NSButton* reloadButton;

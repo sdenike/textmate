@@ -25,6 +25,7 @@ static NSTextField* OakCreateTextField ()
 }
 
 @interface HOStatusBar ()
+@property (nonatomic) NSView*              contentHolder;
 @property (nonatomic) NSView*              topDivider;
 @property (nonatomic) NSView*              divider;
 @property (nonatomic) NSButton*            goBackButton;
@@ -41,11 +42,6 @@ static NSTextField* OakCreateTextField ()
 {
 	if(self = [super initWithFrame:frame])
 	{
-		self.wantsLayer   = YES;
-		self.material     = NSVisualEffectMaterialTitlebar;
-		self.blendingMode = NSVisualEffectBlendingModeWithinWindow;
-		self.state        = NSVisualEffectStateFollowsWindowActiveState;
-
 		_indeterminateProgress = YES;
 
 		_topDivider               = OakCreateNSBoxSeparator();
@@ -79,8 +75,12 @@ static NSTextField* OakCreateTextField ()
 		_spinner.style                = NSProgressIndicatorStyleSpinning;
 		_spinner.displayedWhenStopped = NO;
 
+		// Controls go inside the glass, not on the bar: NSGlassEffectView guarantees
+		// placement only for its contentView.
+		_contentHolder = OakWrapInGlass(self, NSGlassEffectViewStyleRegular);
+
 		NSArray* views = @[ _topDivider, _divider, _goBackButton, _goForwardButton, _statusTextField, _spinner ];
-		OakAddAutoLayoutViewsToSuperview(views, self);
+		OakAddAutoLayoutViewsToSuperview(views, _contentHolder);
 
 		[_progressIndicator setTranslatesAutoresizingMaskIntoConstraints:NO];
 	}
@@ -90,7 +90,7 @@ static NSTextField* OakCreateTextField ()
 - (void)updateConstraints
 {
 	if(_layoutConstraints)
-		[self removeConstraints:_layoutConstraints];
+		[_contentHolder removeConstraints:_layoutConstraints];
 	_layoutConstraints = [NSMutableArray array];
 
 	[super updateConstraints];
@@ -123,7 +123,7 @@ static NSTextField* OakCreateTextField ()
 		[_layoutConstraints addObjectsFromArray:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[spinner]-5-|" options:0 metrics:nil views:views]];
 	}
 
-	[self addConstraints:_layoutConstraints];
+	[_contentHolder addConstraints:_layoutConstraints];
 }
 
 - (void)setIndeterminateProgress:(BOOL)newIndeterminateProgress
@@ -134,13 +134,13 @@ static NSTextField* OakCreateTextField ()
 	if(_indeterminateProgress = newIndeterminateProgress)
 	{
 		[_progressIndicator removeFromSuperview];
-		[self addSubview:_spinner];
+		[_contentHolder addSubview:_spinner];
 		if(_busy)
 			[_spinner startAnimation:nil];
 	}
 	else
 	{
-		[self addSubview:_progressIndicator];
+		[_contentHolder addSubview:_progressIndicator];
 		if(_busy)
 			[_spinner stopAnimation:nil];
 		[_spinner removeFromSuperview];
