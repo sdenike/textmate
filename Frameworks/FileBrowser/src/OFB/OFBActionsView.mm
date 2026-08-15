@@ -18,11 +18,6 @@ static NSButton* OakCreateImageButton (NSImage* image)
 {
 	if(self = [super initWithFrame:aRect])
 	{
-		self.wantsLayer   = YES;
-		self.material     = NSVisualEffectMaterialTitlebar;
-		self.blendingMode = NSVisualEffectBlendingModeWithinWindow;
-		self.state        = NSVisualEffectStateFollowsWindowActiveState;
-
 		self.createButton       = OakCreateImageButton([NSImage imageNamed:NSImageNameAddTemplate]);
 		self.actionsPopUpButton = OakCreateActionPopUpButton();
 		self.reloadButton       = OakCreateImageButton([NSImage imageNamed:NSImageNameRefreshTemplate]);
@@ -60,12 +55,15 @@ static NSButton* OakCreateImageButton (NSImage* image)
 			@"scm":        self.scmButton,
 		};
 
-		OakAddAutoLayoutViewsToSuperview([views allValues], self);
+		// Controls go inside the glass, not on the bar: NSGlassEffectView guarantees
+		// placement only for its contentView.
+		NSView* contentHolder = OakWrapInGlass(self, NSGlassEffectViewStyleRegular);
+		OakAddAutoLayoutViewsToSuperview([views allValues], contentHolder);
 		OakSetupKeyViewLoop(@[ self, _createButton, _actionsPopUpButton, _reloadButton, _searchButton, _favoritesButton, _scmButton ]);
 
-		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-8-[create]-8-[divider(==1)]-8-[actions(==31)]-(>=8)-[reload]-4-[search]-4-[favorites]-4-[scm]-(12)-|" options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
-		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[topDivider]|"                                                                                         options:0 metrics:nil views:views]];
-		[self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[topDivider(==1)]-4-[divider(==15)]-5-|"                                                                     options:0 metrics:nil views:views]];
+		[contentHolder addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-8-[create]-8-[divider(==1)]-8-[actions(==31)]-(>=8)-[reload]-4-[search]-4-[favorites]-4-[scm]-(12)-|" options:NSLayoutFormatAlignAllCenterY metrics:nil views:views]];
+		[contentHolder addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[topDivider]|"                                                                                         options:0 metrics:nil views:views]];
+		[contentHolder addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[topDivider(==1)]-4-[divider(==15)]-5-|"                                                                     options:0 metrics:nil views:views]];
 	}
 	return self;
 }

@@ -2,6 +2,34 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-15 (v3.0.0-revived.21)
+
+Missing artwork is back, and the window chrome moves to the macOS 26 material.
+
+### Fixed
+
+* Missing artwork throughout the application. The code-folding arrows in the
+  gutter, gutter bookmarks, the diff/error/warning/note marks beside a line, the
+  Preferences window's toolbar icons, and the file browser's search, favorites
+  and SCM buttons were all drawing nothing.
+
+  Forty image files had never been copied into the application since it moved to
+  the Xcode build. An earlier release fixed forty *other* missing images, but its
+  fix looked only in folders named `gfx` and only for PNG files — and the entire
+  gutter icon set is PDF, kept in a different folder. A missing image fails
+  silently, drawing an empty control rather than an error, which is why it went
+  unnoticed through two releases.
+
+### Changed
+
+* The status bar, the file browser's header and actions bar, and the HTML output
+  status bar now use the macOS 26 glass material.
+
+* Each tab's close button is now always visible, rather than fading in when the
+  pointer happens to be over the tab. Closing a tab used to mean aiming at it,
+  waiting for the button to appear, then aiming again. Tab widths are unchanged —
+  the button always occupied that space, it was simply invisible.
+
 ## 2026-08-14 (v3.0.0-revived.20)
 
 The first surface to adopt macOS 26's Liquid Glass material.

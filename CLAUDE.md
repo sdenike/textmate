@@ -178,6 +178,40 @@ Two traps found while adopting glass on the first real control, both of which pa
   default "Button" title. Renders produced by `OakAppKit_test` are therefore representative of
   layout and material, not of every subview. Check bundle-loaded imagery in the running app.
 
+**Framework artwork must be flattened into the app bundle, and the glob has been wrong twice.**
+`Xcode/scripts/assemble_resources.sh` copies images from `Frameworks/` into `Contents/Resources/`,
+because the frameworks are statically linked and `+[NSImage imageNamed:inSameBundleAsClass:]`
+resolves through `+[NSBundle bundleForClass:]` to the app bundle itself. A miss is **silent** — the
+control just draws empty.
+
+Artwork lives in `gfx/`, `resources/` **and** `icons/`, in `.png`, `.pdf` **and** `.tiff`. The
+v3.0.0-revived.18 fix globbed only `gfx/*.png` and missed 40 files, including the entire gutter icon
+set, which is PDF. Never verify this with a threshold ("at least N images present"); compare the sets:
+
+```sh
+APP=~/build/textmate-revived/xcode/Release/TextMate.app/Contents/Resources
+comm -23 <(find Frameworks -type f \( -name '*.png' -o -name '*.pdf' -o -name '*.tiff' \) \
+             -not -path '*/tests/*' -exec basename {} \; | sort -u) \
+         <(ls "$APP" | sort -u)          # must print nothing
+```
+
+Flattening relies on every image basename under `Frameworks/` being unique. Check that with
+`find Frameworks -name '*.png' -o -name '*.pdf' | xargs -n1 basename | sort | uniq -d`.
+
+**This development machine has Reduce Transparency enabled** — `com.apple.universalaccess
+reduceTransparency = 1`, and `NSWorkspace.accessibilityDisplayShouldReduceTransparency` returns
+`YES`. macOS flattens every vibrancy and glass material at the compositor when it is on. Check it
+before drawing any conclusion from a screenshot taken here:
+
+```sh
+defaults read com.apple.universalaccess reduceTransparency
+```
+
+Glass still renders as a distinct rounded surface with the setting on, so screenshots from this
+machine confirm geometry, layout and control placement. They **cannot** confirm that a surface looks
+translucent, and a flat-looking material here is not evidence that the material is wrong. A claim
+about how glass *looks* needs a machine with the setting off.
+
 Renders are verified by looking at them, not only by checking them. The first batch from the
 snapshot harness had four distinct checksums at exactly the right dimensions and was still useless —
 the glass had no backdrop to refract and a placeholder button covered the text. Checksums prove the

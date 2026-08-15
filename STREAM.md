@@ -4,6 +4,231 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — Increment 4 complete; and 40 more images have never shipped
+
+**`0bce7964` — all four chrome bars are on glass.** `HOStatusBar`, `OFBHeaderView` and
+`OFBActionsView` joined `OTVStatusBar`. `OakAppKit_test: 25 tests passed`, application builds. The
+file browser's actions bar visibly gains the glass view's rounded corner, which is the first place
+in this phase the material reads at all — the editor status bar sits over a flat text view, so glass
+there is indistinguishable from the old flat bar.
+
+`HOStatusBar` needed one thing beyond the brief's survey: its `setIndeterminateProgress:` adds
+subviews dynamically, and those calls needed retargeting to the holder alongside the static ones.
+
+### `5bcba5cc` — the .18 image fix was half a fix, and the other half was mine to miss
+
+The implementer stopped on three blank buttons in the file browser and root-caused it as
+pre-existing. Auditing it properly found far worse: **79 image files exist under `Frameworks/`, and
+40 of them were never copied into the app.**
+
+| Missing | Effect |
+|---|---|
+| `Folding Top/Bottom/Collapsed (+Hover)`, `FoldingDots` | no code-folding arrows in the gutter |
+| `Bookmark`, `InsertBookmark`, `RemoveBookmark` | no gutter bookmarks |
+| `diff.added/modified`, `error`, `warning`, `note`, `search` | no gutter marks |
+| `Projects`, `Software Update`, `Terminal`, `Variables` | empty Preferences toolbar |
+| `Search`, `Favorites`, `SCM` | the three blank file-browser buttons |
+
+v3.0.0-revived.18 fixed "40 missing images" by globbing directories named `gfx` for `*.png`. Two
+things that glob could never catch, and I checked neither before declaring it done:
+
+- Four frameworks keep artwork outside `gfx/` — FileBrowser, DocumentWindow and OakTextView under
+  `resources/`, Preferences under `icons/`.
+- **The entire gutter icon set is PDF**, so `*.png` was structurally incapable of matching it.
+
+The glob now covers `gfx/`, `resources/` and `icons/`, matching png, pdf and tiff. Audited before
+and after: **40 missing → 0 missing**, confirmed in the running application.
+
+`Ruling: the lesson is not "widen the glob". It is that the .18 verification counted only what it
+had already decided to look for -- it asserted "≥40 PNGs in Resources" rather than comparing the set
+that exists against the set that ships. A completeness check has to be a set difference, not a
+threshold. The fix now carries that audit command in its comment, plus the basename-collision check
+that flattening depends on.`
+
+**If interrupted here:** increment 4's code is complete on `phase-6/liquid-glass-chrome-bars`.
+Remaining: the full suite against the parity doc, then ship as v3.0.0-revived.21 (the CHANGELOG
+currently has an "Unreleased" section to fold in). Then titlebar tabs, whose full recipe is measured
+and recorded in the entry below.
+
+Two Task 3 checks were not verified live and are not claimed as verified: scrolling the file list
+under the header, and the HTML output status bar. The sandbox drops synthetic modifier keys, so
+neither could be exercised. The height-neutrality test covers the first mechanically.
+
+---
+
+## 2026-08-15 — Tab close button always visible; iTerm2's titlebar tabs use the mechanism we already have
+
+**`fb8d25f2` — the tab close button no longer hides until hover.** Maintainer request. The mechanism
+was a KVO binding: `closeButtonAlphaValue` returned 1 only when `_mouseInside || _modified ||
+_voiceOverEnabled`. It now returns 1 whenever there is a tab item, and
+`keyPathsForValuesAffectingCloseButtonAlphaValue` narrows to `tabItem` accordingly. The modified
+state still changes the button's *image* via `updateCloseButtonImage`; that was never driven from
+the alpha.
+
+**It costs no horizontal room, contrary to the initial survey's warning.** The button is created and
+constrained whatever its alpha — it sits in the `H:|-(3@53)-[close]-(>=3@53)-[title]-(>=6@53)-|`
+chain and already contributed to each tab's `fittingSize` — so only opacity changed, and opacity does
+not participate in Auto Layout. Confirmed by screenshotting three open tabs with nothing hovered:
+widths unchanged.
+
+### Titlebar tabs — researched, and it corrects something said earlier in this session
+
+The maintainer asked about moving tabs into the titlebar row the way iTerm2 and Obsidian do, to
+reclaim a row of chrome. Mid-conversation I claimed this would mean replacing TextMate's mechanism
+with `NSWindowStyleMaskFullSizeContentView` plus a hidden title. **That was wrong.**
+
+| | Mechanism |
+|---|---|
+| iTerm2 | `NSTitlebarAccessoryViewController` — `sources/Hacks/iTermTitlebarAccessoryNanny.swift:51-63` |
+| TextMate today | `NSTitlebarAccessoryViewController` — `DocumentWindowController.mm:208-212` |
+
+**The same AppKit mechanism, already in place.** Both even set `fullScreenMinHeight` on it. The
+difference is configuration:
+
+- iTerm2 sets `_tabBarControl.insets` from `leftInsetForWindowButtons`
+  (`iTermRootTerminalView.m:1145`) — 2.5, 9 or 6 points depending on tab style — to clear the traffic
+  lights. That inset only makes sense if the accessory shares a row with those buttons, which is
+  precisely the visual difference.
+- Tab position is a preference, `kPreferenceKeyTabPosition`, over
+  `PSMTab_TopTab/BottomTab/LeftTab/RightTab`.
+- Full screen hides the bar entirely unless `kPreferenceKeyShowFullscreenTabBar` is set.
+
+**Not verified, and not to be assumed:** the exact configuration that puts their accessory in the
+traffic-light row rather than below the title. The inset code is strong circumstantial evidence, not
+proof. **Pin that down before writing the plan** — guessing is how you get a window that looks right
+until someone enters full screen or uses a notched display.
+
+Also relevant when that increment is written: TextMate hides the accessory entirely when the window
+holds one document or fewer (`DocumentWindowController.mm:389`, `:1576`, gated on
+`kUserDefaultsDisableTabBarCollapsingKey`). Titlebar tabs have to keep working with that collapse.
+
+**If interrupted here:** increment 4 Task 3 — `HOStatusBar`, `OFBHeaderView`, `OFBActionsView` — is
+still outstanding and is the next thing in the current plan. Titlebar tabs are a separate,
+unplanned increment.
+
+---
+
+## 2026-08-15 — Editor status bar on glass; and Reduce Transparency invalidates a claim I made
+
+**Task 2 landed:** `cf0aa263` moves `OTVStatusBar` off `NSVisualEffectView` onto a plain `NSView`
+hosting `OakWrapInGlass`. `OakAppKit_test: 24 tests passed`, application builds, and a window-only
+screenshot confirms every control is present and correctly placed — line/column, the grammar popup,
+tab size, the bundle-item and symbol controls, the macro dot — at unchanged height.
+
+**The finding that matters more: this machine has Reduce Transparency enabled.**
+`com.apple.universalaccess reduceTransparency = 1`, and
+`NSWorkspace.accessibilityDisplayShouldReduceTransparency` returns `YES`. macOS flattens every
+vibrancy and glass material at the compositor when that is on.
+
+**This retracts a claim committed in `a6a5b169`.** That commit put in the spec that
+`NSVisualEffectMaterialTitlebar` "does not silently become Liquid Glass on macOS 26", citing a
+screenshot of the flat status bar as proof. The screenshot proved nothing — the bar was flat because
+*everything* is flat on this machine. Whether that material maps to glass on macOS 26 is still
+unverified and cannot be settled here. Retracted in the spec, and `CLAUDE.md` now carries the check
+to run before trusting any screenshot taken on this machine.
+
+What survives: glass still renders as a distinct rounded surface with the setting on — the increment
+2 renders show it, and the measured 0.44 mean-RGB difference between glass and no-glass held there.
+So screenshots from here confirm **geometry, layout and control placement**, and cannot confirm
+**translucency**. Every visual sign-off in this phase so far falls in the first category.
+
+Two Task 2 checks are genuinely unverified for environmental reasons, both documented rather than
+papered over: controls were not click-tested (the screen was locked, and macOS does not deliver
+synthetic input while locked), and glassiness was not confirmed (Reduce Transparency). Neither
+implicates the diff — no target/action wiring was touched — but neither is proven.
+
+---
+
+## 2026-08-15 — Increment 4 planned and started: the chrome bars
+
+**Branch:** `phase-6/liquid-glass-chrome-bars`, off master at `43858aee`. Plan committed as
+`b80a42b8`. Not merged.
+
+Plan: `docs/superpowers/plans/2026-08-15-liquid-glass-chrome-bars.md`. Ledger:
+`.superpowers/sdd/2026-08-15-liquid-glass-chrome-bars/`.
+
+**The structural decision worth knowing.** All four bars need the identical restructure — plain
+`NSView`, hosting a glass view pinned to its bounds, whose `contentView` is a holder carrying the
+existing controls. Rather than write that out four times, Task 1 factors it into one helper,
+`OakWrapInGlass(bar, style)`, which returns the holder to add controls to. Four hand-written copies
+would be four chances to diverge, on four surfaces that are on screen constantly.
+
+**Sequencing:** `OTVStatusBar` alone first as the probe — it is on every editor window, so it is both
+the highest-value target and the right place to prove the shape. `HOStatusBar`, `OFBHeaderView` and
+`OFBActionsView` are batched behind it once that shape holds. Renders and the full suite last.
+
+**Two hazards the plan guards explicitly**, both of the same family as the six-point shrink that
+increment 2 hit:
+
+- `OakWrapInGlass` must be **size-neutral**. Task 1's third test pins a 300 × 24 holder and asserts
+  the bar's `fittingSize` comes back 300 × 24. The brief tells the implementer to stop and report the
+  observed value rather than adjust the expectation, because a surprise there is a finding.
+- The file browser's list scrolls **underneath** its header, and `FileBrowserView.mm:68` derives the
+  list's top content inset from `_headerView.fittingSize.height`. A height change of even one point
+  shifts the file list. Task 3 carries a dedicated height-neutrality test.
+
+**`HOStatusBar` needs care** where the others do not: it rebuilds its constraints dynamically in
+`updateConstraints` (`:90-127`), so its holder must be reachable from that method — an instance
+variable, not a local.
+
+**Task 1 has landed.** `5e97d957` adds `OakWrapInGlass` and
+`Frameworks/OakAppKit/tests/t_glass_wrap.mm` — 78 insertions across three files. Count verified by
+running the binary directly rather than taken from the implementer's report:
+`OakAppKit_test: 24 tests passed`, up from 21.
+
+The size-neutrality test passed first time, so wrapping a bar in glass does **not** reproduce
+increment 2's shrink — a 300 × 24 holder yields a 300 × 24 bar. That was the single biggest risk in
+this increment and it is now pinned by a test rather than assumed.
+
+**If interrupted here:** resume at Task 2, `OTVStatusBar` — superclass to `NSView`, delete the
+`material`/`blendingMode`/`state` lines at `OTVStatusBar.mm:76-78`, call `OakWrapInGlass`, and move
+both the control-adding at `:135` **and the constraint block at `:147-156`** onto the returned
+holder. That constraint move is the step most likely to go wrong; if any constraint there references
+`self` as a layout item rather than as a container, that is a finding to report, not to guess at.
+Then Task 3 (the other three, batched), Task 4 (render + full suite), Task 5 (ship as
+v3.0.0-revived.21).
+
+---
+
+## 2026-08-15 — v3.0.0-revived.20 verified live; increment 4 surveyed and the spec corrected
+
+**The release is out and checked end to end**, not just reported green: cask SHA256
+`1d9c8f08…5343` matches the published asset byte-for-byte, signed by Developer ID
+`485WH9DHS4`, notarized, stapled, `spctl` accepts it as `Notarized Developer ID`.
+
+**Increment 4 (chrome bars) is surveyed, and three spec claims were wrong.** All corrected in
+`a6a5b169`; the details are in the spec, the consequences are here.
+
+1. **There is no contained effect view to swap.** `OTVStatusBar`, `HOStatusBar`, `OFBHeaderView`
+   and `OFBActionsView` each **subclass `NSVisualEffectView`** and add their controls directly to
+   themselves. The SDK guarantees placement only for `contentView`, so each needs restructuring
+   around a glass `contentView` — the same holder shape increment 2 arrived at independently. A grep
+   for `.material` / `.blendingMode` / `.state` / `.maskImage` on these across `Frameworks/` and
+   `Applications/` returns nothing, so changing the superclass to `NSView` breaks no consumer.
+2. **The spec's only concrete `spacing` claim was false.** It named the file browser's header and
+   actions bar as the pair needing a non-zero container spacing; `FileBrowserView.mm:63-65` puts them
+   at opposite ends with the entire file list between them. They can never be in proximity. No
+   surface identified so far needs a non-zero `spacing`.
+3. **The file list scrolls underneath the header.** `FileBrowserView.mm:68` adds the header's height
+   to the scroll view's top content inset and `:59` raises the header above it. The header is
+   therefore a real glass-over-content surface, and **its `fittingSize` is load-bearing** — change it
+   and the list's inset moves with it. This is the same class of hazard that silently shrank
+   `OakKeyEquivalentView` by six points in increment 2, so it gets an explicit test.
+
+**The premise was checked before committing to the work:** the running app, built against the macOS
+26 SDK, was screenshotted. `NSVisualEffectMaterialTitlebar` renders flat and opaque — it does **not**
+silently become Liquid Glass. Increment 4 is real work with a real visible result.
+
+**If interrupted here:** increment 2 is shipped and merged (PR #13, master at `4cb82ff7`); nothing
+is in flight. Increment 4 is surveyed but **not yet planned** — no plan file, no branch, no ledger.
+Write the plan from the corrected spec, then execute `OTVStatusBar` alone first as the probe (it is
+on every editor window), render it with the live-window harness, and only batch `HOStatusBar`,
+`OFBHeaderView` and `OFBActionsView` once that shape is proven. Increment 3 (overlays) was
+deliberately deferred behind 4 because its stated purpose was cheap learning, and increment 2
+already delivered that.
+
+---
+
 ## 2026-08-14 — Liquid Glass increment 2 shipped as v3.0.0-revived.20
 
 **Increment 2 is complete and released.** `OakKeyEquivalentView` — the key-equivalent recorder in

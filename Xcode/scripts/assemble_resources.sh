@@ -142,14 +142,33 @@ assemble_textmate() {
 	# overflow button and the per-tab close button both rendered as the word
 	# "Button". Verify after changing this with:
 	#   find "$APP/Contents/Resources" -name 'TabOverflowThinTemplate*'
-	while IFS= read -r -d '' gfx; do
-		cp -p "$gfx" "$contents/Resources/$(basename "$gfx")"
+	#
+	# Two things this glob got wrong until 2026-08-15, both silent, and together
+	# they cost another 40 images on top of the 40 the .18 fix recovered:
+	#
+	#   * It only looked in directories named `gfx`. Four frameworks keep their
+	#     artwork elsewhere -- FileBrowser, DocumentWindow and OakTextView under
+	#     `resources/`, Preferences under `icons/`.
+	#   * It only matched `*.png`. The entire gutter icon set is PDF: the folding
+	#     arrows, bookmarks, and the diff/error/warning/note marks.
+	#
+	# So the file browser's search, favorites and SCM buttons drew nothing, the
+	# Preferences toolbar had no icons, and the gutter had no folding arrows --
+	# from the Xcode migration until this was fixed.
 	#
 	# `-type f -o -type l` rather than plain `-type f`: BundleEditor ships
 	# Proxy.png as a symlink to Settings.png, and -type f silently excludes
 	# symlinks, so the plain form copied 39 of the 40 images. cp follows the
 	# link and writes a real file, which is what the bundle wants.
-	done < <(find "$SRCROOT/Frameworks" -type d -name gfx -exec find {} \( -type f -o -type l \) -name '*.png' -print0 \;)
+	#
+	# Flattening is safe: every image basename under Frameworks/ is unique, so
+	# nothing overwrites anything. If that ever stops being true this loop will
+	# silently pick a winner, so check with:
+	#   find Frameworks -name '*.png' -o -name '*.pdf' | xargs -n1 basename | sort | uniq -d
+	while IFS= read -r -d '' gfx; do
+		cp -p "$gfx" "$contents/Resources/$(basename "$gfx")"
+	done < <(find "$SRCROOT/Frameworks" -type d \( -name gfx -o -name resources -o -name icons \) \
+		-exec find {} \( -type f -o -type l \) \( -name '*.png' -o -name '*.pdf' -o -name '*.tiff' \) -print0 \;)
 
 	# about/* + ../../CHANGELOG.md -- files -> Resources/About.
 	mkdir -p "$contents/Resources/About/css" "$contents/Resources/About/js"

@@ -74,8 +74,19 @@ Two consequences, both of which the constructors now encode:
 2. **Content goes in the container's `contentView`**, not as direct subviews — merging and z-order
    elevation apply to `contentView`'s descendants only.
 
-The file browser's `OFBHeaderView` and `OFBActionsView` are the case that needs a non-zero value;
-what value is a screenshot question for increment 4, not a guess to bake in now.
+An earlier draft named the file browser's `OFBHeaderView` and `OFBActionsView` as the case needing a
+non-zero value. **That was wrong, and reading `FileBrowserView.mm` on 2026-08-15 settled it.** Its
+constraints are `V:|[header]-(>=0)-[actions]` and `V:|[files][actions]|` — the header sits at the top
+of the file browser and the actions bar at the bottom, with the entire file list between them. They
+are never in proximity, so no `spacing` value would ever merge them. No surface identified so far
+needs a non-zero `spacing`; the parameter stays available for one that does.
+
+The same reading turned up something the migration has to respect: the scroll view spans the full
+height and `FileBrowserView.mm:68` adds the header's height to its top content inset, while
+`FileBrowserView.mm:59` explicitly raises the header above it. **The file list scrolls underneath
+the header**, which is precisely why that surface carries a material. Two consequences: the header
+is a genuine glass-over-content surface rather than decoration, and any change to its `fittingSize`
+shifts the list's content inset with it.
 
 ### Verified behaviour of `NSGlassEffectView`
 
@@ -118,7 +129,7 @@ Six increments, ordered by blast radius. Each ships as its own release.
 | 1 | Foundation | `OakUIConstructionFunctions` | None — additive, no callers yet |
 | 2 | Small controls | `OakKeyEquivalentView` | Low — self-contained, rarely visible |
 | 3 | Overlays | `OTVHUD`, `OakToolTip`, `OakChoiceMenu` | Low — transient, `Clear` style, no layout impact |
-| 4 | Chrome bars | `OTVStatusBar`, `HOStatusBar`, `OFBHeaderView`, `OFBActionsView` | Medium — always visible; needs the container |
+| 4 | Chrome bars | `OTVStatusBar`, `HOStatusBar`, `OFBHeaderView`, `OFBActionsView` | Medium — always visible; each is an `NSVisualEffectView` **subclass**, so each needs restructuring |
 | 5 | Choosers and window | `OakChooser`, `OakPasteboardChooser`, `BundlesPreferences`, window chrome | Medium — window chrome is where regressions show |
 | 6 | Tab bar | `OakTabBarView` | Medium — see below |
 
@@ -143,6 +154,58 @@ subview (the clear button) that must stay above the new glass.
 This ordering has independent corroboration: iTerm2, a mature macOS application, has begun
 adopting `NSGlassEffectView` and applied it to its Open Quickly chooser, chat toolbar and a
 text-field container — overlays and choosers — while leaving its tab bar untouched.
+
+### The chrome bars are effect-view subclasses, not hosts of one
+
+Surveyed 2026-08-15. All four of increment 4's targets **subclass `NSVisualEffectView` directly**:
+
+| Class | Declared at | Configures |
+|---|---|---|
+| `OTVStatusBar` | `OTVStatusBar.h:6` | `material = Titlebar`, `blendingMode = WithinWindow`, `state = FollowsWindowActiveState` |
+| `HOStatusBar` | `HOStatusBar.h:6` | same three, plus `wantsLayer = YES` |
+| `OFBHeaderView` | `OFBHeaderView.h:3` | `blendingMode`, `material`, `wantsLayer` |
+| `OFBActionsView` | `OFBActionsView.h:1` | same four as `HOStatusBar` |
+
+Each then calls `OakAddAutoLayoutViewsToSuperview(views, self)` — adding its controls **directly to
+itself**. So this increment cannot swap a contained effect view for a glass one; there is no
+contained effect view. Changing the superclass alone is also not enough: the SDK header states that
+`NSGlassEffectView` "only guarantees the `contentView` will be placed inside the glass effect;
+arbitrary subviews aren't guaranteed specific behavior with regard to z-order in relation to the
+content view or glass effect."
+
+The shape each migration takes, which is the pattern increment 2 arrived at independently:
+
+```
+Bar : NSView                          (no longer an effect view)
+└── NSGlassEffectView                 (pinned to the bar's bounds)
+      └── contentView: plain NSView   (holds every existing control, unchanged)
+```
+
+No consumer depends on the superclass — a grep for `.material`, `.blendingMode`, `.state` and
+`.maskImage` on `statusBar`, `headerView` and `actionsView` across `Frameworks/` and `Applications/`
+returns nothing — so the header change is safe.
+
+**Retracted 2026-08-15.** An earlier revision of this section claimed that
+`NSVisualEffectMaterialTitlebar` "does not silently become Liquid Glass on macOS 26", citing a
+screenshot of the running application in which the status bar rendered flat and opaque.
+
+**That screenshot proved nothing of the kind, and the claim was wrong to make.** The development
+machine has **Reduce Transparency enabled** (`com.apple.universalaccess reduceTransparency = 1`;
+`NSWorkspace.accessibilityDisplayShouldReduceTransparency` returns `YES`), and macOS flattens every
+vibrancy and glass material at the compositor when it is on. The bar was flat because *all* materials
+are flat on that machine — not because the material failed to map to glass. Whether
+`NSVisualEffectMaterialTitlebar` maps to Liquid Glass on macOS 26 **remains unverified**, and it
+cannot be settled by looking at this machine.
+
+Two things that follow, both of which matter more than the retracted claim:
+
+- **Any visual review of this phase performed on this machine is inconclusive about translucency.**
+  Glass still renders as a distinct rounded surface with Reduce Transparency on — the increment 2
+  renders show that clearly, and the measured 0.44 mean-RGB difference between glass and no glass
+  held there — but its *translucency* does not appear. Screenshots from this machine can confirm
+  geometry, layout and control placement. They cannot confirm that a surface looks like glass.
+- **The migration is still worth doing regardless**, because the setting is per-machine and per-user.
+  What it changes is who can review the result, not whether the result is correct.
 
 ### The tab bar
 
