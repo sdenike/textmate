@@ -4,6 +4,40 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-14 — Liquid Glass increment 2 shipped as v3.0.0-revived.20
+
+**Increment 2 is complete and released.** `OakKeyEquivalentView` — the key-equivalent recorder in
+the Bundle Item Chooser — is the first surface in the fork to call a glass constructor. Corner
+radius settled at **8**, a deliberate local override of `OakGlassChromeMetrics().cornerRadius` (12):
+the control is a fixed 22 points tall, so anything from 11 up clamps to a full capsule, and a small
+recessed input reading as a capsule would be the only one in that chooser. Documented at the call
+site.
+
+**Verification, all of it re-run at the end rather than trusted from earlier in the increment:**
+
+| Check | Result |
+|---|---|
+| Full suite, 28 targets | 23 clean; 4 failures all matching the parity doc exactly; `command_test` hit its known hang and was killed by a 15-minute timeout |
+| `OakAppKit_test` | 21 tests passed (was 10 before the increment) |
+| Application build | `** BUILD SUCCEEDED **` |
+| Launch smoke test | window opened, process stayed up, no crash |
+| Clear-button artwork | all six `Close*Template` PNGs present in `TextMate.app/Contents/Resources/` |
+
+That last row is the check the harness structurally cannot do. `NSImage Additions.mm:9` resolves
+artwork with `[NSBundle bundleForClass:]`, which lands on the app bundle in the real app (OakAppKit
+is statically linked) but on the bare test binary under the runner — which is exactly why renders
+from the harness showed `NSButton`'s default "Button" title where the clear button should be. The
+artwork is fine; only the test binary cannot see it.
+
+**Next: increment 4, not increment 3.** The spec ordered overlays before chrome bars so glass could
+be learned cheaply on a tooltip. That learning has already happened, and on a control that exercised
+more edge cases than a tooltip would have — content-size propagation through `contentView`, the
+capture limitation, appearance resolution. The maintainer wants a change they can see, and increment
+4 (`OTVStatusBar`, `HOStatusBar`, `OFBHeaderView`, `OFBActionsView`) is the first one that is on
+screen at all times. Increment 3's overlays fold in afterwards.
+
+---
+
 ## 2026-08-14 — Phase 6 increment 2 planned; spec corrected against the SDK and the code
 
 **Branch:** `phase-6/liquid-glass-small-controls`, off master at `56d193b7`. Not merged.

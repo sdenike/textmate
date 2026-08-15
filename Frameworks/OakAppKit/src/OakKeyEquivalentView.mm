@@ -34,8 +34,15 @@ static CGFloat const kControlHeight = 22;
 		_displayField.textColor                 = NSColor.labelColor;
 		_displayField.cell.accessibilityElement = NO; // this class answers for itself; see accessibilityAttributeValue:
 
-		_glassView              = OakCreateGlassBackground(NSGlassEffectViewStyleRegular);
-		_glassView.cornerRadius = 8; // provisional -- the renders decide this; see the task that follows
+		_glassView = OakCreateGlassBackground(NSGlassEffectViewStyleRegular);
+
+		// Deliberately overrides OakGlassChromeMetrics().cornerRadius, which is 12.
+		// That value was chosen for chrome bars; this control is a fixed 22 points
+		// tall, so anything from 11 up clamps to a full capsule, and a small
+		// recessed input reading as a capsule would be the only one in the Bundle
+		// Item Chooser. 8 is also NSGlassEffectView's own default. Settled by
+		// review of the renders the snapshot harness produces at both radii.
+		_glassView.cornerRadius = 8;
 
 		// The glass pins its contentView to fill itself, so handing it the
 		// field directly would stretch the field and push the glyphs off centre.
