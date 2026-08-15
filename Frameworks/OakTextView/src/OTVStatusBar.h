@@ -3,7 +3,7 @@
 - (void)showSymbolSelector:(NSPopUpButton*)popUpButton;
 @end
 
-@interface OTVStatusBar : NSVisualEffectView
+@interface OTVStatusBar : NSView
 - (void)showBundlesMenu:(id)sender;
 @property (nonatomic) NSString* selectionString;
 @property (nonatomic) NSString* grammarName;
