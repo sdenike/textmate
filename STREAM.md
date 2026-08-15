@@ -4,6 +4,45 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — v3.0.0-revived.20 verified live; increment 4 surveyed and the spec corrected
+
+**The release is out and checked end to end**, not just reported green: cask SHA256
+`1d9c8f08…5343` matches the published asset byte-for-byte, signed by Developer ID
+`485WH9DHS4`, notarized, stapled, `spctl` accepts it as `Notarized Developer ID`.
+
+**Increment 4 (chrome bars) is surveyed, and three spec claims were wrong.** All corrected in
+`a6a5b169`; the details are in the spec, the consequences are here.
+
+1. **There is no contained effect view to swap.** `OTVStatusBar`, `HOStatusBar`, `OFBHeaderView`
+   and `OFBActionsView` each **subclass `NSVisualEffectView`** and add their controls directly to
+   themselves. The SDK guarantees placement only for `contentView`, so each needs restructuring
+   around a glass `contentView` — the same holder shape increment 2 arrived at independently. A grep
+   for `.material` / `.blendingMode` / `.state` / `.maskImage` on these across `Frameworks/` and
+   `Applications/` returns nothing, so changing the superclass to `NSView` breaks no consumer.
+2. **The spec's only concrete `spacing` claim was false.** It named the file browser's header and
+   actions bar as the pair needing a non-zero container spacing; `FileBrowserView.mm:63-65` puts them
+   at opposite ends with the entire file list between them. They can never be in proximity. No
+   surface identified so far needs a non-zero `spacing`.
+3. **The file list scrolls underneath the header.** `FileBrowserView.mm:68` adds the header's height
+   to the scroll view's top content inset and `:59` raises the header above it. The header is
+   therefore a real glass-over-content surface, and **its `fittingSize` is load-bearing** — change it
+   and the list's inset moves with it. This is the same class of hazard that silently shrank
+   `OakKeyEquivalentView` by six points in increment 2, so it gets an explicit test.
+
+**The premise was checked before committing to the work:** the running app, built against the macOS
+26 SDK, was screenshotted. `NSVisualEffectMaterialTitlebar` renders flat and opaque — it does **not**
+silently become Liquid Glass. Increment 4 is real work with a real visible result.
+
+**If interrupted here:** increment 2 is shipped and merged (PR #13, master at `4cb82ff7`); nothing
+is in flight. Increment 4 is surveyed but **not yet planned** — no plan file, no branch, no ledger.
+Write the plan from the corrected spec, then execute `OTVStatusBar` alone first as the probe (it is
+on every editor window), render it with the live-window harness, and only batch `HOStatusBar`,
+`OFBHeaderView` and `OFBActionsView` once that shape is proven. Increment 3 (overlays) was
+deliberately deferred behind 4 because its stated purpose was cheap learning, and increment 2
+already delivered that.
+
+---
+
 ## 2026-08-14 — Liquid Glass increment 2 shipped as v3.0.0-revived.20
 
 **Increment 2 is complete and released.** `OakKeyEquivalentView` — the key-equivalent recorder in
