@@ -4,6 +4,58 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — Increment 4 complete; and 40 more images have never shipped
+
+**`0bce7964` — all four chrome bars are on glass.** `HOStatusBar`, `OFBHeaderView` and
+`OFBActionsView` joined `OTVStatusBar`. `OakAppKit_test: 25 tests passed`, application builds. The
+file browser's actions bar visibly gains the glass view's rounded corner, which is the first place
+in this phase the material reads at all — the editor status bar sits over a flat text view, so glass
+there is indistinguishable from the old flat bar.
+
+`HOStatusBar` needed one thing beyond the brief's survey: its `setIndeterminateProgress:` adds
+subviews dynamically, and those calls needed retargeting to the holder alongside the static ones.
+
+### `5bcba5cc` — the .18 image fix was half a fix, and the other half was mine to miss
+
+The implementer stopped on three blank buttons in the file browser and root-caused it as
+pre-existing. Auditing it properly found far worse: **79 image files exist under `Frameworks/`, and
+40 of them were never copied into the app.**
+
+| Missing | Effect |
+|---|---|
+| `Folding Top/Bottom/Collapsed (+Hover)`, `FoldingDots` | no code-folding arrows in the gutter |
+| `Bookmark`, `InsertBookmark`, `RemoveBookmark` | no gutter bookmarks |
+| `diff.added/modified`, `error`, `warning`, `note`, `search` | no gutter marks |
+| `Projects`, `Software Update`, `Terminal`, `Variables` | empty Preferences toolbar |
+| `Search`, `Favorites`, `SCM` | the three blank file-browser buttons |
+
+v3.0.0-revived.18 fixed "40 missing images" by globbing directories named `gfx` for `*.png`. Two
+things that glob could never catch, and I checked neither before declaring it done:
+
+- Four frameworks keep artwork outside `gfx/` — FileBrowser, DocumentWindow and OakTextView under
+  `resources/`, Preferences under `icons/`.
+- **The entire gutter icon set is PDF**, so `*.png` was structurally incapable of matching it.
+
+The glob now covers `gfx/`, `resources/` and `icons/`, matching png, pdf and tiff. Audited before
+and after: **40 missing → 0 missing**, confirmed in the running application.
+
+`Ruling: the lesson is not "widen the glob". It is that the .18 verification counted only what it
+had already decided to look for -- it asserted "≥40 PNGs in Resources" rather than comparing the set
+that exists against the set that ships. A completeness check has to be a set difference, not a
+threshold. The fix now carries that audit command in its comment, plus the basename-collision check
+that flattening depends on.`
+
+**If interrupted here:** increment 4's code is complete on `phase-6/liquid-glass-chrome-bars`.
+Remaining: the full suite against the parity doc, then ship as v3.0.0-revived.21 (the CHANGELOG
+currently has an "Unreleased" section to fold in). Then titlebar tabs, whose full recipe is measured
+and recorded in the entry below.
+
+Two Task 3 checks were not verified live and are not claimed as verified: scrolling the file list
+under the header, and the HTML output status bar. The sandbox drops synthetic modifier keys, so
+neither could be exercised. The height-neutrality test covers the first mechanically.
+
+---
+
 ## 2026-08-15 — Tab close button always visible; iTerm2's titlebar tabs use the mechanism we already have
 
 **`fb8d25f2` — the tab close button no longer hides until hover.** Maintainer request. The mechanism
