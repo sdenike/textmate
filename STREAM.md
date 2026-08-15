@@ -4,6 +4,45 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — Increment 4 planned and started: the chrome bars
+
+**Branch:** `phase-6/liquid-glass-chrome-bars`, off master at `43858aee`. Plan committed as
+`b80a42b8`. Not merged.
+
+Plan: `docs/superpowers/plans/2026-08-15-liquid-glass-chrome-bars.md`. Ledger:
+`.superpowers/sdd/2026-08-15-liquid-glass-chrome-bars/`.
+
+**The structural decision worth knowing.** All four bars need the identical restructure — plain
+`NSView`, hosting a glass view pinned to its bounds, whose `contentView` is a holder carrying the
+existing controls. Rather than write that out four times, Task 1 factors it into one helper,
+`OakWrapInGlass(bar, style)`, which returns the holder to add controls to. Four hand-written copies
+would be four chances to diverge, on four surfaces that are on screen constantly.
+
+**Sequencing:** `OTVStatusBar` alone first as the probe — it is on every editor window, so it is both
+the highest-value target and the right place to prove the shape. `HOStatusBar`, `OFBHeaderView` and
+`OFBActionsView` are batched behind it once that shape holds. Renders and the full suite last.
+
+**Two hazards the plan guards explicitly**, both of the same family as the six-point shrink that
+increment 2 hit:
+
+- `OakWrapInGlass` must be **size-neutral**. Task 1's third test pins a 300 × 24 holder and asserts
+  the bar's `fittingSize` comes back 300 × 24. The brief tells the implementer to stop and report the
+  observed value rather than adjust the expectation, because a surprise there is a finding.
+- The file browser's list scrolls **underneath** its header, and `FileBrowserView.mm:68` derives the
+  list's top content inset from `_headerView.fittingSize.height`. A height change of even one point
+  shifts the file list. Task 3 carries a dedicated height-neutrality test.
+
+**`HOStatusBar` needs care** where the others do not: it rebuilds its constraints dynamically in
+`updateConstraints` (`:90-127`), so its holder must be reachable from that method — an instance
+variable, not a local.
+
+**If interrupted here:** Task 1 (`OakWrapInGlass` plus three tests) was dispatched to an implementer
+and had not reported. Resume by checking whether `Frameworks/OakAppKit/tests/t_glass_wrap.mm` exists
+and whether the count reads 24 (it was 21 after increment 2). Then Task 2 (`OTVStatusBar`), Task 3
+(the other three, batched), Task 4 (render + full suite), Task 5 (ship as v3.0.0-revived.21).
+
+---
+
 ## 2026-08-15 — v3.0.0-revived.20 verified live; increment 4 surveyed and the spec corrected
 
 **The release is out and checked end to end**, not just reported green: cask SHA256
