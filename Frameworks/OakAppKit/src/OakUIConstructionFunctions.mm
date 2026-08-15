@@ -329,3 +329,20 @@ OakGlassMetrics OakGlassChromeMetrics ()
 {
 	return { .cornerRadius = 12, .contentInsets = NSEdgeInsetsMake(8, 12, 8, 12) };
 }
+
+NSView* OakWrapInGlass (NSView* bar, NSGlassEffectViewStyle style)
+{
+	NSGlassEffectView* glass = OakCreateGlassBackground(style);
+
+	NSView* holder = [[NSView alloc] initWithFrame:NSZeroRect];
+	holder.translatesAutoresizingMaskIntoConstraints = NO;
+	glass.contentView = holder;
+
+	OakAddAutoLayoutViewsToSuperview(@[ glass ], bar);
+	[glass.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor].active   = YES;
+	[glass.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor].active = YES;
+	[glass.topAnchor constraintEqualToAnchor:bar.topAnchor].active           = YES;
+	[glass.bottomAnchor constraintEqualToAnchor:bar.bottomAnchor].active     = YES;
+
+	return holder;
+}

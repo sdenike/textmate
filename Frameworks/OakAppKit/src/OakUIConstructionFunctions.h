@@ -73,6 +73,19 @@ struct OakGlassMetrics
 
 OakGlassMetrics OakGlassChromeMetrics ();
 
+// Restructures `bar` to draw its background with glass, and returns the view its
+// controls should be added to.
+//
+// NSGlassEffectView hosts content through contentView and guarantees placement
+// only for that view -- the SDK header is explicit that "arbitrary subviews
+// aren't guaranteed specific behavior with regard to z-order in relation to the
+// content view or glass effect". So a bar cannot simply gain a glass subview and
+// keep adding controls to itself; the controls move into a holder that becomes
+// the glass's contentView.
+//
+// Add controls to the RETURNED view, never to `bar` itself.
+NSView* OakWrapInGlass (NSView* bar, NSGlassEffectViewStyle style);
+
 OakBackgroundFillView* OakCreateVerticalLine (OakBackgroundFillViewStyle style);
 void OakSetupKeyViewLoop (NSArray<NSView*>* views);
 void OakAddAutoLayoutViewsToSuperview (NSArray<NSView*>* views, NSView* superview);
