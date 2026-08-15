@@ -4,6 +4,61 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — Window drag restored; two ivars with the same name; Legal page audited
+
+**`0c48bae8` restores window dragging.** With the tab bar in the titlebar row there was no bare
+titlebar left to grab and the window could not be moved at all.
+
+**The trap: two different ivars named `_backgroundView` in `OakTabBarView.mm`.**
+
+| Line | Class | What it is |
+|---|---|---|
+| `:259` | `OakBox` | belongs to **`OakTabView`** — each tab's own fill |
+| `:718` | `OakTabView` | belongs to **`OakTabBarView`** — the empty area, created `tabItem:nil` |
+
+A survey reported "OakBox" because it matched line 259 first, and the brief I wrote from it was
+wrong. The empty region right of the last tab is a **phantom `OakTabView`** — that is how
+double-clicking blank space opens a new tab (`doubleAction = newTab:`). It inherits
+`OakTabView.mouseDown:` (`:563`), which records the location and returns **without calling super**,
+so the click was swallowed. Adding `mouseDown:` to `OakTabBarView`, as the brief specified, would
+have fired only on a roughly 1pt sliver the background view does not cover. The implementer applied
+nothing and escalated — eighth time that judgement has been right.
+
+**The fix hooks `mouseDragged:`, not `mouseDown:`, and that is load-bearing.** Starting the window
+drag on mouse-down consumes the event and `mouseUp:` never arrives — and `mouseUp:` is where the
+double-click that opens a new tab is detected. Reusing the existing 2.5pt drag threshold keeps both
+behaviours: a click still opens a tab, a drag now moves the window. Guarded on `!_tabItem`, which is
+how the file already distinguishes the phantom elsewhere (`closeButtonAlphaValue`).
+
+Build succeeds, `OakAppKit_test: 25 tests passed`. **Not verified:** the drag itself — this
+environment denies UI scripting (`osascript` returns `-1728`) and Screen Recording, so no synthetic
+click can be delivered. The maintainer confirmed the About-window centring works; the drag needs the
+same treatment.
+
+### Legal page audited at the maintainer's request — nothing to remove
+
+Every entry still ships, so every credit is still required:
+
+| Component | Present | Used by | Licence obligation |
+|---|---|---|---|
+| Onigmo | `vendor/Onigmo` | linked by 28 targets | BSD, attribution |
+| kvdb | `vendor/kvdb` | `DocumentWindowController.mm`, `Favorites.mm` | MIT, notice retained |
+| xdiff | `vendor/xdiff` | linked by 12 targets | **LGPL-2.1** — attribution *and* source availability |
+| Dialog / Dialog2 | `PlugIns/dialog*` | 27 references, both `PROVENANCE.md` present | MacroMates notice preserved; covered by our GPLv3 |
+
+The page is already clean of the Phase 3 purge — zero mentions of boost, sparsehash, capnp or ragel.
+
+One caveat worth knowing rather than discovering later: the Dialog entry states that upstream "did
+not distribute either under a separate license, so they are covered by this repository's own license
+(GPLv3)." That is a reasonable reading, but it is a conclusion this project reached, not something
+upstream asserted.
+
+**If interrupted here:** the branch is complete — titlebar tabs, drag fix, About centring, always-on
+close button. Ship as v3.0.0-revived.22. The maintainer has already replied to Georg Seifert, so no
+outreach is pending.
+
+---
+
 ## 2026-08-15 — About window centres on the frontmost document window
 
 **`9f1f6986`.** The About panel now centres on the frontmost document window, or on the active screen
