@@ -4,6 +4,35 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — About window centres on the frontmost document window
+
+**`9f1f6986`.** The About panel now centres on the frontmost document window, or on the active screen
+when none is open, instead of landing wherever it was last left. Maintainer request.
+
+Two separate causes, not one:
+
+- `AboutWindowController.mm:57` computed an **x** origin from `NSMaxY` of both terms —
+  `rect.origin.x = NSMaxY(visibleRect) - NSMaxY(rect)`. A longstanding typo.
+- `:71` sets `setFrameAutosaveName:@"BundlesReleaseNotes"`, and the restored frame overrode the
+  computed placement anyway, so the initial calculation only ever applied on a machine that had never
+  opened the window.
+
+The autosave is **kept** — it remembers a size the user chose — but the origin is recomputed on every
+show. Panels are skipped when picking the reference window, since the About panel is itself an
+`NSPanel`, and the result is clamped to the screen so a partly-offscreen document window cannot drag
+the panel off with it.
+
+**Still outstanding: the window-drag fix.** `OakTabBarView` has no `performWindowDragWithEvent:` in
+the tree yet — the implementer had not filed it when this entry was written. The window cannot be
+dragged by the titlebar row until it lands. The intended shape, and the reason
+`mouseDownCanMoveWindow` must stay `NO`, is recorded in the entry two below.
+
+**If interrupted here:** check whether `OakTabBarView.mm` contains `performWindowDragWithEvent:`; if
+not, that fix still needs applying. Then build, run `OakAppKit_test` (expect 25), and ship the branch
+as v3.0.0-revived.22.
+
+---
+
 ## 2026-08-15 — PR #1469's author corrected us, and he was right
 
 **`1f0ff406` retracts a false claim this project published about someone else's work.**

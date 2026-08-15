@@ -2,6 +2,14 @@ Title: Release Notes
 
 # Changes
 
+## Unreleased
+
+### Changed
+
+* The About window now opens centred on the frontmost editor window, or centred
+  on screen when no editor window is open, instead of reappearing wherever it was
+  last left.
+
 ## 2026-08-15 (v3.0.0-revived.21)
 
 Missing artwork is back, and the window chrome moves to the macOS 26 material.
