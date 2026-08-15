@@ -2,7 +2,9 @@ Title: Release Notes
 
 # Changes
 
-## Unreleased
+## 2026-08-15 (v3.0.0-revived.21)
+
+Missing artwork is back, and the window chrome moves to the macOS 26 material.
 
 ### Fixed
 
