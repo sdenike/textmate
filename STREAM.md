@@ -4,6 +4,66 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — Last two .rave files deleted; credential audit; two bugs from maintainer testing
+
+**`56e021cb` deletes `PlugIns/dialog/default.rave` and `PlugIns/dialog-1.x/default.rave`** — the last
+two tracked survivors of the build system Phase 2 replaced. The maintainer asked whether any had crept
+back; they had never left. Nothing reads them: every other `default.rave` mention in the tree is a
+comment in `Xcode/scripts/*.sh` citing the old file as the source a build setting was derived from,
+which is worth keeping. Both plug-ins build from `project.yml` (`tm_dialog`, `Dialog`, `Dialog2`), so
+this removes dead files rather than a build path. Full `bin/build` passes after deletion.
+
+Build entry points confirmed while checking: no `./configure`, no `bin/rave`, no `build.ninja`.
+`bin/build` wrapping `xcodebuild` is the only path.
+
+### Credential audit — clean, and the one hit is not a leak
+
+Scanned the current tree **and the full history**, not just what is checked out:
+
+| | |
+|---|---|
+| Apple ID `denike@gmail.com` | not present; `git log -S` finds it in no commit, ever |
+| The app-specific password exposed in chat | not present; never in history |
+| `.p12` / `.pem` / `.key` / `.cer` / `.mobileprovision` | none tracked |
+| Workflows | reference `secrets.NAME` only — values live in GitHub Secrets |
+| gitleaks pre-commit | active, `.githooks/pre-commit` via `core.hooksPath` |
+
+**Team ID `485WH9DHS4` does appear** in `STREAM.md` and `docs/RELEASING.md`, and that is correct
+rather than an oversight. A Team ID is public by design — it is embedded in every signed binary and
+anyone who downloads the app can read it with `codesign -dv --verbose=2`, which is exactly how
+Gatekeeper validates and how `OakDownloadManager` refuses an update signed by a different team.
+Verified by reading it back out of the installed app. Nothing to redact.
+
+### Two bugs the maintainer found testing the titlebar-tabs build
+
+1. **The window cannot be dragged.** The tab bar now covers the titlebar row, and
+   `OakTabBarView.mouseDownCanMoveWindow` returns `NO` (`:735-738`) with no `mouseDown:` anywhere on
+   the bar — so a click in the empty area right of the tabs hits `_backgroundView` (`:1371`), travels
+   up the responder chain, and is dropped. Fix is a `mouseDown:` on **`OakTabBarView`** calling
+   `performWindowDragWithEvent:`. `mouseDownCanMoveWindow` **stays `NO`**: returning `YES` would let
+   AppKit move the window on a click anywhere in the bar, including on a tab, and the view would
+   never see the `mouseDown` at all. Tabs are `OakTabView` subviews that consume their own clicks and
+   `+` is an `NSButton`, so an event reaching the bar came from empty space.
+2. **The About window lands wherever it was left.** Two separate causes.
+   `AboutWindowController.mm:57` computes an **x** origin from `NSMaxY` of both terms — a longstanding
+   typo — and `:71` sets `setFrameAutosaveName:@"BundlesReleaseNotes"`, whose restored frame overrode
+   the computed placement anyway. It now centres on the frontmost non-panel window, falling back to
+   the active screen, clamped to stay on-screen. The autosave is kept, because it remembers a size
+   the user chose.
+
+**GitHub check:** no open PRs or issues on `sdenike/textmate`, `hidden-revived` or `homebrew-tap`. All
+ten textmate PRs are the maintainer's own and merged; #10 never existed (GitHub shares numbering
+between issues and PRs). The notifications API is not readable with the current token
+(`Resource not accessible by personal access token`), so an alert the maintainer saw cannot be
+confirmed from here — most likely the `github-actions[bot]` cask-bump commit on the tap.
+
+**If interrupted here:** both fixes were dispatched to an implementer and had not reported. Resume by
+checking whether `OakTabBarView.mm` has a `mouseDown:` and `AboutWindowController.mm` has
+`centerOnFrontmostDocumentWindow`, then ship the branch as v3.0.0-revived.22. Full screen is still
+unverified for the titlebar tabs, and cannot be verified in this environment.
+
+---
+
 ## 2026-08-15 — Tabs moved into the titlebar row; and a probe that measured its own input
 
 **Branch:** `phase-6/titlebar-tabs`, off master at `570c8be9`. `4b978fd6` moves the tab bar into the
