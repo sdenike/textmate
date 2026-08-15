@@ -235,7 +235,11 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 @implementation OakTabView
 + (NSSet*)keyPathsForValuesAffectingCloseButtonAlphaValue
 {
-	return [NSSet setWithObjects:@"tabItem", @"mouseInside", @"modified", @"voiceOverEnabled", nil];
+	// Only tabItem remains: the close button is now always shown, so hovering,
+	// modification and VoiceOver no longer change whether it is visible. They
+	// still change its *image* -- see updateCloseButtonImage, which draws the
+	// modified state differently -- but that is not driven from here.
+	return [NSSet setWithObjects:@"tabItem", nil];
 }
 
 - (instancetype)animator
@@ -448,7 +452,15 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 
 - (CGFloat)closeButtonAlphaValue
 {
-	return _tabItem && (_mouseInside || _modified || _voiceOverEnabled) ? 1 : 0;
+	// Always shown. It used to appear only on hover (or when the document was
+	// modified, or under VoiceOver), which made closing a tab a two-step
+	// discovery: aim at the tab, wait for the button to fade in, then aim again.
+	//
+	// This costs no horizontal room. The button is created and constrained
+	// whatever its alpha -- see the `H:|-(3@53)-[close]...` chain in the layout
+	// -- so it already contributed to each tab's fittingSize. Only its opacity
+	// changes here, and opacity does not participate in Auto Layout.
+	return _tabItem ? 1 : 0;
 }
 
 - (void)setOverflowButtonVisible:(BOOL)flag
