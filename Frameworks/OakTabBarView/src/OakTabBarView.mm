@@ -572,7 +572,30 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 
 - (void)mouseDragged:(NSEvent*)anEvent
 {
-	if(self.dragAction && !NSEqualPoints(_mouseDownLocation, NSZeroPoint) && hypot(_mouseDownLocation.x - anEvent.locationInWindow.x, _mouseDownLocation.y - anEvent.locationInWindow.y) >= 2.5)
+	if(NSEqualPoints(_mouseDownLocation, NSZeroPoint) || hypot(_mouseDownLocation.x - anEvent.locationInWindow.x, _mouseDownLocation.y - anEvent.locationInWindow.y) < 2.5)
+		return;
+
+	// The tab bar's background is itself an OakTabView, created with a nil
+	// tabItem (see -[OakTabBarView init]) so that a double-click on empty space
+	// opens a new tab. It covers everything to the right of the last tab.
+	//
+	// Since the tab bar moved into the window's titlebar row, that empty space is
+	// the only thing left to drag the window by -- and this class's own mouseDown:
+	// was swallowing the click. Drag the window from here instead.
+	//
+	// This has to live in mouseDragged: rather than mouseDown:. Starting the
+	// window drag on mouse-down would consume the event and never deliver
+	// mouseUp:, which is where the double-click that opens a new tab is detected.
+	// Waiting for the 2.5pt threshold keeps both: a click still makes a tab, a
+	// drag still moves the window.
+	if(!_tabItem)
+	{
+		_mouseDownLocation = NSZeroPoint;
+		[self.window performWindowDragWithEvent:anEvent];
+		return;
+	}
+
+	if(self.dragAction)
 	{
 		[NSApp sendAction:self.dragAction to:self.target from:self];
 		_mouseDownLocation = NSZeroPoint;
