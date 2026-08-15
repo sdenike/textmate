@@ -36,10 +36,22 @@ increment 2 hit:
 `updateConstraints` (`:90-127`), so its holder must be reachable from that method — an instance
 variable, not a local.
 
-**If interrupted here:** Task 1 (`OakWrapInGlass` plus three tests) was dispatched to an implementer
-and had not reported. Resume by checking whether `Frameworks/OakAppKit/tests/t_glass_wrap.mm` exists
-and whether the count reads 24 (it was 21 after increment 2). Then Task 2 (`OTVStatusBar`), Task 3
-(the other three, batched), Task 4 (render + full suite), Task 5 (ship as v3.0.0-revived.21).
+**Task 1 has landed.** `5e97d957` adds `OakWrapInGlass` and
+`Frameworks/OakAppKit/tests/t_glass_wrap.mm` — 78 insertions across three files. Count verified by
+running the binary directly rather than taken from the implementer's report:
+`OakAppKit_test: 24 tests passed`, up from 21.
+
+The size-neutrality test passed first time, so wrapping a bar in glass does **not** reproduce
+increment 2's shrink — a 300 × 24 holder yields a 300 × 24 bar. That was the single biggest risk in
+this increment and it is now pinned by a test rather than assumed.
+
+**If interrupted here:** resume at Task 2, `OTVStatusBar` — superclass to `NSView`, delete the
+`material`/`blendingMode`/`state` lines at `OTVStatusBar.mm:76-78`, call `OakWrapInGlass`, and move
+both the control-adding at `:135` **and the constraint block at `:147-156`** onto the returned
+holder. That constraint move is the step most likely to go wrong; if any constraint there references
+`self` as a layout item rather than as a container, that is a finding to report, not to guess at.
+Then Task 3 (the other three, batched), Task 4 (render + full suite), Task 5 (ship as
+v3.0.0-revived.21).
 
 ---
 
