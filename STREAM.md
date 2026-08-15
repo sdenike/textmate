@@ -4,6 +4,71 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — Tabs moved into the titlebar row; and a probe that measured its own input
+
+**Branch:** `phase-6/titlebar-tabs`, off master at `570c8be9`. `4b978fd6` moves the tab bar into the
+window's titlebar row beside the traffic lights, iTerm2-style, reclaiming a row of chrome. Not
+merged; the implementer's final verification had not been filed when this was written.
+
+### The mechanism was already there
+
+`DocumentWindowController.mm:208-212` already used `NSTitlebarAccessoryViewController` — the same
+AppKit mechanism iTerm2 uses (`iTermTitlebarAccessoryNanny.swift:51-63`). Tabs landed in their own
+strip only because `layoutAttribute` defaults to `NSLayoutAttributeBottom`.
+
+Measured against real AppKit, by reading back frames from probe windows:
+
+| Configuration | Accessory | Traffic lights | Result |
+|---|---|---|---|
+| `Bottom` (as shipped) | y 364–400 | y 409–423 | separate rows |
+| `+ titleVisibility Hidden` | y 364–400 | y 409–423 | still separate |
+| `+ titlebarAppearsTransparent` | y 364–400 | y 409–423 | still separate |
+| `+ FullSizeContentView` | y 332–368 | y 377–391 | still separate |
+| **`Right`** | **y 400–432** | **y 409–423** | **same row** |
+
+`NSLayoutAttributeRight` is the entire mechanism. `titlebarAppearsTransparent` and
+`FullSizeContentView` are **not** needed and were measured not to help.
+
+### I asserted a measured fact that was my own input read back
+
+The brief told the implementer that under `Right` the accessory "spans the full window width
+starting at x = 0". **It does not.** My probe constructed its view with
+`initWithFrame:NSMakeRect(0, 0, winWidth, 28)` — already full width — so the `w=800` I recorded was
+the frame I had just set, not AppKit stretching anything.
+
+The implementer built it as specified, found the tab bar rendering at **zero width**, confirmed it
+three independent ways including an `NSLog` in the running application, and escalated rather than
+inventing a fix. Correct call; it was the seventh time in this project that stopping on a
+contradiction turned out to be right.
+
+Re-measured, with a view deliberately **not** pre-sized:
+
+- A `Right` accessory does **not** stretch its view.
+- An Auto Layout **width constraint on the container has no effect** — still `w = 0`. A `Right`
+  accessory sizes from the view's **frame**.
+- **`autoresizingMask = NSViewWidthSizable` has no effect either.** Frame-size it once and it is
+  correct; resize the window 800 → 1200 and the container stays 800 wide and right-aligns at x = 400.
+
+So the container is frame-sized and maintained by hand in `windowDidResize:`. Verified in both
+directions — 800 → 1200 and 1400 → 700 — with the tab bar starting at x = 77 and clearing the zoom
+button each time. **That is the part a future reader will try to "clean up" into a constraint; the
+commit message says why it cannot be.**
+
+Other measured values: traffic lights end at **x = 69** (close 9–23, miniaturize 32–46, zoom 55–69),
+so the inset is 69 + 8 = 77, matching iTerm2's 6–9pt of padding. The inset is derived at runtime from
+the zoom button's frame rather than hardcoded, so it collapses to 0 in full screen where the buttons
+are hidden.
+
+**Unverified and not claimed:** full screen, and any screenshot of the real app — Screen Recording is
+declined for this session's process, and synthetic modifier keys are dropped, so ⌃⌘F is unreachable.
+The inset logic is written to be self-correcting there, which is not the same as tested.
+
+**If interrupted here:** confirm the implementer's report landed and the six visual checks were
+answered, then the tab-bar collapse at ≤1 document (`DocumentWindowController.mm:389`, `:1576`) needs
+a look, then ship as v3.0.0-revived.22.
+
+---
+
 ## 2026-08-15 — Increment 4 complete; and 40 more images have never shipped
 
 **`0bce7964` — all four chrome bars are on glass.** `HOStatusBar`, `OFBHeaderView` and

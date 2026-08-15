@@ -178,6 +178,26 @@ Two traps found while adopting glass on the first real control, both of which pa
   default "Button" title. Renders produced by `OakAppKit_test` are therefore representative of
   layout and material, not of every subview. Check bundle-loaded imagery in the running app.
 
+**The tab bar is an `NSTitlebarAccessoryViewController`, and three of its layout properties do
+nothing.** `DocumentWindowController.mm` puts the tab bar in the window's titlebar row with
+`layoutAttribute = NSLayoutAttributeRight` — the default, `Bottom`, gives it a separate strip below
+the titlebar, and that attribute is the *entire* mechanism. `titlebarAppearsTransparent`,
+`titleVisibility` and `NSWindowStyleMaskFullSizeContentView` were each measured and none of them
+moves the accessory into that row. (`titleVisibility = Hidden` is still set, but only so the document
+title does not sit behind the tabs.)
+
+A `Right` accessory sizes from its view's **frame**, and measured against real AppKit:
+
+- it does **not** stretch the view to the window width;
+- an Auto Layout **width constraint on that view has no effect** — the view stays 0 wide;
+- **`autoresizingMask = NSViewWidthSizable` has no effect either** — resize the window and the view
+  keeps its old width and right-aligns.
+
+So `_tabBarContainer` is frame-sized and maintained by hand in `windowDidResize:`. That looks like
+something to clean up into a constraint; it is not. The traffic lights end at x = 69, so the tab
+bar's leading inset is 77, derived at runtime from the zoom button's frame rather than hardcoded so
+it collapses to 0 in full screen.
+
 **Framework artwork must be flattened into the app bundle, and the glob has been wrong twice.**
 `Xcode/scripts/assemble_resources.sh` copies images from `Frameworks/` into `Contents/Resources/`,
 because the frameworks are statically linked and `+[NSImage imageNamed:inSameBundleAsClass:]`
