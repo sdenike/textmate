@@ -4,6 +4,62 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-16 — Phase 6 adoption complete: `NSVisualEffectView` is gone from the tree
+
+**`6c7a46cb`** moves the last six surfaces onto glass — both choosers' footer bars, the Bundles
+preferences footer, the tooltip, the choice menu, and `OakBackgroundFillView`'s header style. The
+completion check is a grep, and it comes back empty:
+
+```sh
+grep -rn 'NSVisualEffectView\|NSVisualEffectMaterial\|NSVisualEffectBlending' \
+     --include='*.h' --include='*.mm' --include='*.cc' Frameworks Applications
+```
+
+Also removes the `@available(macos 10.14, *)` guards these sites carried, dead against a macOS 26
+deployment target.
+
+### Two defects in my brief, both caught by measurement
+
+**The instructions were mutually exclusive.** `OakCreateGlassBackground` sets
+`translatesAutoresizingMaskIntoConstraints = NO`, and my brief then told the implementer to keep
+sizing two of the sites with `autoresizingMask`. Those cannot both hold. It built a throwaway Cocoa
+binary and showed the frame stays `{0, 0, 0, 0}` through a superview resize with the flag off and no
+constraints. Applying the brief literally would have shipped two invisible, zero-sized glass views.
+Fixed by re-enabling the flag at those two frame-driven sites, with a comment saying why.
+
+**`footerView`'s contract was the real problem, not its type.** The implementer found that five other
+files — `FileChooser.mm`, `SymbolChooser.mm`, `BundleItemChooser.mm`, `Favorites.mm` and
+`OakPasteboardChooser.mm` — add controls **directly as subviews of the footer view**, which is
+exactly what `NSGlassEffectView` does not guarantee. Swapping the type alone would have left five
+call sites relying on undefined z-order.
+
+`Ruling: change what footerView returns rather than its five consumers. It now returns the holder,
+with the glass behind it, and its declared type becomes NSView* rather than NSGlassEffectView*. Every
+consumer keeps working untouched, and NSView* is the honest type -- a caller only ever needed
+something to add subviews to. Cost if wrong: nothing gained a glass surface it should not have; the
+alternative was editing five files to route through a holder each.`
+
+### Increment 6 dropped deliberately — no glass behind the tab bar
+
+The tab bar now sits in the window's titlebar row, where macOS already draws its own material.
+Putting an `NSGlassEffectView` behind it would stack a second material inside a surface that has one
+— the same reasoning that removed `OFBFinderTagsChooser` from increment 2. It would read as muddier,
+not more modern. The spec's increment 6 is closed as **not wanted**, rather than pending.
+
+### `Regular` everywhere, including the overlays
+
+The spec anticipated `NSGlassEffectViewStyleClear` for tooltips and menus. All six use `Regular`
+instead. `Clear` is for surfaces meant to read *through* to what is beneath; every one of these
+carries text or controls that must stay legible. `Clear` remains a one-word change per site if the
+maintainer wants a more transparent look.
+
+**If interrupted here:** the branch is `phase-6/liquid-glass-finish`, feature-complete and not yet
+merged. Run the full suite against the parity document, then ship as v3.0.0-revived.23. After that
+Phase 6 is closed and Phase 7 (performance) begins. Georg Seifert is expected to open a PR with just
+the UI work from #1469; the maintainer has asked him for it and will say when it arrives.
+
+---
+
 ## 2026-08-15 — Tab tear-off: mostly already built, only the trigger was missing
 
 **`2da8ac7e`.** Dragging a tab out of the window now gives it a window of its own. Maintainer

@@ -53,16 +53,20 @@ enum action_t { kActionNop, kActionTab, kActionReturn, kActionCancel, kActionMov
 		scrollView.autoresizingMask      = NSViewWidthSizable|NSViewHeightSizable;
 		scrollView.drawsBackground       = NO;
 
-		NSVisualEffectView* effectView = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
-		effectView.autoresizingMask = NSViewWidthSizable|NSViewHeightSizable;
-		effectView.material         = NSVisualEffectMaterialMenu;
+		NSView* menuContentView = [[NSView alloc] initWithFrame:NSZeroRect];
+		menuContentView.autoresizingMask = NSViewWidthSizable|NSViewHeightSizable;
 
-		if(@available(macos 10.14, *))
-			effectView.blendingMode = NSVisualEffectBlendingModeBehindWindow; // MAC_OS_X_VERSION_10_14
+		// The scroll view goes inside the glass, not on top of it: NSGlassEffectView
+		// guarantees placement only for its contentView.
+		NSView* holder = OakWrapInGlass(menuContentView, NSGlassEffectViewStyleRegular);
+		scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+		OakAddAutoLayoutViewsToSuperview(@[ scrollView ], holder);
+		[scrollView.leadingAnchor constraintEqualToAnchor:holder.leadingAnchor].active   = YES;
+		[scrollView.trailingAnchor constraintEqualToAnchor:holder.trailingAnchor].active = YES;
+		[scrollView.topAnchor constraintEqualToAnchor:holder.topAnchor].active           = YES;
+		[scrollView.bottomAnchor constraintEqualToAnchor:holder.bottomAnchor].active     = YES;
 
-		[effectView addSubview:scrollView positioned:NSWindowBelow relativeTo:nil];
-
-		[self.window setContentView:effectView];
+		[self.window setContentView:menuContentView];
 	}
 	return self;
 }

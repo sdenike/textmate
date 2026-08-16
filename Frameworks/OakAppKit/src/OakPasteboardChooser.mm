@@ -75,7 +75,7 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierFlag = @"flag";
 @property (nonatomic) NSSearchField*        searchField;
 @property (nonatomic) NSScrollView*         scrollView;
 @property (nonatomic) NSTableView*          tableView;
-@property (nonatomic) NSVisualEffectView*   footerView;
+@property (nonatomic) NSView*               footerView;
 @property (nonatomic) BOOL                  hasSelection;
 @property (nonatomic) NSUInteger            sourceIndex;
 @end
@@ -329,22 +329,23 @@ static NSMutableDictionary* SharedChoosers;
 	return _scrollView;
 }
 
-- (NSVisualEffectView*)footerView
+- (NSView*)footerView
 {
 	if(!_footerView)
 	{
-		_footerView = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
-		_footerView.blendingMode = NSVisualEffectBlendingModeWithinWindow;
-		_footerView.material     = NSVisualEffectMaterialTitlebar;
-		if(@available(macos 10.14, *))
-			_footerView.material = NSVisualEffectMaterialHeaderView;
+		// footerView returns the holder rather than the glass itself, so the five
+		// call sites that add controls to it keep working unchanged. Adding
+		// subviews straight to an NSGlassEffectView is not guaranteed to
+		// composite correctly; only its contentView is.
+		NSView* glassHost = [[NSView alloc] initWithFrame:NSZeroRect];
+		_footerView = OakWrapInGlass(glassHost, NSGlassEffectViewStyleRegular);
 
 		NSView* contentView = self.window.contentView;
 		contentView.wantsLayer = YES;
-		_footerView.translatesAutoresizingMaskIntoConstraints = NO;
-		[contentView addSubview:_footerView positioned:NSWindowAbove relativeTo:nil];
+		glassHost.translatesAutoresizingMaskIntoConstraints = NO;
+		[contentView addSubview:glassHost positioned:NSWindowAbove relativeTo:nil];
 
-		NSDictionary* views = @{ @"footerView": _footerView, };
+		NSDictionary* views = @{ @"footerView": glassHost, };
 		[contentView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(>=77)-[footerView]|" options:0 metrics:nil views:views]];
 		[contentView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[footerView]|" options:0 metrics:nil views:views]];
 	}

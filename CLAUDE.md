@@ -218,19 +218,22 @@ comm -23 <(find Frameworks -type f \( -name '*.png' -o -name '*.pdf' -o -name '*
 Flattening relies on every image basename under `Frameworks/` being unique. Check that with
 `find Frameworks -name '*.png' -o -name '*.pdf' | xargs -n1 basename | sort | uniq -d`.
 
-**This development machine has Reduce Transparency enabled** — `com.apple.universalaccess
-reduceTransparency = 1`, and `NSWorkspace.accessibilityDisplayShouldReduceTransparency` returns
-`YES`. macOS flattens every vibrancy and glass material at the compositor when it is on. Check it
-before drawing any conclusion from a screenshot taken here:
+**Check Reduce Transparency before drawing any conclusion from a screenshot.** macOS flattens every
+vibrancy and glass material at the compositor when it is on:
 
 ```sh
-defaults read com.apple.universalaccess reduceTransparency
+defaults read com.apple.universalaccess reduceTransparency    # 1 = on, and glass will look flat
 ```
 
-Glass still renders as a distinct rounded surface with the setting on, so screenshots from this
-machine confirm geometry, layout and control placement. They **cannot** confirm that a surface looks
-translucent, and a flat-looking material here is not evidence that the material is wrong. A claim
-about how glass *looks* needs a machine with the setting off.
+This machine had it **on** through most of the Liquid Glass work and the maintainer turned it **off**
+on 2026-08-15, so notes written before then describe a flattened rendering. Do not assume either
+state; run the check.
+
+While it is on, glass still renders as a distinct rounded surface, so screenshots confirm geometry,
+layout and control placement — they **cannot** confirm that a surface looks translucent, and a
+flat-looking material is not evidence that the material is wrong. This already produced one false
+claim in the spec (that `NSVisualEffectMaterialTitlebar` does not map to glass on macOS 26), since
+retracted.
 
 Renders are verified by looking at them, not only by checking them. The first batch from the
 snapshot harness had four distinct checksums at exactly the right dimensions and was still useless —
