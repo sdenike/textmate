@@ -2,6 +2,16 @@ Title: Release Notes
 
 # Changes
 
+## Unreleased
+
+### Changed
+
+* The remaining translucent surfaces now use the macOS 26 glass material: the
+  Go to File and paste-history choosers' footer bars, the Bundles preferences
+  footer, tooltips, and the choice menu shown when completing a word. Together
+  with the earlier releases, every material surface in the application is now
+  drawn the same way.
+
 ## 2026-08-15 (v3.0.0-revived.22)
 
 Tabs move into the title bar, and can be dragged out into their own window.
