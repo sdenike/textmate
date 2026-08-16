@@ -77,16 +77,69 @@ I dispatched the launch profiler and the large-file-open harness at the same tim
 same app, and the profiler correctly stopped when it found the other one's `measure-open.sh` mid-run
 rather than killing a process it had not started. Sequence GUI measurements one at a time.
 
+### THE REAL FINDING — a 1 MB file takes 19-118 seconds to open
+
+Large-file open, the gate metric left unmeasured through six phases, was finally measured. Opening
+a **1 MB** C file pegs the CPU at 100% for **19-118 seconds**. A comment-only 1 MB control file
+takes the same ~90 s, so it is not symbol count. This — not launch time, not bundle size — is what
+"slow and clunky" means.
+
+A 1 ms `sample` of the stalled process puts **1,774 of 2,475 main-thread samples (72%)** here:
+
+```
+ng::buffer_t::initiate_repair -> update_scopes -> did_parse
+  -> ng::symbols_t::did_parse          symbols.cc:111
+    -> bundles::value_for_setting      wrappers.cc:188
+      -> query -> search -> scope::types::path_t::does_match
+```
+
+**Root cause, in one function.** `value_for_setting` already memoizes, with correct invalidation via
+`bundles_did_change`. Both defects are in keying and bounding:
+
+- the cache key was `setting + "\037" + to_s(scope)` — **built on every call, including hits**.
+  `to_s` walks the whole node chain and allocates; `scope::scope_t::to_s_helper` appears ~1,900
+  times in the sampled stacks. Meanwhile `scope_t::hash()` (`scope.cc:178`) is
+  `return node ? node->_hash : 0` — an O(1) read of a field computed once at construction.
+- `if(cache.map.size() > 1000) cache.map.clear()` — **discards the entire cache**, so a large file
+  fills it, wipes it, refills it, degenerating to no caching exactly when caching matters.
+
+Fix applied (uncommitted at time of writing, under measurement): `std::unordered_map` keyed on
+`(setting, context_t)` using the already-cached hashes, no string built at all, bound raised to
+50000 with clear-all kept only as a memory backstop.
+
+`Ruling: do not commit the fix unless a measured before/after justifies it, and the "before" must
+come from a provably unfixed binary. The edit was already in the working tree when measurement
+started, so an unproven baseline here would be a second "after" wearing a "before" label.`
+
+**Three more instances of the same pattern** were found and are NOT yet fixed:
+
+| Site | Defect |
+|---|---|
+| `layout.cc:812` | `scope::to_s(_buffer.scope(0).left)` in the **per-frame draw path** |
+| `folds.cc:367` | scope stringification in fold detection |
+| `settings.cc:147-151` | another self-clearing cache — threshold **64** |
+
+### Verified since
+
+- `bin/build` succeeds with both the Contributions removal and the cache fix applied.
+- Bundle is **26,164 KB**, down from 27,704 — the full 1,540 KB, and now **1,764 KB under
+  `undead`** rather than 224 KB over. Artwork set-difference check prints nothing.
+- `73a3299a` records why the first post-removal measurement showed the bundle getting *larger*:
+  `assemble_resources.sh` copies but never deletes, so an incremental build keeps resources you
+  removed. Delete `Resources/About` before trusting any local size figure.
+
 ### If interrupted here
 
-1. **Large-file-open measurement was still running** — `$CLAUDE_JOB_DIR/tmp/measure-open.sh`, with
-   1/10/100 MB generated `.c` files beside it. A `busy-sample.txt` was written mid-run, which
-   suggests the 100 MB case stalled long enough to be worth sampling. Check
-   `$CLAUDE_JOB_DIR/tmp/large-file-open.md` for its verdict.
-2. **Build and verify `3b59b4eb`+`ad635a95`.** Neither was compiled — the build was frozen for the
-   measurement runs. The About window must still open and show three tabs, not four.
-3. **Then run the `-Os` -> `-O2` experiment**, both builds measured back to back in one session.
-4. Do not push or open a PR without the maintainer saying so.
+1. **Get the cache fix's numbers** and commit only if they justify it; write the doc entry in the
+   same commit. If the result is negative, record that here — "caching did not help" would save the
+   next session a day.
+2. **Then the three sibling defects above**, `layout.cc:812` first — it is on the draw path, so it
+   costs on every frame rather than only on open.
+3. **Then the `-Os` -> `-O2` experiment** (`Xcode/Base.xcconfig`), both builds measured back to back.
+4. Small dead-code sweep: 3 dead `@available` guards (`fs_cache.mm:66,217`,
+   `OakDocumentView.mm:336`) and 4 uncompiled utilities (`gtm.cc`, `indent.cc`, `pretty_plist.cc`,
+   `NewApplication/`). Housekeeping only — none of it ships, so none of it is a speed or size win.
+5. Do not push or open a PR without the maintainer saying so.
 
 ---
 
