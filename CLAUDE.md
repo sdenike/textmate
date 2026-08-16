@@ -213,6 +213,23 @@ comm -23 <(find Frameworks -type f \( -name '*.png' -o -name '*.pdf' -o -name '*
 Flattening relies on every image basename under `Frameworks/` being unique. Check that with
 `find Frameworks -name '*.png' -o -name '*.pdf' | xargs -n1 basename | sort | uniq -d`.
 
+**`assemble_resources.sh` copies but never deletes, so an incremental build keeps resources you
+removed from the source.** After the About window's Contributions page was deleted on 2026-08-16,
+`** BUILD SUCCEEDED **` still produced a bundle containing the stale 1,536 KB `Contributions.html`
+and its `js/` directory — the script regenerates `About.html`, `Legal.html` and `CHANGELOG.html`
+and simply leaves anything else already sitting in `Resources/` untouched. The bundle measured
+*larger* after the removal, not smaller.
+
+CI builds clean so releases are unaffected, but any local measurement of bundle size, and any check
+that a resource is really gone, must delete the target directory first:
+
+```sh
+rm -rf ~/build/textmate-revived/xcode/Release/TextMate.app/Contents/Resources/About && bin/build
+```
+
+The size only dropped — 27,704 KB to 26,164 KB — once that was done. Treat a size figure from an
+incremental build as an upper bound, never as evidence a resource was removed.
+
 **Check Reduce Transparency before drawing any conclusion from a screenshot.** macOS flattens every
 vibrancy and glass material at the compositor when it is on:
 
