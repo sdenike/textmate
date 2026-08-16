@@ -373,20 +373,19 @@ static NSUserInterfaceItemIdentifier const kTableColumnIdentifierActions     = @
 	progressIndicator.displayedWhenStopped = NO;
 	progressIndicator.style                = NSProgressIndicatorStyleSpinning;
 
-	NSVisualEffectView* footerView = [[NSVisualEffectView alloc] initWithFrame:NSZeroRect];
-	footerView.blendingMode = NSVisualEffectBlendingModeWithinWindow;
-	footerView.material     = NSVisualEffectMaterialTitlebar;
+	NSView* footerView = [[NSView alloc] initWithFrame:NSZeroRect];
+	NSView* footerHolder = OakWrapInGlass(footerView, NSGlassEffectViewStyleRegular);
 
 	NSDictionary* footerViews = @{
 		@"divider": OakCreateNSBoxSeparator(),
 		@"spinner": progressIndicator,
 		@"status":  statusTextField,
 	};
-	OakAddAutoLayoutViewsToSuperview(footerViews.allValues, footerView);
-	[footerView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[divider]|"                        options:0 metrics:nil views:footerViews]];
-	[footerView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-[spinner]-(>=8)-[status]-(>=8)-|" options:NSLayoutFormatAlignAllCenterY metrics:nil views:footerViews]];
-	[footerView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[divider(==1)]-4-[status]-4-|"     options:0 metrics:nil views:footerViews]];
-	[statusTextField.centerXAnchor constraintEqualToAnchor:footerView.centerXAnchor].active = YES;
+	OakAddAutoLayoutViewsToSuperview(footerViews.allValues, footerHolder);
+	[footerHolder addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[divider]|"                        options:0 metrics:nil views:footerViews]];
+	[footerHolder addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-[spinner]-(>=8)-[status]-(>=8)-|" options:NSLayoutFormatAlignAllCenterY metrics:nil views:footerViews]];
+	[footerHolder addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[divider(==1)]-4-[status]-4-|"     options:0 metrics:nil views:footerViews]];
+	[statusTextField.centerXAnchor constraintEqualToAnchor:footerHolder.centerXAnchor].active = YES;
 
 	NSDictionary* views = @{
 		@"scopeBar":        _scopeBar.view,

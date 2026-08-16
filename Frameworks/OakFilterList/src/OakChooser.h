@@ -18,7 +18,7 @@ NSMutableAttributedString* CreateAttributedStringWithMarkedUpRanges (std::string
 @property (nonatomic, readonly) NSSearchField*      searchField;
 @property (nonatomic, readonly) NSScrollView*       scrollView;
 @property (nonatomic, readonly) NSTableView*        tableView;
-@property (nonatomic, readonly) NSVisualEffectView* footerView;
+@property (nonatomic, readonly) NSView*             footerView;
 @property (nonatomic, readonly) NSTextField*        statusTextField;
 @property (nonatomic, readonly) NSTextField*        itemCountTextField;
 - (void)addTitlebarAccessoryView:(NSView*)titlebarView;

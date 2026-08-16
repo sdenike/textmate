@@ -128,7 +128,7 @@ OakRolloverButton* OakCreateCloseButton (NSString* accessibilityLabel)
 	if(self = [super initWithFrame:aRect])
 	{
 		_style = OakBackgroundFillViewStyleNone;
-		[self setWantsLayer:YES]; // required by NSVisualEffectBlendingModeWithinWindow
+		[self setWantsLayer:YES]; // required by the glass background updateBackgroundStyle installs
 	}
 	return self;
 }
@@ -220,20 +220,22 @@ OakRolloverButton* OakCreateCloseButton (NSString* accessibilityLabel)
 
 	if(self.style == OakBackgroundFillViewStyleHeader)
 	{
-		if(@available(macos 10.14, *))
-		{
-			NSVisualEffectView* effectView = [[NSVisualEffectView alloc] initWithFrame:[self bounds]];
-			effectView.material     = NSVisualEffectMaterialHeaderView; // MAC_OS_X_VERSION_10_14
-			effectView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-			_visualEffectBackgroundView = effectView;
-			[_visualEffectBackgroundView setAutoresizingMask:NSViewWidthSizable|NSViewHeightSizable];
-			[self addSubview:_visualEffectBackgroundView positioned:NSWindowBelow relativeTo:nil];
-		}
-		else
-		{
-			self.activeBackgroundGradient   = [[NSGradient alloc] initWithStartingColor:[NSColor colorWithCalibratedWhite:0.915 alpha:1] endingColor:[NSColor colorWithCalibratedWhite:0.760 alpha:1]];
-			self.inactiveBackgroundGradient = [[NSGradient alloc] initWithStartingColor:[NSColor colorWithCalibratedWhite:0.915 alpha:1] endingColor:[NSColor colorWithCalibratedWhite:0.915 alpha:1]];
-		}
+		NSGlassEffectView* effectView = OakCreateGlassBackground(NSGlassEffectViewStyleRegular);
+
+		// OakCreateGlassBackground turns this off for its constraint-driven callers.
+		// This site is frame-driven and sizes itself with autoresizingMask, which
+		// does nothing while that flag is NO -- the view stays 0x0 and invisible.
+		effectView.translatesAutoresizingMaskIntoConstraints = YES;
+
+		// Autoresizing only corrects size on a later superview resize event; it does
+		// not retroactively fix a mismatch that already exists when the subview is
+		// added. self may already be at its real size here, so match it explicitly
+		// the way initWithFrame:[self bounds] used to.
+		effectView.frame = [self bounds];
+
+		_visualEffectBackgroundView = effectView;
+		[_visualEffectBackgroundView setAutoresizingMask:NSViewWidthSizable|NSViewHeightSizable];
+		[self addSubview:_visualEffectBackgroundView positioned:NSWindowBelow relativeTo:nil];
 	}
 }
 
