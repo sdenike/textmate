@@ -10,6 +10,10 @@ Title: Release Notes
   rather than in a strip of their own below it. That gives back a full row of
   window chrome to the editor.
 
+* Dragging a tab out of the window now opens it in a window of its own. The
+  menu's Move Document to New Window, and double-clicking a tab, already did
+  this; the drag now does too.
+
 * The About window now opens centred on the frontmost editor window, or centred
   on screen when no editor window is open, instead of reappearing wherever it was
   last left.

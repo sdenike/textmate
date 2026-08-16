@@ -4,6 +4,51 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — Tab tear-off: mostly already built, only the trigger was missing
+
+**`2da8ac7e`.** Dragging a tab out of the window now gives it a window of its own. Maintainer
+request, and the survey that preceded it saved most of the work.
+
+**`takeTabsToTearOffFrom:` (`DocumentWindowController.mm:1733`) already did the whole job** — creates
+the new `DocumentWindowController`, assigns the documents, opens and shows the window, closes the
+source tabs — and was already wired to two triggers: the `moveDocumentToNewWindow:` menu action
+(`:887`) and double-clicking a tab (`:1825`). The only gap was that
+`draggingSession:endedAtPoint:operation:` (`OakTabBarView.mm:1019`) reset `draggedTabIndex` and
+ignored everything else.
+
+**The condition needs both halves:**
+
+```objc
+if(operation != NSDragOperationNone || draggedIndex == -1) return;
+if(NSPointInRect(screenPoint, self.window.frame))          return;
+```
+
+`NSDragOperationNone` alone also covers a drop on some spot *inside* the window that refused it, and
+dropping a tab back onto its own window should do nothing. Either check on its own tears off when it
+should not.
+
+The delegate method is `@optional`, so a tab bar whose delegate does not implement it keeps the old
+behaviour of cancelling the drag. It carries the screen point so a future change can place the new
+window where the tab was dropped; nothing uses that yet.
+
+**A design question answered by the existing code rather than by me.** Before building this I flagged
+that "a window is a project, not a document" in TextMate, and asked whether a torn-off window should
+inherit the project. `takeTabsToTearOffFrom:` had already decided: it does `[DocumentWindowController
+new]` and assigns only the documents, so the new window has no file browser — though it does keep
+`defaultProjectPath` when the document lives inside the current project. Following existing behaviour
+rather than inventing a second answer.
+
+Tearing off the last tab is a no-op, the same guard `moveDocumentToNewWindow:` uses — otherwise it
+would empty this window and open a near-identical one.
+
+`OakAppKit_test: 25 tests passed`, application builds. **The drag gesture itself is unverified** —
+UI scripting is denied in this environment, so no synthetic drag can be delivered. The maintainer
+confirmed the window-drag fix by hand; this needs the same.
+
+**If interrupted here:** the branch is feature-complete. Ship as v3.0.0-revived.22.
+
+---
+
 ## 2026-08-15 — Window drag restored; two ivars with the same name; Legal page audited
 
 **`0c48bae8` restores window dragging.** With the tab bar in the titlebar row there was no bare
