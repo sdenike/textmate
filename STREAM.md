@@ -276,6 +276,33 @@ negation; comma alternatives are gated per composite.
 settings cache almost entirely after the first open, so that metric barely exercises `does_match`.
 Both numbers are recorded rather than only the flattering one.
 
+### `-Os` -> `-O2` MEASURED AND REVERTED — inconclusive, and `-Os` is Apple's own default
+
+The last untested lever from the original Phase 7 plan. Built at `-O2`, measured cold 1 MB opens
+against `-Os`, alternating sides so machine drift hit both equally:
+
+```
+        -Os        -O2       delta
+r1    37045      35676       O2 -1369
+r2    38890      42299       O2 +3409
+r3    47400      35454       O2 -11946
+median 38890     35676
+spread 10355      6845
+```
+
+**The within-build spread is as large as the between-build difference.** `-Os` varied by 10.4 s
+against *itself* across three rounds (37.0 -> 38.9 -> 47.4, drifting monotonically upward as the
+session wore on), which is bigger than any effect being measured. Two of three rounds favour `-O2`
+and its median is 8.3% better, but that cannot be distinguished from drift at this sample size.
+
+Cost side is certain: binary 6184752 -> 6733360 bytes (+8.9%), bundle 26012 -> 26920 KB (+908 KB).
+The size gate would still have passed — 1008 KB under `undead` — so the gate was not the blocker.
+
+`Ruling: reverted. A certain 908 KB for an unmeasurable speed change is a bad trade, and -Os is
+Xcode's own default for Release builds -- it is Apple's deliberate choice, not an oversight
+inherited from upstream, which removes the main argument for switching. Worth one more attempt on a
+quiet machine; the numbers above are the baseline to beat.`
+
 ### APPLE SILICON AUDIT — clean apart from three vendored binaries
 
 Asked whether everything is optimised for Apple Silicon. Surveyed, and the answer is mostly yes:
