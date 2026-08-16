@@ -240,6 +240,42 @@ number with modestly better codegen, while adding a second toolchain to a build 
 unified, and Swift/C++ interop still handles the templated `oak::basic_tree_t` / scope node graphs
 poorly. Algorithm beats language here.
 
+### THE FAST-REJECT LANDED — 2.3x on a cold open (`72fa771f`)
+
+The one lever that reduces the work rather than moving it. `path_t` precomputes its literal
+(wildcard-free) first scope component at parse time; `does_match` scans the ancestor chain for it
+before running the recursive matcher.
+
+```
+cold 1 MB open   85.6 s -> 37.1 s     2.3x, consistent across two runs
+differential     6,500,000+ comparisons, 0 disagreements
+scope 14/14   bundles 5/5   buffer 23/26 (same pre-existing spellchecking failures)
+```
+
+*(The absolute seconds are far above the 5-14 s measured earlier — the machine was heavily loaded by
+then. The ratio is same-session against the same file, so it is the trustworthy figure.)*
+
+**My design for this was unsound and the implementer caught it.** I specified comparing the query
+scope's **root** atom. But `test_rank`, already in the suite, matches selector `source.php` against a
+scope rooted at `text.html.php` with `source.php` as a *non-root ancestor* — PHP embedded in HTML.
+An unanchored path's first component may match below the root, and every embedded-language grammar
+depends on it. A root-equality reject would have silently broken PHP-in-HTML, JS-in-HTML,
+Ruby-in-ERB. Hence the ancestor-chain scan: O(depth) rather than O(1), still much cheaper than the
+full matcher because it skips the rank and backtrack bookkeeping every caller pays for.
+
+`has_dotted_prefix` is `strncmp` plus a boundary check for `\0` or `.`, so `source.c` matches
+`source.c.foo` but **not** `source.c++` — components compare whole. Getting that wrong would reject
+valid matches.
+
+**Falls back to the full matcher** (always correct, never rejects) for: any `*` in the first
+component, and `group_t` parenthesised sub-selectors entirely, including any negation wrapping a
+group. Negation is handled by gating only the un-negated `path_t` and letting the caller apply the
+negation; comma alternatives are gated per composite.
+
+**The reopen median is flat and that is expected** — reopening the same file in one session hits the
+settings cache almost entirely after the first open, so that metric barely exercises `does_match`.
+Both numbers are recorded rather than only the flattering one.
+
 ### APPLE SILICON AUDIT — clean apart from three vendored binaries
 
 Asked whether everything is optimised for Apple Silicon. Surveyed, and the answer is mostly yes:
