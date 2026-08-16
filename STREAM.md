@@ -137,9 +137,36 @@ properly; the cached `_hash` does not.
 $CLAUDE_JOB_DIR/tmp/cachefix.patch, for reference only -- do not reapply as-is. The 72% hot-path
 diagnosis stands (measured three independent ways); only this remedy is disproven.`
 
-**A better next attempt, untested:** memoize the serialized string *per scope node* so `to_s` is
-paid once per distinct scope instead of once per call, keeping the well-distributed string hash.
-That attacks the allocation without touching hash quality. Measure it; do not assume it.
+### THEN THE RIGHT EXPERIMENT RAN — bound alone, 2.7x faster
+
+**I had misread my own profile.** Of the 1774 samples in `value_for_setting`, **1770 are below it**
+in `query`/`search`/`does_match` — the *miss* path. Only a handful are in `to_s` and the map lookup.
+The `to_s_helper` frames I seized on were deep in the recursive stack, not the leaf cost. The string
+key was never the bottleneck; **the cache missing was**. The failed experiment changed key *and*
+bound together, and the bad hash swamped whatever the bound bought.
+
+Changing **only** the bound, string key untouched (`wrappers.cc`, 1000 -> 50000):
+
+```
+before (bound 1000)   15597 / 15559 / 15405     median 15559 ms
+after  (bound 50000)  15961 /  5820 /  5802     median  5820 ms
+```
+
+**Read the shape, not the median.** With the old bound all three runs are identical ~15.5 s — the
+cache filled, wiped, and every open started cold. With the bound raised, run 1 is unchanged (~16 s,
+populating the cache) and runs 2-3 drop to 5.8 s. The cache now survives between opens instead of
+destroying itself. That is the thrash hypothesis confirmed directly.
+
+Honest scope of the win: the **first** file opened in a session is unchanged at ~16 s; every file
+after it is **2.7x faster**. Provenance verified — the bound-only build has 0 `key_hash` symbols.
+
+**5.8 s for a 1 MB file is still bad.** The deeper cost is untouched: `symbols_t::did_parse`
+(`symbols.cc:111`) queries the bundle system per distinct scope on every parse pass. Fixing the
+first-open case means not making those queries at all, not caching them better.
+
+**A further attempt, untested:** memoize the serialized string *per scope node* so `to_s` is paid
+once per distinct scope instead of once per call, keeping the well-distributed string hash. Worth
+little on its own given the above, but it compounds. Measure it; do not assume it.
 
 Tests, for the record: `bundles_test` 5/5, `scope_test` 13/13, `buffer_test` 23/26 — the three
 failures are pre-existing spellchecking ones, reproduced with the change stashed out.
