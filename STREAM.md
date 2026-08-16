@@ -4,7 +4,93 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-16 — RESUME HERE: Phase 6 shipped as .23; Phase 7 baselined and already ahead
+## 2026-08-16 — RESUME HERE: Phase 7, the levers are not where the spec said
+
+Branch **`phase-7/performance`** (4 commits, unpushed). `master` is back at `origin/master`; two
+Phase 7 commits had landed on it directly by mistake and were moved off. No PR yet.
+
+### The two findings that reframe Phase 7
+
+**1. The build is compiled for size, not speed.** `Xcode/Base.xcconfig` sets
+`GCC_OPTIMIZATION_LEVEL = s`. `-Os` is precisely the flag that tells clang to suppress the inlining
+and unrolling that make hot loops fast, and TextMate's hot loops are `oak::basic_tree_t`, the layout
+engine and Onigmo's scanner — what a user feels when typing and scrolling.
+
+Meanwhile the design doc named LTO and dead-stripping as Phase 7's levers. Both were **already on**
+before Phase 7 began (`LLVM_LTO = YES_THIN`, `DEAD_CODE_STRIPPING = YES`). The one flag that
+actually trades speed for size pointed at size, and nobody had looked.
+
+`Not yet tested. -Os -> -O2 must be measured, not assumed -- assuming is what produced the
+wrong-sign benchmark recorded in the entry below.`
+
+**2. Bundle size is dominated by resources, not by binaries.**
+
+```
+55 document .icns   10040 KB   36%      <- largest single category, ~177 KB each
+main TextMate        6040 KB   22%
+Assets.car           2836 KB   10%
+About/Contributions  1536 KB    6%      <- removed today
+QuickLook+Bundles    4464 KB   16%
+everything else      2788 KB   10%
+```
+
+Dead-strip and LTO act on `MacOS/` (7072 KB). `Resources/` is 15460 KB — more than twice that.
+
+**Sequencing that follows from these two:** the size gate had only 224 KB of slack against `undead`
+(27704 vs 27928). `-Os -> -O2` typically costs 10-20% of code size, which on a 6 MB binary would
+blow that gate outright. Shrink first, then spend. Removing Contributions bought 1536 KB of room.
+
+### Done today
+
+| Commit | What |
+|---|---|
+| `3b59b4eb` | Removed the About window's Contributions page, `bin/gen_credits.rb`, its CSS and JS; added a contributors link to `About.md` |
+| `ad635a95` | Dropped stale Contributions references from `bin/build`, `README.md`, CI workflow |
+| `6915872e` | Corrected the fork's bundle id in `measure.sh` and the Phase 0 baseline |
+
+**Why Contributions went, beyond the 1536 KB:** `bin/gen_credits.rb` called `api.github.com`
+*during the build*, making builds non-hermetic and differently broken offline; the About window
+fetched an avatar per contributor over the network when displayed; the page listed every commit in
+the repo, so it grew without bound (26,887 lines). Its removal also deletes the DBM-cache failure
+mode CLAUDE.md documented at length. Contributors are still credited — `About.md` now links
+`/graphs/contributors` and `/commits/master`, which matters because that page was the only place in
+the shipped app the ~26 upstream contributors were named at all (`Legal.md` names *framework*
+authors, a different set).
+
+### Two traps found, both worth not re-walking
+
+**`xctrace --launch <path>` resolves through Launch Services by bundle id, not by the path given.**
+Three Instruments runs aimed at the build tree profiled `/Applications/TextMate.app` instead,
+confirmed from each trace's own `<process path=...>`. The launch profile is therefore **still
+unmeasured**. To fix: copy the build to a scratch path with a distinct `CFBundleIdentifier` so
+Launch Services can resolve it uniquely, then `--launch` that copy.
+
+**The fork's bundle id is `com.shelbydenike.TextMate`, not `com.macromates.TextMate`.** Two
+documents still said otherwise. This inverts which collision to guard against: there is now no
+collision with `official`/`undead` at all, and the one that does bite is a `bin/deploy-local` copy
+in `/Applications` sharing the id with the build under measurement. `measure.sh` itself needed no
+change — it matches on executable name, not id — so the recorded launch numbers stand.
+
+### Two GUI benchmarks cannot run concurrently
+
+I dispatched the launch profiler and the large-file-open harness at the same time; both drive the
+same app, and the profiler correctly stopped when it found the other one's `measure-open.sh` mid-run
+rather than killing a process it had not started. Sequence GUI measurements one at a time.
+
+### If interrupted here
+
+1. **Large-file-open measurement was still running** — `$CLAUDE_JOB_DIR/tmp/measure-open.sh`, with
+   1/10/100 MB generated `.c` files beside it. A `busy-sample.txt` was written mid-run, which
+   suggests the 100 MB case stalled long enough to be worth sampling. Check
+   `$CLAUDE_JOB_DIR/tmp/large-file-open.md` for its verdict.
+2. **Build and verify `3b59b4eb`+`ad635a95`.** Neither was compiled — the build was frozen for the
+   measurement runs. The About window must still open and show three tabs, not four.
+3. **Then run the `-Os` -> `-O2` experiment**, both builds measured back to back in one session.
+4. Do not push or open a PR without the maintainer saying so.
+
+---
+
+## 2026-08-16 — Phase 6 shipped as .23; Phase 7 baselined and already ahead
 
 **Read this first on resume.** Everything below is merged to master and released.
 
