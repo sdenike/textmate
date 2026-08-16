@@ -2,6 +2,34 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-16 (v3.0.0-revived.24)
+
+Opening a file is substantially faster, and the app is smaller.
+
+### Changed
+
+* Opening a large source file is much faster. A 1 MB file that took about 15.5
+  seconds to reopen now takes about 5.8 seconds, and a first open is roughly
+  2.3× faster.
+
+  Two things caused the delay. The cache that remembers which editor settings
+  apply to a stretch of code threw itself away once it held a thousand entries —
+  a 1 MB file has far more than that, so the cache filled, emptied and refilled
+  without ever being used. And every lookup that missed the cache compared the
+  code's context against every rule in every installed bundle, in full, even
+  when the rule belonged to a different language entirely. Those comparisons now
+  stop early when the language cannot match.
+
+* The About window no longer carries a copy of the project's entire commit
+  history — 1.5 MB of it, growing with every commit, and fetching a picture of
+  every contributor from the network each time it was opened. It links to the
+  contributor list and the commit log on GitHub instead. Building the app no
+  longer contacts GitHub either.
+
+* The application is about 1.9 MB smaller than the previous community release,
+  and the helper programs bundled with it are now built for Apple Silicon only,
+  where three of them still carried unused Intel code.
+
 ## 2026-08-16 (v3.0.0-revived.23)
 
 Every material surface in the application now uses the macOS 26 glass material.

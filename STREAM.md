@@ -4,7 +4,48 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-16 — RESUME HERE: Phase 7, the levers are not where the spec said
+## 2026-08-16 — RESUME HERE: Phase 7 closed, released as .24, everything in sync
+
+Phase 7 is done and merged. `HANDOFF.md` is the polished snapshot; this file keeps the evidence.
+
+### Two audits the maintainer asked for, both answered
+
+**The Legal page: all four credits stay.** Onigmo (BSD-2), kvdb (MIT), xdiff (LGPLv2.1) and
+Dialog/Dialog2 (repo GPLv3) are each present, compiled into the app target, linked, **and actively
+called** — `regexp.cc:35` `onig_new()`, `Favorites.mm:15`, `gutter_diff.cc:192` `xdl_diff()`, and the
+two embedded `.tmplugin`s. Each licence carries an attribution clause. The reverse sweep found
+nothing shipped-but-uncredited; the only uncredited LICENSE in the tree is `bin/CxxTest`, which no
+target compiles and no header path references (our runner is a home-grown reimplementation), so it
+needs no credit.
+
+**The `mate` CLI needs no separate optimisation.** `mate`, `tm_query` and `CommitWindowTool` all
+inherit the project-wide flags with **zero overrides** — same `-Os`, thin LTO, dead-stripping,
+arm64-only, hardened runtime as the app. And `mate` is a thin client: it posts a file-open request to
+the running app over a Unix domain socket (`/tmp/textmate-{uid}.sock`, `Applications/mate/src/mate.mm`)
+and does no real work itself, so its own speed is not a lever. It reaches `PATH` via the Terminal
+preferences pane (`TerminalPreferences.mm:134`), offering `/usr/local/bin` or `~/bin`.
+
+### Test baseline — know which failures are expected
+
+- `buffer_test` **23/26**: three pre-existing spellchecking failures at `t_buffer.mm:117,136,151`.
+- `settings_test` **passes in parallel, fails 1/9 under `--no-parallel`** — the documented flake;
+  `t_track_paths.cc` needs real wall-clock time to pass between filesystem operations.
+- scope, bundles, document, regexp, io, text, plist: all pass.
+
+Anything else is a regression.
+
+### If interrupted here
+
+1. Phase 8 (shared modules) and Phase 9 (optional LSP) are what remain.
+2. Before more micro-optimising: **the whole file is parsed at open, not the visible region**
+   (`set_grammar` dirties the entire buffer, `buffer.cc:202`; batching stops at EOF, never at the
+   viewport). That is the next real lever and a bigger change than anything in Phase 7.
+3. The machine drifts badly — identical builds varied 28% across three rounds today. Any further
+   perf work needs a quiet machine or it cannot be measured.
+
+---
+
+## 2026-08-16 — Phase 7, the levers are not where the spec said
 
 Branch **`phase-7/performance`** (4 commits, unpushed). `master` is back at `origin/master`; two
 Phase 7 commits had landed on it directly by mistake and were moved off. No PR yet.

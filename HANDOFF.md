@@ -1,0 +1,102 @@
+Title: Handoff
+
+# Handoff
+
+The polished snapshot: where the project is, what is decided, and what is next.
+`STREAM.md` is the play-by-play with the evidence behind each decision; read this
+first, then that only when you need the reasoning.
+
+## What this is
+
+`sdenike/textmate` — an unaffiliated, community-maintained fork of TextMate
+targeting macOS 26 and Apple Silicon. Hard constraints, declared by the
+maintainer and enforced throughout:
+
+- **arm64 only** — no x86_64 fallbacks anywhere, including vendored binaries
+- **System Ruby 2.6.10 only** — no bundled Rubies, no downloads, no 1.8 code
+- **Forward compatible** (macOS 26+), zero traces of Ruby 1.8
+
+## Current state
+
+| | |
+|---|---|
+| Released | **v3.0.0-revived.24** |
+| Phases complete | 0-7 |
+| Phases remaining | 8 (shared modules), 9 (optional LSP) |
+| Build | `TextMate.xcodeproj`, generated from `project.yml` by XcodeGen |
+| Bundle | 26,012 KB — **1,916 KB smaller than the `undead` baseline** |
+
+## Performance, as measured
+
+Phase 7's headline: **opening a large file was the real problem**, and it had
+never been measured through six prior phases.
+
+| metric | before | after |
+|---|---|---|
+| 1 MB file, reopen | 15,559 ms | **5,820 ms** |
+| 1 MB file, cold open | — | **2.3× faster** |
+| Launch | — | **28% faster than `undead`** |
+| Bundle | 27,704 KB | **26,012 KB** |
+
+Two changes produced all of it:
+
+1. **`bundles::value_for_setting` discarded its whole cache past 1000 entries**
+   (`wrappers.cc`). A real 1 MB C++ file produces ~61,000 distinct scopes, so the
+   cache filled, wiped and refilled without ever paying off. Bound raised.
+2. **The scope-selector matcher had no early-out** (`scope/src/match.cc`). Each
+   cache miss compared the scope against all 53 installed settings items in full.
+   A literal-first-component check now rejects most before the recursive matcher
+   runs.
+
+## What was tried and rejected — do not retry without reading why
+
+Each is recorded in `STREAM.md` with numbers:
+
+- **Keying the settings cache on `scope_t::hash()`** — 13× *slower*. That hash
+  XOR-chains atoms into the parent's, and nesting repeats atoms, so distinct
+  scopes collapse onto shared values and lookups degenerate into bucket walks.
+- **Deferring the symbol list until after first paint** — flat, twice, both
+  implementations correct. The parser already yields every ~10-20 lines, so the
+  main thread was answering in ~470 ms before any change. There was no freeze to
+  break up.
+- **Warming the settings cache from the parser's background queue** — 8% faster
+  and **crashed on quit** (static destroyed on the main thread while a background
+  block still used it). Reverted.
+- **`-Os` -> `-O2`** — inconclusive; within-build variance exceeded the effect.
+  Costs 908 KB certain. Note `-Os` is Xcode's own Release default.
+- **Rewriting hot paths in Rust or Swift** — wrong layer. The cost was ~3.25M
+  selector evaluations; a rewrite runs the same number with better codegen while
+  adding a second toolchain.
+
+## Things that will mislead you
+
+- **Cross-session benchmark comparisons are invalid.** The same unchanged
+  `undead` binary measured 661 ms at Phase 0 and ~1137 ms months later. Measure
+  both sides in one session or measure nothing.
+- **This machine drifts within a session too.** Identical builds have varied 28%
+  across three rounds. Alternate sides and report spreads.
+- **`measure-open.sh` waits for CPU quiescence**, so it cannot show a win from
+  deferring work. `measure-responsive.sh` measures time-to-responsive instead.
+- **TextMate restores open documents at launch**, so a hand-rolled
+  open-and-wait-for-idle loop times session restore, not the open. Use the
+  harnesses.
+- **An incremental build keeps resources you deleted.** `assemble_resources.sh`
+  copies and never removes. Delete `Resources/About` before trusting a size figure.
+- **`xctrace --launch` resolves by bundle id, not path**, so it profiles
+  `/Applications/TextMate.app` rather than your build. Use `sample`.
+
+## Third-party attribution
+
+Audited in full: Onigmo (BSD-2), kvdb (MIT), xdiff (LGPLv2.1) and Dialog/Dialog2
+(repo GPLv3) are each **compiled, linked and actively called**, so all four
+credits on the About window's Legal page are required and must stay. Nothing
+shipped is uncredited. `bin/CxxTest` carries a licence but is provably not
+shipped — our test runner is a home-grown reimplementation.
+
+## Next
+
+Phase 8 (shared modules) and Phase 9 (optional LSP). Before more micro-optimising,
+note that the remaining open-time cost is structural: the whole file is parsed at
+open rather than the visible region (`set_grammar` dirties the entire buffer and
+batching stops at EOF, never at the viewport). That is the next real lever, and it
+is a larger change than anything in Phase 7.
