@@ -4,6 +4,301 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-15 — Tab tear-off: mostly already built, only the trigger was missing
+
+**`2da8ac7e`.** Dragging a tab out of the window now gives it a window of its own. Maintainer
+request, and the survey that preceded it saved most of the work.
+
+**`takeTabsToTearOffFrom:` (`DocumentWindowController.mm:1733`) already did the whole job** — creates
+the new `DocumentWindowController`, assigns the documents, opens and shows the window, closes the
+source tabs — and was already wired to two triggers: the `moveDocumentToNewWindow:` menu action
+(`:887`) and double-clicking a tab (`:1825`). The only gap was that
+`draggingSession:endedAtPoint:operation:` (`OakTabBarView.mm:1019`) reset `draggedTabIndex` and
+ignored everything else.
+
+**The condition needs both halves:**
+
+```objc
+if(operation != NSDragOperationNone || draggedIndex == -1) return;
+if(NSPointInRect(screenPoint, self.window.frame))          return;
+```
+
+`NSDragOperationNone` alone also covers a drop on some spot *inside* the window that refused it, and
+dropping a tab back onto its own window should do nothing. Either check on its own tears off when it
+should not.
+
+The delegate method is `@optional`, so a tab bar whose delegate does not implement it keeps the old
+behaviour of cancelling the drag. It carries the screen point so a future change can place the new
+window where the tab was dropped; nothing uses that yet.
+
+**A design question answered by the existing code rather than by me.** Before building this I flagged
+that "a window is a project, not a document" in TextMate, and asked whether a torn-off window should
+inherit the project. `takeTabsToTearOffFrom:` had already decided: it does `[DocumentWindowController
+new]` and assigns only the documents, so the new window has no file browser — though it does keep
+`defaultProjectPath` when the document lives inside the current project. Following existing behaviour
+rather than inventing a second answer.
+
+Tearing off the last tab is a no-op, the same guard `moveDocumentToNewWindow:` uses — otherwise it
+would empty this window and open a near-identical one.
+
+`OakAppKit_test: 25 tests passed`, application builds. **The drag gesture itself is unverified** —
+UI scripting is denied in this environment, so no synthetic drag can be delivered. The maintainer
+confirmed the window-drag fix by hand; this needs the same.
+
+**If interrupted here:** the branch is feature-complete. Ship as v3.0.0-revived.22.
+
+---
+
+## 2026-08-15 — Window drag restored; two ivars with the same name; Legal page audited
+
+**`0c48bae8` restores window dragging.** With the tab bar in the titlebar row there was no bare
+titlebar left to grab and the window could not be moved at all.
+
+**The trap: two different ivars named `_backgroundView` in `OakTabBarView.mm`.**
+
+| Line | Class | What it is |
+|---|---|---|
+| `:259` | `OakBox` | belongs to **`OakTabView`** — each tab's own fill |
+| `:718` | `OakTabView` | belongs to **`OakTabBarView`** — the empty area, created `tabItem:nil` |
+
+A survey reported "OakBox" because it matched line 259 first, and the brief I wrote from it was
+wrong. The empty region right of the last tab is a **phantom `OakTabView`** — that is how
+double-clicking blank space opens a new tab (`doubleAction = newTab:`). It inherits
+`OakTabView.mouseDown:` (`:563`), which records the location and returns **without calling super**,
+so the click was swallowed. Adding `mouseDown:` to `OakTabBarView`, as the brief specified, would
+have fired only on a roughly 1pt sliver the background view does not cover. The implementer applied
+nothing and escalated — eighth time that judgement has been right.
+
+**The fix hooks `mouseDragged:`, not `mouseDown:`, and that is load-bearing.** Starting the window
+drag on mouse-down consumes the event and `mouseUp:` never arrives — and `mouseUp:` is where the
+double-click that opens a new tab is detected. Reusing the existing 2.5pt drag threshold keeps both
+behaviours: a click still opens a tab, a drag now moves the window. Guarded on `!_tabItem`, which is
+how the file already distinguishes the phantom elsewhere (`closeButtonAlphaValue`).
+
+Build succeeds, `OakAppKit_test: 25 tests passed`. **Not verified:** the drag itself — this
+environment denies UI scripting (`osascript` returns `-1728`) and Screen Recording, so no synthetic
+click can be delivered. The maintainer confirmed the About-window centring works; the drag needs the
+same treatment.
+
+### Legal page audited at the maintainer's request — nothing to remove
+
+Every entry still ships, so every credit is still required:
+
+| Component | Present | Used by | Licence obligation |
+|---|---|---|---|
+| Onigmo | `vendor/Onigmo` | linked by 28 targets | BSD, attribution |
+| kvdb | `vendor/kvdb` | `DocumentWindowController.mm`, `Favorites.mm` | MIT, notice retained |
+| xdiff | `vendor/xdiff` | linked by 12 targets | **LGPL-2.1** — attribution *and* source availability |
+| Dialog / Dialog2 | `PlugIns/dialog*` | 27 references, both `PROVENANCE.md` present | MacroMates notice preserved; covered by our GPLv3 |
+
+The page is already clean of the Phase 3 purge — zero mentions of boost, sparsehash, capnp or ragel.
+
+One caveat worth knowing rather than discovering later: the Dialog entry states that upstream "did
+not distribute either under a separate license, so they are covered by this repository's own license
+(GPLv3)." That is a reasonable reading, but it is a conclusion this project reached, not something
+upstream asserted.
+
+**If interrupted here:** the branch is complete — titlebar tabs, drag fix, About centring, always-on
+close button. Ship as v3.0.0-revived.22. The maintainer has already replied to Georg Seifert, so no
+outreach is pending.
+
+---
+
+## 2026-08-15 — About window centres on the frontmost document window
+
+**`9f1f6986`.** The About panel now centres on the frontmost document window, or on the active screen
+when none is open, instead of landing wherever it was last left. Maintainer request.
+
+Two separate causes, not one:
+
+- `AboutWindowController.mm:57` computed an **x** origin from `NSMaxY` of both terms —
+  `rect.origin.x = NSMaxY(visibleRect) - NSMaxY(rect)`. A longstanding typo.
+- `:71` sets `setFrameAutosaveName:@"BundlesReleaseNotes"`, and the restored frame overrode the
+  computed placement anyway, so the initial calculation only ever applied on a machine that had never
+  opened the window.
+
+The autosave is **kept** — it remembers a size the user chose — but the origin is recomputed on every
+show. Panels are skipped when picking the reference window, since the About panel is itself an
+`NSPanel`, and the result is clamped to the screen so a partly-offscreen document window cannot drag
+the panel off with it.
+
+**Still outstanding: the window-drag fix.** `OakTabBarView` has no `performWindowDragWithEvent:` in
+the tree yet — the implementer had not filed it when this entry was written. The window cannot be
+dragged by the titlebar row until it lands. The intended shape, and the reason
+`mouseDownCanMoveWindow` must stay `NO`, is recorded in the entry two below.
+
+**If interrupted here:** check whether `OakTabBarView.mm` contains `performWindowDragWithEvent:`; if
+not, that fix still needs applying. Then build, run `OakAppKit_test` (expect 25), and ship the branch
+as v3.0.0-revived.22.
+
+---
+
+## 2026-08-15 — PR #1469's author corrected us, and he was right
+
+**`1f0ff406` retracts a false claim this project published about someone else's work.**
+
+The Liquid Glass spec said PR #1469 (`textmate/textmate`) "reintroduces 11 `.rave` files — the build
+system Phase 2 deleted." Georg Seifert (@schriftgestalt), its author, replied on commit `7cf1ff90`:
+
+> removing the .rave build system was the first thing I did. My fork build with Xcode all the way.
+
+Checked against the GitHub API rather than taken on either side's word:
+
+| | |
+|---|---|
+| `.rave` files in the #1469 diff | **63**, every one status `removed` |
+| Xcode project | PR **adds** `Applications/TextMate/TextMate.xcodeproj/project.pbxproj` |
+| Upstream `textmate/textmate` master | still ships `.rave` — which is why they appear in the diff at all |
+
+He is right and the spec was wrong. **The mistake was reading a list of filenames without reading
+each entry's `status`.** A deleted file appears in a PR's file list exactly as an added one does. That
+is the same failure mode as the artwork audit earlier today — counting what exists without checking
+which ones ship — and it is worth naming twice, because both times the check *looked* like evidence.
+
+He reached Xcode independently, and before this fork did.
+
+**He has offered to open a PR containing only the UI work**, which is exactly Phase 6's scope. That
+is the maintainer's call to accept; it is not something to answer on their behalf, so it is recorded
+here and left open.
+
+### Session links removed from public places
+
+At the maintainer's instruction, `Claude-Session:` trailers and bare session URLs are no longer added
+to commit messages or PR bodies. Stripped from the bodies of PRs #12, #13 and #14 and verified zero
+remaining.
+
+**Not removed: the 53 commit messages on `master` that already carry them.** Doing so means rewriting
+published history — every SHA changes, the `v3.0.0-revived.4` … `.21` tags break, and any existing
+clone is invalidated. That is a deliberate, destructive operation and needs an explicit decision, not
+a side effect of a formatting request.
+
+---
+
+## 2026-08-15 — Last two .rave files deleted; credential audit; two bugs from maintainer testing
+
+**`56e021cb` deletes `PlugIns/dialog/default.rave` and `PlugIns/dialog-1.x/default.rave`** — the last
+two tracked survivors of the build system Phase 2 replaced. The maintainer asked whether any had crept
+back; they had never left. Nothing reads them: every other `default.rave` mention in the tree is a
+comment in `Xcode/scripts/*.sh` citing the old file as the source a build setting was derived from,
+which is worth keeping. Both plug-ins build from `project.yml` (`tm_dialog`, `Dialog`, `Dialog2`), so
+this removes dead files rather than a build path. Full `bin/build` passes after deletion.
+
+Build entry points confirmed while checking: no `./configure`, no `bin/rave`, no `build.ninja`.
+`bin/build` wrapping `xcodebuild` is the only path.
+
+### Credential audit — clean, and the one hit is not a leak
+
+Scanned the current tree **and the full history**, not just what is checked out:
+
+| | |
+|---|---|
+| Apple ID `denike@gmail.com` | not present; `git log -S` finds it in no commit, ever |
+| The app-specific password exposed in chat | not present; never in history |
+| `.p12` / `.pem` / `.key` / `.cer` / `.mobileprovision` | none tracked |
+| Workflows | reference `secrets.NAME` only — values live in GitHub Secrets |
+| gitleaks pre-commit | active, `.githooks/pre-commit` via `core.hooksPath` |
+
+**Team ID `485WH9DHS4` does appear** in `STREAM.md` and `docs/RELEASING.md`, and that is correct
+rather than an oversight. A Team ID is public by design — it is embedded in every signed binary and
+anyone who downloads the app can read it with `codesign -dv --verbose=2`, which is exactly how
+Gatekeeper validates and how `OakDownloadManager` refuses an update signed by a different team.
+Verified by reading it back out of the installed app. Nothing to redact.
+
+### Two bugs the maintainer found testing the titlebar-tabs build
+
+1. **The window cannot be dragged.** The tab bar now covers the titlebar row, and
+   `OakTabBarView.mouseDownCanMoveWindow` returns `NO` (`:735-738`) with no `mouseDown:` anywhere on
+   the bar — so a click in the empty area right of the tabs hits `_backgroundView` (`:1371`), travels
+   up the responder chain, and is dropped. Fix is a `mouseDown:` on **`OakTabBarView`** calling
+   `performWindowDragWithEvent:`. `mouseDownCanMoveWindow` **stays `NO`**: returning `YES` would let
+   AppKit move the window on a click anywhere in the bar, including on a tab, and the view would
+   never see the `mouseDown` at all. Tabs are `OakTabView` subviews that consume their own clicks and
+   `+` is an `NSButton`, so an event reaching the bar came from empty space.
+2. **The About window lands wherever it was left.** Two separate causes.
+   `AboutWindowController.mm:57` computes an **x** origin from `NSMaxY` of both terms — a longstanding
+   typo — and `:71` sets `setFrameAutosaveName:@"BundlesReleaseNotes"`, whose restored frame overrode
+   the computed placement anyway. It now centres on the frontmost non-panel window, falling back to
+   the active screen, clamped to stay on-screen. The autosave is kept, because it remembers a size
+   the user chose.
+
+**GitHub check:** no open PRs or issues on `sdenike/textmate`, `hidden-revived` or `homebrew-tap`. All
+ten textmate PRs are the maintainer's own and merged; #10 never existed (GitHub shares numbering
+between issues and PRs). The notifications API is not readable with the current token
+(`Resource not accessible by personal access token`), so an alert the maintainer saw cannot be
+confirmed from here — most likely the `github-actions[bot]` cask-bump commit on the tap.
+
+**If interrupted here:** both fixes were dispatched to an implementer and had not reported. Resume by
+checking whether `OakTabBarView.mm` has a `mouseDown:` and `AboutWindowController.mm` has
+`centerOnFrontmostDocumentWindow`, then ship the branch as v3.0.0-revived.22. Full screen is still
+unverified for the titlebar tabs, and cannot be verified in this environment.
+
+---
+
+## 2026-08-15 — Tabs moved into the titlebar row; and a probe that measured its own input
+
+**Branch:** `phase-6/titlebar-tabs`, off master at `570c8be9`. `4b978fd6` moves the tab bar into the
+window's titlebar row beside the traffic lights, iTerm2-style, reclaiming a row of chrome. Not
+merged; the implementer's final verification had not been filed when this was written.
+
+### The mechanism was already there
+
+`DocumentWindowController.mm:208-212` already used `NSTitlebarAccessoryViewController` — the same
+AppKit mechanism iTerm2 uses (`iTermTitlebarAccessoryNanny.swift:51-63`). Tabs landed in their own
+strip only because `layoutAttribute` defaults to `NSLayoutAttributeBottom`.
+
+Measured against real AppKit, by reading back frames from probe windows:
+
+| Configuration | Accessory | Traffic lights | Result |
+|---|---|---|---|
+| `Bottom` (as shipped) | y 364–400 | y 409–423 | separate rows |
+| `+ titleVisibility Hidden` | y 364–400 | y 409–423 | still separate |
+| `+ titlebarAppearsTransparent` | y 364–400 | y 409–423 | still separate |
+| `+ FullSizeContentView` | y 332–368 | y 377–391 | still separate |
+| **`Right`** | **y 400–432** | **y 409–423** | **same row** |
+
+`NSLayoutAttributeRight` is the entire mechanism. `titlebarAppearsTransparent` and
+`FullSizeContentView` are **not** needed and were measured not to help.
+
+### I asserted a measured fact that was my own input read back
+
+The brief told the implementer that under `Right` the accessory "spans the full window width
+starting at x = 0". **It does not.** My probe constructed its view with
+`initWithFrame:NSMakeRect(0, 0, winWidth, 28)` — already full width — so the `w=800` I recorded was
+the frame I had just set, not AppKit stretching anything.
+
+The implementer built it as specified, found the tab bar rendering at **zero width**, confirmed it
+three independent ways including an `NSLog` in the running application, and escalated rather than
+inventing a fix. Correct call; it was the seventh time in this project that stopping on a
+contradiction turned out to be right.
+
+Re-measured, with a view deliberately **not** pre-sized:
+
+- A `Right` accessory does **not** stretch its view.
+- An Auto Layout **width constraint on the container has no effect** — still `w = 0`. A `Right`
+  accessory sizes from the view's **frame**.
+- **`autoresizingMask = NSViewWidthSizable` has no effect either.** Frame-size it once and it is
+  correct; resize the window 800 → 1200 and the container stays 800 wide and right-aligns at x = 400.
+
+So the container is frame-sized and maintained by hand in `windowDidResize:`. Verified in both
+directions — 800 → 1200 and 1400 → 700 — with the tab bar starting at x = 77 and clearing the zoom
+button each time. **That is the part a future reader will try to "clean up" into a constraint; the
+commit message says why it cannot be.**
+
+Other measured values: traffic lights end at **x = 69** (close 9–23, miniaturize 32–46, zoom 55–69),
+so the inset is 69 + 8 = 77, matching iTerm2's 6–9pt of padding. The inset is derived at runtime from
+the zoom button's frame rather than hardcoded, so it collapses to 0 in full screen where the buttons
+are hidden.
+
+**Unverified and not claimed:** full screen, and any screenshot of the real app — Screen Recording is
+declined for this session's process, and synthetic modifier keys are dropped, so ⌃⌘F is unreachable.
+The inset logic is written to be self-correcting there, which is not the same as tested.
+
+**If interrupted here:** confirm the implementer's report landed and the six visual checks were
+answered, then the tab-bar collapse at ≤1 document (`DocumentWindowController.mm:389`, `:1576`) needs
+a look, then ship as v3.0.0-revived.22.
+
+---
+
 ## 2026-08-15 — Increment 4 complete; and 40 more images have never shipped
 
 **`0bce7964` — all four chrome bars are on glass.** `HOStatusBar`, `OFBHeaderView` and

@@ -2,6 +2,31 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-15 (v3.0.0-revived.22)
+
+Tabs move into the title bar, and can be dragged out into their own window.
+
+### Changed
+
+* Tabs now sit in the window's title bar, beside the close/minimise/zoom buttons,
+  rather than in a strip of their own below it. That gives back a full row of
+  window chrome to the editor.
+
+* Dragging a tab out of the window now opens it in a window of its own. The
+  menu's Move Document to New Window, and double-clicking a tab, already did
+  this; the drag now does too.
+
+* The About window now opens centred on the frontmost editor window, or centred
+  on screen when no editor window is open, instead of reappearing wherever it was
+  last left.
+
+### Fixed
+
+* The window could not be dragged by the empty space in the tab bar. With tabs
+  moved into the title bar there was nowhere else left to grab, so windows could
+  not be moved at all. Dragging that space now moves the window; double-clicking
+  it still opens a new tab, as before.
+
 ## 2026-08-15 (v3.0.0-revived.21)
 
 Missing artwork is back, and the window chrome moves to the macOS 26 material.

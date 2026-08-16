@@ -20,6 +20,15 @@
 - (void)tabBarViewDidDoubleClick:(OakTabBarView*)aTabBarView;
 - (NSMenu*)menuForTabBarView:(OakTabBarView*)aTabBarView;
 
+// Sent when a tab drag ended outside any tab bar and outside the window it came
+// from -- the user pulled the tab out to give it a window of its own. The
+// delegate is expected to move that document to a new window; not implementing
+// this simply leaves the drag cancelled, which is the old behaviour.
+//
+// `aPoint` is in screen coordinates, so a delegate can place the new window
+// where the tab was dropped.
+- (void)tabBarView:(OakTabBarView*)aTabBarView didDragTabOutOfWindowAtIndex:(NSUInteger)anIndex screenPoint:(NSPoint)aPoint;
+
 // Methods sent to the delegate which the tab was dragged to
 - (BOOL)performDropOfTabItem:(NSUUID*)tabItemUUID fromTabBar:(OakTabBarView*)sourceTabBar index:(NSUInteger)dragIndex toTabBar:(OakTabBarView*)destTabBar index:(NSUInteger)droppedIndex operation:(NSDragOperation)operation;
 

@@ -17,10 +17,23 @@ background.
 
 **Out of scope, deliberately.**
 
-- **PR #1469 (`textmate/textmate`).** "My take on modernizing TextMate", +19,490/−5,877 across
-  550 files. It is a fork-sized rewrite that adds whole new applications (CompareMate,
-  SyntaxMate, QuickLookExtensions) and reintroduces 11 `.rave` files — the build system Phase 2
-  deleted. There is no "UI part" that lifts out cleanly.
+- **PR #1469 (`textmate/textmate`).** "My take on modernizing TextMate" by Georg Seifert
+  (@schriftgestalt), +19,490/−5,877 across 550 files. A fork-sized rewrite that also adds whole new
+  applications (CompareMate, SyntaxMate, QuickLookExtensions), so it does not lift out as a single
+  piece.
+
+  **Correction, 2026-08-15.** An earlier revision of this line claimed the PR "reintroduces 11
+  `.rave` files — the build system Phase 2 deleted." **That was wrong**, and Seifert said so on
+  commit `7cf1ff90`: *"removing the .rave build system was the first thing I did. My fork build with
+  Xcode all the way."* Checked against the GitHub API, he is right — all **63** `.rave` files in that
+  diff carry status `removed`, and the PR **adds** `Applications/TextMate/TextMate.xcodeproj`. The 63
+  appear in the diff at all only because upstream `textmate/textmate` still ships `.rave`; deleting a
+  file lists it just as adding one would.
+
+  The mistake was reading a filename list without reading each entry's status — the same failure mode
+  as counting images that exist without checking which ship. He reached Xcode independently and
+  before this fork did. He has since offered to open a PR containing only the UI work, which is
+  exactly what this phase covers.
 - **`OakTextView`'s own drawing.** Text needs an opaque backdrop; glass behind body text is
   unreadable.
 - **`Printing.mm`.** No screen presence.

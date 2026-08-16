@@ -51,11 +51,6 @@ static NSData* Digest (NSString* someString)
 	NSRect visibleRect = [[NSScreen mainScreen] visibleFrame];
 	NSRect rect = NSMakeRect(0, 0, std::min<CGFloat>(700, NSWidth(visibleRect)), std::min<CGFloat>(800, NSHeight(visibleRect)));
 
-	CGFloat dy = NSHeight(visibleRect) - NSHeight(rect);
-
-	rect.origin.y = round(NSMinY(visibleRect) + dy*3/4);
-	rect.origin.x = NSMaxY(visibleRect) - NSMaxY(rect);
-
 	NSWindow* win = [[NSPanel alloc] initWithContentRect:rect styleMask:(NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskFullSizeContentView) backing:NSBackingStoreBuffered defer:NO];
 	if((self = [super initWithWindow:win]))
 	{
@@ -127,6 +122,38 @@ static NSData* Digest (NSString* someString)
 {
 	self.selectedPage = @"About";
 	[self showWindow:self];
+	[self centerOnFrontmostDocumentWindow];
+}
+
+- (void)centerOnFrontmostDocumentWindow
+{
+	// Centre on the frontmost document window when there is one, so the panel
+	// lands where the user is looking rather than on whichever screen happens to
+	// be "main". Falls back to the active screen.
+	//
+	// Panels are skipped: the About window is itself an NSPanel, and so are the
+	// other auxiliary windows, none of which are a sensible thing to centre on.
+	NSRect target = NSScreen.mainScreen.visibleFrame;
+	for(NSWindow* window in NSApp.orderedWindows)
+	{
+		if(window == self.window || !window.isVisible || [window isKindOfClass:[NSPanel class]])
+			continue;
+		target = window.frame;
+		break;
+	}
+
+	NSRect frame = self.window.frame;
+	frame.origin.x = round(NSMidX(target) - NSWidth(frame)  / 2);
+	frame.origin.y = round(NSMidY(target) - NSHeight(frame) / 2);
+
+	// Keep it on screen: a document window can be partly offscreen, or larger
+	// than the screen the panel would land on.
+	NSScreen* screen = self.window.screen ?: NSScreen.mainScreen;
+	NSRect limit = screen.visibleFrame;
+	frame.origin.x = std::min(std::max(NSMinX(frame), NSMinX(limit)), NSMaxX(limit) - NSWidth(frame));
+	frame.origin.y = std::min(std::max(NSMinY(frame), NSMinY(limit)), NSMaxY(limit) - NSHeight(frame));
+
+	[self.window setFrameOrigin:frame.origin];
 }
 
 - (void)showChangesWindow:(id)sender
