@@ -103,13 +103,46 @@ ng::buffer_t::initiate_repair -> update_scopes -> did_parse
 - `if(cache.map.size() > 1000) cache.map.clear()` — **discards the entire cache**, so a large file
   fills it, wipes it, refills it, degenerating to no caching exactly when caching matters.
 
-Fix applied (uncommitted at time of writing, under measurement): `std::unordered_map` keyed on
-`(setting, context_t)` using the already-cached hashes, no string built at all, bound raised to
-50000 with clear-all kept only as a memory backstop.
+### THE FIX WAS TRIED AND IT IS 13x WORSE — do not retry it
 
-`Ruling: do not commit the fix unless a measured before/after justifies it, and the "before" must
-come from a provably unfixed binary. The edit was already in the working tree when measurement
-started, so an unproven baseline here would be a second "after" wearing a "before" label.`
+Attempted: `std::unordered_map` keyed on `(setting, context_t)` using `scope_t::hash()`, no string
+built at all, bound raised 1000 -> 50000. **Measured, twice, by two operators, on the 1 MB file:**
+
+```
+before (unfixed)   15597 / 15559 / 15405 ms      median 15559 ms   (also 16505/16314/17061 earlier)
+after  (fixed)     timeout:200s x 3              never completed a single timed run
+```
+
+Baseline provenance was verified rather than assumed: `nm` shows **0** `key_hash` symbols in
+`/private/tmp/tm-before` and **5** in `tm-after`, so the two binaries genuinely differ by this
+change and nothing else.
+
+**Why it failed — `scope_t::hash()` is not safe to bucket on.** `scope.cc:16`:
+
+```cpp
+_hash(std::hash<std::string>()(atoms) ^ (parent ? parent->_hash : 0))
+```
+
+XOR is self-cancelling, and scope paths repeat atoms whenever constructs nest — `meta.block.c`
+inside `meta.block.c` is ordinary C. Each repeated pair cancels to zero, so large families of
+distinct scopes collapse onto one hash value. Harmless as a change-detector, which is presumably
+why it survived; fatal as an `unordered_map` key, because entries pile into shared buckets and every
+lookup degenerates to a linear walk resolved by `operator==`. Raising the bound to 50000 made those
+walks fifty times longer.
+
+**The expensive string key was load-bearing.** `std::hash` over the serialized scope distributes
+properly; the cached `_hash` does not.
+
+`Ruling: reverted. Change preserved as stash@{0} and as
+$CLAUDE_JOB_DIR/tmp/cachefix.patch, for reference only -- do not reapply as-is. The 72% hot-path
+diagnosis stands (measured three independent ways); only this remedy is disproven.`
+
+**A better next attempt, untested:** memoize the serialized string *per scope node* so `to_s` is
+paid once per distinct scope instead of once per call, keeping the well-distributed string hash.
+That attacks the allocation without touching hash quality. Measure it; do not assume it.
+
+Tests, for the record: `bundles_test` 5/5, `scope_test` 13/13, `buffer_test` 23/26 — the three
+failures are pre-existing spellchecking ones, reproduced with the change stashed out.
 
 **Three more instances of the same pattern** were found and are NOT yet fixed:
 
@@ -130,11 +163,14 @@ started, so an unproven baseline here would be a second "after" wearing a "befor
 
 ### If interrupted here
 
-1. **Get the cache fix's numbers** and commit only if they justify it; write the doc entry in the
-   same commit. If the result is negative, record that here — "caching did not help" would save the
-   next session a day.
-2. **Then the three sibling defects above**, `layout.cc:812` first — it is on the draw path, so it
-   costs on every frame rather than only on open.
+1. **The cache fix is measured, rejected and reverted** — see above. Nothing outstanding on it.
+2. **`layout.cc:812` is the best remaining candidate.** `_theme->background(scope::to_s(_buffer.scope(0).left))`
+   inside `layout_t::draw()`, reached from `OakTextView.mm:432,765,1266` — a scope-chain walk plus a
+   string allocation **on every frame**, for a colour that almost never changes. Cache it against the
+   previous scope and recompute only on change; remember to invalidate on theme switch.
+   Note `folds.cc:367` is a fallback that only runs when no folding pattern matched, and
+   `settings.cc:147` is **not** the same defect — its `clear()` fires only on an explicit
+   `sections(NULL_STR)` flush, not per lookup. A survey called it a defect; reading it says otherwise.
 3. **Then the `-Os` -> `-O2` experiment** (`Xcode/Base.xcconfig`), both builds measured back to back.
 4. Small dead-code sweep: 3 dead `@available` guards (`fs_cache.mm:66,217`,
    `OakDocumentView.mm:336`) and 4 uncompiled utilities (`gtm.cc`, `indent.cc`, `pretty_plist.cc`,
