@@ -2,7 +2,9 @@ Title: Release Notes
 
 # Changes
 
-## Unreleased
+## 2026-08-16 (v3.0.0-revived.23)
+
+Every material surface in the application now uses the macOS 26 glass material.
 
 ### Changed
 
