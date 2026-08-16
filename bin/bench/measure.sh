@@ -20,15 +20,23 @@ DYLIBS=$(otool -L "$BIN" | tail -n +2 | grep -c '@rpath\|@loader_path' || true)
 LAUNCH_MS="not measured (Gatekeeper)"
 RSS_MB="not measured (Gatekeeper)"
 
-# official and undead (and, on a developer's own Mac, a real installed
-# TextMate) all ship the identical CFBundleIdentifier com.macromates.TextMate.
 # An Apple Event addressed "by id" resolves to whichever process currently
 # owns that id system-wide, not necessarily the one this script launched at
-# $APP. Detect any *other* process with the same executable name before
-# trusting an id-addressed event to land on our own instance: a real
-# session the user has open must never be sent a quit, and the readiness
-# poll must never be allowed to answer from the wrong process and produce a
-# plausible but wrong LAUNCH_MS.
+# $APP, so a bundle-id collision produces a plausible but wrong LAUNCH_MS.
+#
+# There are two lineages and they no longer share an id: official and undead
+# ship com.macromates.TextMate, this fork ships com.shelbydenike.TextMate
+# (verified 2026-08-16 -- an earlier version of this comment claimed all
+# three shared the macromates id, which is no longer true). The collision
+# that actually bites now is same-lineage: a bin/deploy-local copy in
+# /Applications carries the identical id to the build being measured, and
+# Launch Services resolves by id, not by path. That is what defeated an
+# Instruments `xctrace --launch` run on 2026-08-16, which silently profiled
+# the installed copy instead of the build it was pointed at.
+#
+# Detection below is by executable *name*, not by id, so it catches both
+# cases: a real session the user has open must never be sent a quit, and the
+# readiness poll must never be allowed to answer from the wrong process.
 other_instance_pid() {
 	local exe p cmd
 	exe=$(basename "$BIN")
