@@ -71,6 +71,16 @@ namespace scope
 			} while(ws());
 
 			res.anchor_to_eol = parse_char("$");
+
+			// The first (leftmost/“root-side”) scope is whichever component
+			// does_match tries to match last (it walks the candidate scope from
+			// leaf to root). A literal (no '*') first component is a necessary
+			// condition — it must dotted-prefix some node in the chain, root or
+			// not, since an unanchored path may match starting below the root
+			// (e.g. an embedded language) — see match.cc for the check itself.
+			if(!res.scopes.empty() && res.scopes.front().atoms.find('*') == std::string::npos)
+				res.root_prefix = res.scopes.front().atoms;
+
 			return true;
 		}
 
