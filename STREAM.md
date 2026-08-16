@@ -204,6 +204,42 @@ non-language-rooted selectors must stay in every bucket, so expect ~2.5-3x on th
 more. Bigger win, bigger risk: stop computing the symbol list synchronously during the initial parse
 at all.
 
+### DEFERRAL SURVEY — what is and is not on the critical path
+
+Full survey at `$CLAUDE_JOB_DIR/tmp/deferral-survey.md`. Headlines:
+
+**Parsing is already off the main thread; the expensive part is not.** `initiate_repair`
+(`parsing.cc:55`) dispatches grammar parsing to a global queue, but the completion is bounced back
+via `CFRunLoopPerformBlock` to the **main** run loop every ~10-20 lines, and that completion is what
+runs `did_parse` -> `symbols_t::did_parse` -> the settings lookups. So millions of selector matches
+land on the main thread in thousands of slices, for the whole file.
+
+**The symbol list is genuinely deferrable.** Every consumer that can block is user-initiated
+(Jump to Symbol, the status-bar popup, QuickLook), and they already call `wait_for_repair()`
+themselves before reading. The only consumer firing automatically at open is `updateSymbol`
+(`OakTextView.mm:3587`), a cheap non-blocking `upper_bound` read. So `symbols_t::did_parse` computes
+the full cost for every buffer whether or not anything ever asks. **Not yet implemented** — it is a
+visible behaviour change (the status-bar symbol would be empty until first requested), so it needs
+the maintainer's call.
+
+**The whole file is parsed at open, not the visible region** — `set_grammar` marks the entire buffer
+dirty (`buffer.cc:202`) and batching stops at EOF, never at the viewport.
+
+**Launch re-parses restored documents.** A `sample` of launch: 241 samples in `initiate_repair`,
+164 in `update_scopes`, against 97 for all of `applicationWillFinishLaunching:` and 84 for
+`restoreSession`. So launch cost is dominated by re-parsing whatever was open at quit, not by
+bundle or plugin loading. Undetermined: whether background tabs load eagerly too.
+
+**Checked and NOT worth pursuing:** the unconditional `createBundlesIndex:` after `cache.load()`
+(`BundlesManager.mm:969`) looks like a wasteful rebuild but the cache makes the walk cheap and the
+profile agrees it is minor; `layout_t`'s glyph layout is already correctly viewport-bounded
+(`layout.cc:410-420`) — only the row-splitting pass is whole-buffer.
+
+**Rust/Swift would not help.** The cost is ~3.25M selector evaluations; a rewrite runs the same
+number with modestly better codegen, while adding a second toolchain to a build Phase 2 deliberately
+unified, and Swift/C++ interop still handles the templated `oak::basic_tree_t` / scope node graphs
+poorly. Algorithm beats language here.
+
 ### A MEASUREMENT TRAP THAT INVALIDATED TWO NUMBERS
 
 **TextMate restores previously-open documents at launch.** An ad-hoc timing loop that does

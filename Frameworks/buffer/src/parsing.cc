@@ -1,5 +1,6 @@
 #include "buffer.h"
 #include "meta_data.h"
+#include <bundles/bundles.h>
 
 namespace ng
 {
@@ -53,6 +54,31 @@ namespace ng
 				CFRunLoopRef runLoop = CFRunLoopGetCurrent();
 				dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 					result_t result = handle_request(grammarRef, state, line, { from, to });
+
+					// Warm the bundle settings cache for the scopes just produced, while
+					// still on this background queue.
+					//
+					// The main-thread completion below fans out to symbols_t::did_parse
+					// (symbols.cc:111), which asks for the “showInSymbolList” setting once
+					// per distinct scope. The first time a scope is seen that is a cache
+					// miss, and a miss costs a scope-selector match against every settings
+					// item declaring the key — 53 of them as installed. Instrumented on a
+					// real 1 MB C++ file: 61,346 misses, so ~3.25M selector matches, all
+					// landing on the main thread in ~10-20 line slices for the whole file.
+					//
+					// bundles::value_for_setting is mutex-protected, so populating it from
+					// here is safe and changes nothing semantically: the same lookups give
+					// the same answers in the same order, the main thread just finds hits
+					// instead of doing the work.
+					scope::scope_t previous;
+					for(auto const& pair : result.scopes)
+					{
+						if(pair.second == previous)
+							continue;
+						previous = pair.second;
+						bundles::value_for_setting("showInSymbolList", pair.second);
+					}
+
 					CFRunLoopPerformBlock(runLoop, kCFRunLoopCommonModes, ^{
 						if(bufferRef.lock())
 						{
