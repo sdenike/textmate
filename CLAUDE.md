@@ -58,18 +58,13 @@ bin/deploy-local                   # Install the built app to /Applications, rep
 xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build
 ```
 
-**Prefer `bin/build` over bare `xcodebuild`.** Two environment problems break Xcode's Ruby-based
-script phases (`bin/gen_test`, `bin/gen_html`, `bin/gen_credits.rb` all still shell out to system
-Ruby) with errors that point at the wrong culprit, and `bin/build` handles both:
-
-1. Ruby version managers (chruby, rbenv, rvm) export `GEM_HOME`/`GEM_PATH`. The build's helper
-   scripts run under system Ruby 2.6 via `#!/usr/bin/env ruby` and then try to dlopen native gems
-   built for a different Ruby, failing with `Symbol not found: _rb_cArray (LoadError)`. That reads
-   like a broken build; it is a leaked shell environment.
-2. `bin/gen_credits.rb` opens a DBM cache at `~/Library/Caches/com.macromates.TextMate/githubcredits.db`.
-   If any earlier build ran under `sudo`, that file is root-owned and `DBM.new` fails `EACCES` even
-   though the directory is yours. Removing it needs write permission on the directory, not the file,
-   so no `sudo` is required to clear it.
+**Prefer `bin/build` over bare `xcodebuild`.** An environment problem breaks Xcode's Ruby-based
+script phases (`bin/gen_test` and `bin/gen_html` still shell out to system Ruby) with an error that
+points at the wrong culprit, and `bin/build` guards against it: Ruby version managers (chruby,
+rbenv, rvm) export `GEM_HOME`/`GEM_PATH`. The build's helper scripts run under system Ruby 2.6 via
+`#!/usr/bin/env ruby` and then try to dlopen native gems built for a different Ruby, failing with
+`Symbol not found: _rb_cArray (LoadError)`. That reads like a broken build; it is a leaked shell
+environment.
 
 Build output goes to `~/build/textmate-revived/xcode` — `SYMROOT`/`OBJROOT`/`SHARED_PRECOMPS_DIR`
 are overridden in `Xcode/Base.xcconfig` because xcodebuild otherwise writes a launchable
