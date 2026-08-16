@@ -240,6 +240,43 @@ number with modestly better codegen, while adding a second toolchain to a build 
 unified, and Swift/C++ interop still handles the templated `oak::basic_tree_t` / scope node graphs
 poorly. Algorithm beats language here.
 
+### DEFERRING THE SYMBOL LIST DOES NOT HELP — tried twice, do not try a third time
+
+The maintainer's proposal — draw the window first, fill the symbol list in behind — was implemented
+twice, correctly, and **measured no improvement either time**. The implementation was discarded.
+
+**Attempt 1, fixed delay.** `symbols_t` disabled during load, accumulating parsed ranges, flushed by
+a `dispatch_after` a few hundred ms after load. Result: `5820 -> 5981 ms`, flat. Instrumentation
+showed why: the flush fired with only **~80 of ~4000+ chunks** pending, so 98% of the file still
+computed inline. A fixed delay cannot work against a parse that runs 5-10 seconds.
+
+**Attempt 2, debounce plus sliced catch-up.** Flush re-armed on every chunk and fired only after
+250 ms of no parsing, so the whole initial parse was deferred; catch-up processed in bounded slices
+(300 scopes) re-dispatched to the main queue so the freeze could not simply move to the end.
+Lifetime via `weak_ptr<symbols_t>` + `enable_shared_from_this`. Correctness verified: 6 slices,
+`_symbols` growing monotonically, `symbols()` returning the complete list.
+
+```
+time-to-responsive   before median 471 ms   after median 466 ms   (10 runs/side)
+open (quiescence)    before median 5200 ms  after median 5473 ms  (flat within noise)
+```
+
+**Why it cannot help: the parser already yields.** `initiate_repair` (`parsing.cc`) bounces its
+completion through `CFRunLoopPerformBlock` every ~10-20 lines, so the main thread was already
+answering Apple Events in ~470 ms *before any change*. There is no monolithic freeze to break up —
+the work was already arriving in small slices. Deferral reschedules work that was never blocking.
+
+`Ruling: the remaining cost is the total amount of work, not its scheduling. Stop trying to move it;
+make it smaller. The one lever left is the root-atom pre-filter.`
+
+**Also learned: `measure-open.sh`'s metric cannot show a deferral win at all**, because it waits for
+CPU quiescence, which includes deferred work by definition. `bin/bench/measure-responsive.sh` was
+added for this — it measures how long the main thread stays too busy to answer a bounded Apple
+Event, requiring three consecutive fast replies so a lull between chunks cannot fake success.
+**It contains a bash 3.2 workaround**: macOS's stock `/bin/bash` is 3.2 and its parser fails on
+`case` inside `$( ... | while ... )` with ``syntax error near `;;'`` — fine under Homebrew bash 5.x,
+broken exactly where the harness runs. The `case` lives in a named function for that reason.
+
 ### A MEASUREMENT TRAP THAT INVALIDATED TWO NUMBERS
 
 **TextMate restores previously-open documents at launch.** An ad-hoc timing loop that does
