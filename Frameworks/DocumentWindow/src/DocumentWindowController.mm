@@ -890,6 +890,17 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 		[self takeTabsToTearOffFrom:[NSIndexSet indexSetWithIndex:_selectedTabIndex]];
 }
 
+- (void)tabBarView:(OakTabBarView*)aTabBarView didDragTabOutOfWindowAtIndex:(NSUInteger)anIndex screenPoint:(NSPoint)aPoint
+{
+	// Dragging a tab out of the window gives it a window of its own -- the same
+	// thing moveDocumentToNewWindow: and double-clicking a tab already do.
+	//
+	// The count guard matters as much here as there: tearing off the only tab
+	// would empty this window and open a near-identical one, so it is a no-op.
+	if(_documents.count > 1)
+		[self takeTabsToTearOffFrom:[NSIndexSet indexSetWithIndex:anIndex]];
+}
+
 - (IBAction)mergeAllWindows:(id)sender
 {
 	NSMutableArray<OakDocument*>* documents = [_documents mutableCopy];

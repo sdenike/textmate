@@ -1018,7 +1018,22 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 
 - (void)draggingSession:(NSDraggingSession*)session endedAtPoint:(NSPoint)screenPoint operation:(NSDragOperation)operation
 {
+	NSInteger draggedIndex = self.draggedTabIndex;
 	self.draggedTabIndex = -1;
+
+	// A tab that no tab bar accepted, released outside the window it came from,
+	// means the user pulled it out to give it a window of its own.
+	//
+	// Both conditions are needed. NSDragOperationNone on its own also covers a
+	// drop on some spot inside the window that refused it, and dropping a tab
+	// back onto its own window should do nothing at all.
+	if(operation != NSDragOperationNone || draggedIndex == -1)
+		return;
+	if(NSPointInRect(screenPoint, self.window.frame))
+		return;
+
+	if([self.delegate respondsToSelector:@selector(tabBarView:didDragTabOutOfWindowAtIndex:screenPoint:)])
+		[self.delegate tabBarView:self didDragTabOutOfWindowAtIndex:draggedIndex screenPoint:screenPoint];
 }
 
 // ========================
