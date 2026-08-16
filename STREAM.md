@@ -160,13 +160,62 @@ destroying itself. That is the thrash hypothesis confirmed directly.
 Honest scope of the win: the **first** file opened in a session is unchanged at ~16 s; every file
 after it is **2.7x faster**. Provenance verified — the bound-only build has 0 `key_hash` symbols.
 
-**5.8 s for a 1 MB file is still bad.** The deeper cost is untouched: `symbols_t::did_parse`
-(`symbols.cc:111`) queries the bundle system per distinct scope on every parse pass. Fixing the
-first-open case means not making those queries at all, not caching them better.
+**5.8 s for a 1 MB file is still bad.** Root cause now established by instrumentation, below.
 
-**A further attempt, untested:** memoize the serialized string *per scope node* so `to_s` is paid
-once per distinct scope instead of once per call, keeping the well-distributed string hash. Worth
-little on its own given the above, but it compounds. Measure it; do not assume it.
+### ROOT CAUSE OF THE REMAINING COST — instrumented, not inferred
+
+Temporary counters were added to `value_for_setting` (calls, misses, clears, per-setting breakdown),
+built, and run against two 1 MB files. **The instrumentation has been removed; the tree is back at
+the committed 50000 bound.**
+
+| setting | synthetic 1 MB | real 1 MB C++ (28,510 lines of this repo) |
+|---|---|---|
+| `showInSymbolList` | 47,684 calls / **38,374 misses** | 114,606 calls / **61,346 misses** |
+| `softWrap` | 150,371 calls / 52 misses | 280,369 calls / 74 misses |
+| `foldingStartMarker` | 109 calls / 50 misses | 218 calls / 73 misses |
+| totals | 200,000 calls / 40,132 misses / 0 clears | 400,000 calls / 64,882 misses / **1 clear** |
+
+**The arithmetic.** 53 bundle settings items declare `showInSymbolList`, with 53 distinct scope
+selectors, and `cache_search` evaluates every one of them per miss. So a real 1 MB file costs
+**61,346 x 53 = ~3.25 million scope-selector evaluations**, on the main thread.
+
+**Why so many distinct scopes:** nesting *extends the scope path*, so deeply nested code produces
+unboundedly many distinct scope strings — roughly two new scopes per line of real C++. Caching
+cannot fix this; the misses are genuinely new lookups. Note the real file **cleared even the 50000
+bound once**, so real source is worse than the synthetic test file, not better.
+
+**Ruled out by the same data — do not re-investigate:**
+
+- `folds.cc` — 218 calls, not per-line. An earlier survey and my own per-line theory were both wrong.
+- `softWrap` — 280,369 calls but only 74 misses, so essentially all cache hits. Matches the sample
+  showing almost no time in `to_s`.
+- `item_t::does_match` (`item.cc`) — lean, a multimap range scan, no allocations.
+- `scope_t::operator==` against `scope::wildcard` — short-circuits in O(1) when the wildcard node is
+  null, so the guard before the matcher is not the cost.
+
+The cost is genuinely `scope::selector_t::does_match`, which the sample independently confirms
+(8,237 of 11,344 main-thread samples in `composite_t::does_match` and below).
+
+**Concrete fix design for next session — a root-atom pre-filter.** Selector roots across the 53:
+`source.*` 33, `meta.*` 9, `entity.*` 6, `text.*` 2, `support.*` 1, `constant.*` 1, wildcard 1.
+**35 of 53 are rooted at `source.*`/`text.*`**, so a single atom comparison against the query
+scope's root can reject about two thirds of candidates before running the recursive matcher. The 18
+non-language-rooted selectors must stay in every bucket, so expect ~2.5-3x on the dominant cost, not
+more. Bigger win, bigger risk: stop computing the symbol list synchronously during the initial parse
+at all.
+
+### A MEASUREMENT TRAP THAT INVALIDATED TWO NUMBERS
+
+**TextMate restores previously-open documents at launch.** An ad-hoc timing loop that does
+`open -a`, sleeps, then waits for CPU quiescence measures *session restore*, not the open — and if
+the file is already restored, it returns immediately. That produced a nonsensical **-929 ms** and
+retroactively invalidated two real-file timings taken the same way (118 s and 199 s). Both are
+struck. `bin/bench/measure.sh` and `measure-open.sh` close windows between runs and do not have this
+problem; **use them, and do not hand-roll an open-and-wait loop.**
+
+Consequence: raising the bound 50000 -> 500000 was tried and **reverted**, because its only evidence
+was one of those unsound measurements. The trustworthy numbers today remain the harness ones on the
+synthetic file: 15,559 -> 5,820 ms.
 
 Tests, for the record: `bundles_test` 5/5, `scope_test` 13/13, `buffer_test` 23/26 — the three
 failures are pre-existing spellchecking ones, reproduced with the change stashed out.
