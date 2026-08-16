@@ -64,7 +64,7 @@ For questions about TextMate proper (history, design, upstream behaviour), see t
 You need:
 
  * [Xcode][]         — 26 or later; provides `xcodebuild` and opens `TextMate.xcodeproj`
- * [multimarkdown][] — renders the About, Legal and Contributions pages during the build
+ * [multimarkdown][] — renders the About, Legal and CHANGELOG pages during the build
 
 ```sh
 brew install multimarkdown
