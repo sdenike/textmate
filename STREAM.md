@@ -240,6 +240,29 @@ number with modestly better codegen, while adding a second toolchain to a build 
 unified, and Swift/C++ interop still handles the templated `oak::basic_tree_t` / scope node graphs
 poorly. Algorithm beats language here.
 
+### APPLE SILICON AUDIT — clean apart from three vendored binaries
+
+Asked whether everything is optimised for Apple Silicon. Surveyed, and the answer is mostly yes:
+
+| | |
+|---|---|
+| Compiled architectures | arm64 only; no universal slice in anything we build |
+| x86 intrinsics, `__SSE*`, `__x86_64__` paths | **none anywhere in the tree** |
+| rpath dylibs | 0 — fully static |
+| NEON / Accelerate / SIMD | none used, and none needed: the hot loops chase pointers through scope node chains and AA-tree nodes, which do not vectorise |
+| Vendored universal binaries | **were** shipping 144 KB of dead Intel — fixed, `fa72745c` |
+
+`find_app` 134880->52960, `plist.bundle` 89536->56768, `keychain.bundle` 85648->52880. Enforced in
+`bin/fetch_embedded_bundles.sh` rather than only in the checked-in copies, because a pin bump would
+otherwise silently reintroduce them.
+
+**The one real gap is still `GCC_OPTIMIZATION_LEVEL = s`** in `Xcode/Base.xcconfig` — the build is
+compiled for size, and `-Os` is precisely the setting that suppresses the inlining and unrolling
+that make hot loops fast. It has been the known outstanding lever since early in Phase 7 and is
+**still untested**. Size headroom is comfortable for it: 26,164 KB against `undead`'s 27,928, so a
+10-20% code-growth from `-O2` cannot breach the size gate. That headroom is why the Contributions
+removal was sequenced first.
+
 ### CRASH ON QUIT — the off-thread cache warming was reverted
 
 `938179fa` (warm `value_for_setting`'s cache from the parser's background queue) **crashed the app on

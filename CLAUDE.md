@@ -373,10 +373,15 @@ TextMate is one-bundle-per-repository by design.
 `bin/fetch_embedded_bundles.sh` now also scrubs `src/`. Bundle Support ships `find_app.cc` and a
 `default.rave` there; the prebuilt `find_app` binary ships separately, so they have no runtime
 use, and without the scrub every pin bump silently reintroduced a `.rave` file that `d07cc0c8`
-had deleted. (Note for later: that prebuilt `find_app` is a universal x86_64+arm64 binary we did
-not build. It is vendored upstream content rather than an x86_64 fallback added to our build, so
-it does not breach the arm64-only rule — but now that we own the fork, it could be rebuilt
-arm64-only.)
+had deleted.
+
+**The same script also thins every prebuilt Mach-O in the embedded bundles to arm64.** Upstream
+ships `find_app`, `plist.bundle` and `keychain.bundle` universal, which put 144 KB of dead Intel
+code in the app. These are vendored artifacts we do not compile, so the fetch script is the only
+place the arm64-only rule can be enforced — thinning the checked-in copies alone would be undone by
+the next pin bump, exactly like the `src/` scrub beside it. The pass skips already-thin binaries
+(`lipo` errors on those) and warns rather than failing if a fat binary has no arm64 slice, since
+silently shipping an Intel-only helper is worse than a noisy fetch.
 
 ### Historical — the blocker this replaced
 
