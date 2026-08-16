@@ -240,6 +240,36 @@ number with modestly better codegen, while adding a second toolchain to a build 
 unified, and Swift/C++ interop still handles the templated `oak::basic_tree_t` / scope node graphs
 poorly. Algorithm beats language here.
 
+### CRASH ON QUIT — the off-thread cache warming was reverted
+
+`938179fa` (warm `value_for_setting`'s cache from the parser's background queue) **crashed the app on
+quit** and has been reverted. It bought 8%; it cost a SIGSEGV. Bad trade, and my defect.
+
+```
+Thread 0 (main):    exit -> __cxa_finalize_ranges -> cache_t::~cache_t()      wrappers.cc:190
+Thread 4 (crashed): initiate_repair block -> value_for_setting -> map::find   parsing.cc:79 -> wrappers.cc:211
+EXC_BAD_ACCESS (SIGSEGV) at 0x19bc5
+```
+
+Quitting runs `exit()`, which runs static destructors on the main thread and destroys
+`value_for_setting`'s function-local `static cache_t`. A parse block still in flight on
+`com.apple.root.default-qos` then calls into that cache and reads freed memory.
+
+**The mutex is no defence — the mutex is a member of the object being destroyed.**
+
+**The general rule this violated:** `value_for_setting` had only ever been called from the main
+thread (via the `CFRunLoopPerformBlock` completion), so it could never race static destruction.
+Moving those calls to a background queue turned a single-threaded invariant into a cross-thread one,
+and nothing in the type system or the tests flagged it. **Before calling any function with
+function-local statics from a new thread, check what happens to those statics at `exit()`.**
+
+A targeted fix exists — give the static a deliberately leaked heap allocation
+(`static cache_t& cache = *new cache_t();`) so it is never destroyed, the standard idiom for exactly
+this. It was **not** applied, because `query()`/`cache_search()` reach further statics in
+`query.cc` (`AllItems`, `cache()`) with the same exposure, so fixing one site would likely just move
+the crash. Doing this properly means auditing every static on the bundles query path, and it is not
+worth it for 8%.
+
 ### DEFERRING THE SYMBOL LIST DOES NOT HELP — tried twice, do not try a third time
 
 The maintainer's proposal — draw the window first, fill the symbol list in behind — was implemented
