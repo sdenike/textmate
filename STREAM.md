@@ -4,6 +4,100 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-16 — RESUME HERE: Phase 6 shipped as .23; Phase 7 baselined and already ahead
+
+**Read this first on resume.** Everything below is merged to master and released.
+
+### State
+
+| | |
+|---|---|
+| Released | **v3.0.0-revived.23**, verified: cask SHA256 matched, Developer ID signed, notarized, stapled |
+| Phases done | 0-6 complete. **Phase 6 is closed** — `NSVisualEffectView` appears nowhere in `Frameworks/` or `Applications/` |
+| Phase in progress | **7 — performance.** Baselined, not yet optimised |
+| Phases left | 7, 8 (shared modules), 9 (optional LSP) |
+| Working tree | clean, on `master` |
+
+### Phase 7 baseline — measured today, same machine, same session
+
+```
+| build       | size KB | archs | rpath dylibs | launch ms      | RSS MB |
+| undead      |   27928 | arm64 |            0 | 1141/1160/1110 |    146 |
+| revived.23  |   27820 | arm64 |            0 |  813/ 819/ 824 |    136 |
+```
+
+**We are ~320 ms (28%) faster than `undead` on launch, 10 MB lighter in RSS, and 108 KB smaller.**
+Phase 7's stated gate — "measured improvement over the `undead` baseline on launch time, installed
+size, and large-file open" — is already met on two of three. Large-file open not yet measured.
+
+### The trap that nearly produced the opposite conclusion
+
+Comparing revived.23's ~818 ms against the **Phase 0 baseline document's** figure of 661 ms for
+`undead` shows a 24% *regression*, and that is what I first reported. It is wrong.
+
+`undead` measured **661 ms** at Phase 0 and measures **~1137 ms** on this machine today. Nothing
+about `undead` changed — it is the same notarized binary. The ~475 ms is macOS drift across the
+months between the two measurements, and it dwarfs anything this fork has changed.
+
+`Ruling: every number in docs/benchmarks/2026-08-12-baseline.md is now unusable as a comparison
+point. Phase 7 measures both sides in the same session, on the same machine, or it measures nothing.
+A cross-session comparison here produced a confident 24% regression that was actually a 28%
+improvement -- the sign was wrong, not just the magnitude.`
+
+### Two false starts worth not repeating
+
+- **`measure.sh` printed a skip warning and a number in the same run** (`1178 ms`). Its three
+  bundle-id guards are nested, so that should be impossible — a warning at any level leaves
+  `LAUNCH_MS` as the "not measured" string. Cause not established. The number was contention from my
+  own earlier `open -n` launches; clean re-runs gave a tight 813/819/824. **Treat any `measure.sh`
+  run that prints a warning as void, whatever number follows it.**
+- **`undead` timed out three times, then measured fine on retry** with no change. I wrongly
+  attributed it to an Automation/TCC denial; `osascript` reaches `com.macromates.TextMate` normally
+  when the app is actually running, and both `open -a` and the readiness poll work in isolation. The
+  `-1728` I saw was "no such running app" because I had already killed it. Cause of the original
+  timeout unexplained — possibly first-launch Gatekeeper scanning of a freshly extracted bundle.
+  Kill every TextMate process and re-run before believing a timeout.
+
+### Where the bytes actually are
+
+```
+Contents/Resources      15460 KB   ← 56% of the bundle
+Contents/MacOS           7072 KB
+Contents/Library         2332 KB
+Contents/SharedSupport   2132 KB
+```
+
+The spec's named size levers — dead-strip and LTO tuning — act on `MacOS`, the smaller half.
+`Resources` is more than double it and has not been broken down yet. Do that before tuning link
+flags.
+
+### Maintainer decisions this session
+
+- **The gate is "be fast", not a specific wording.** Asked whether to keep the spec's `undead`
+  comparison or re-base it: *"The original code was slow and clunky, we need to be fast! So whatever
+  we can do to be faster is what we are aiming for, wording is just wording."* Optimise for real
+  speed; do not lawyer the spec's phrasing.
+- Automation permission was offered if needed for benchmarking. It turned out not to be needed.
+- **Georg Seifert (@schriftgestalt), author of upstream PR #1469, has been asked to open a PR with
+  just the UI work.** The maintainer replied to him directly and will say when it arrives. Nothing to
+  do until then.
+- **Session links are no longer added to commits or PR bodies.** Stripped from PRs #12-14. The 53
+  already in `master`'s commit messages are deliberately left alone — removing them rewrites
+  published history, breaks tags `.4`-`.23`, and invalidates clones. Needs an explicit decision.
+
+### Next steps for Phase 7
+
+1. Measure **large-file open** (the third gate metric) — the harness has a method for it; the Phase 0
+   doc says it uses a generated 100 MB file, recorded separately.
+2. Break down the 15,460 KB of `Resources` before touching link flags.
+3. Profile the ~818 ms launch in Instruments to find where the time actually goes, rather than
+   assuming it is the subsystems the spec guessed at.
+4. Then propose targets, against evidence.
+5. Phase 7's own test requirement, per the design doc: benchmark assertions with thresholds that fail
+   CI on regression.
+
+---
+
 ## 2026-08-16 — Phase 6 adoption complete: `NSVisualEffectView` is gone from the tree
 
 **`6c7a46cb`** moves the last six surfaces onto glass — both choosers' footer bars, the Bundles
