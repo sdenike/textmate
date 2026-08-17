@@ -1065,7 +1065,23 @@ static CGFloat const kTabBarTearOffThreshold = 60;
 
 - (NSDragOperation)draggingSession:(NSDraggingSession*)session sourceOperationMaskForDraggingContext:(NSDraggingContext)context
 {
-	return context == NSDraggingContextOutsideApplication ? (NSDragOperationCopy|NSDragOperationGeneric) : (NSDragOperationCopy|NSDragOperationMove|NSDragOperationLink);
+	// Outside this application: nothing. A tab item also writes kUTTypeFileURL
+	// to the pasteboard, so any app that accepts files — Terminal, Finder, a
+	// browser — will take the drop and paste the path. That sets a non-None
+	// operation, and tearing a tab off into its own window requires the
+	// opposite: that no one accepted it. The two cannot both work for one
+	// gesture, and whichever app happened to be behind the window would decide
+	// which you got.
+	//
+	// Tear-off wins, so external destinations see no acceptable operation. The
+	// file URL stays on the pasteboard for in-application destinations, which
+	// are reached through the WithinApplication context below and are
+	// unaffected: OakTextView (drop a tab into text to insert its path) and the
+	// file browser both still work.
+	if(context == NSDraggingContextOutsideApplication)
+		return NSDragOperationNone;
+
+	return NSDragOperationCopy|NSDragOperationMove|NSDragOperationLink;
 }
 
 // Shortest distance from `screenPoint` to the tab bar’s own frame, converted

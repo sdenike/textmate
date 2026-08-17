@@ -23,6 +23,27 @@ Worth cleaning that message up regardless.
 **Merging PR #17 publishes v3.0.0-revived.24**, because `release.yml` fires on a push to `master`
 touching `CHANGELOG.md`. Do not merge casually.
 
+### TEAR-OFF WAS BEING SWALLOWED BY OTHER APPS — fixed
+
+Maintainer: *"When I try to drag a tab off the main window it simply pasted a path into this terminal
+and did not make a new window with that tab."*
+
+Not a bug in the new code — a **fundamental conflict with long-standing upstream behaviour**.
+`OakTabItem` writes `kUTTypeFileURL` to the pasteboard alongside the internal type, and
+`sourceOperationMaskForDraggingContext:` returned `Copy|Generic` for
+`NSDraggingContextOutsideApplication`. So Terminal, Finder or any app that accepts files takes the
+drop and pastes the path — which sets a non-None operation, and tear-off is guarded on
+`operation == NSDragOperationNone`.
+
+**The two cannot both work for one gesture**, and whichever app happened to sit behind the window
+decided which you got. Predates this fork (`503d493f` only moved the file).
+
+`Ruling: maintainer chose tear-off. sourceOperationMaskForDraggingContext: now returns
+NSDragOperationNone for NSDraggingContextOutsideApplication. The file URL stays on the pasteboard --
+in-application destinations go through the WithinApplication context and are unaffected, so dropping
+a tab into OakTextView to insert its path, and onto the file browser, both still work. What is lost
+is dragging a tab into another application to hand it the file.`
+
 ### Tear-off FEEL fixed after live testing (`7af7b720`)
 
 Maintainer tested `f01d67d0` and reported: *"it does work but not very smooth, no indication that its
