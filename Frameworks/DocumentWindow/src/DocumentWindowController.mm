@@ -1877,7 +1877,15 @@ static NSTimeInterval const kWindowMergeHoldDuration = 1.0;
 		[controller showWindow:self];
 		if(screenPointValue)
 			[controller positionWindowNearScreenPoint:screenPointValue.pointValue];
+
+		// closeTabsAtIndexes:...activate: (below) re-selects whatever tab
+		// remains in *this* (source) window and, with activate:YES, makes its
+		// text view first responder -- which lands after showWindow: above
+		// made the new window key, handing focus straight back to this one.
+		// The tear-off then reads as though nothing happened. Re-assert the
+		// new window as key/front as the true last step so it wins.
 		[self closeTabsAtIndexes:indexSet askToSaveChanges:NO createDocumentIfEmpty:YES activate:YES];
+		[controller.window makeKeyAndOrderFront:self];
 	}
 }
 

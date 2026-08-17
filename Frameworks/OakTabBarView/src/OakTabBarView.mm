@@ -216,6 +216,8 @@ static NSString* const OakTabItemPasteboardType = @"com.macromates.TextMate.tabI
 @property (nonatomic) NSTrackingArea* trackingArea;
 @property (nonatomic, getter = isDragging) BOOL dragging;
 @property (nonatomic) BOOL pastTearOffThreshold;
+@property (nonatomic) NSImage* plainDragImage;
+@property (nonatomic) NSImage* tearOffDragImage;
 - (void)didClickCloseButtonForTabView:(OakTabView*)tabView;
 - (void)didClickOverflorButtonForTabView:(OakTabView*)tabView;
 - (NSMenu*)menuForTabView:(OakTabView*)tabView withEvent:(NSEvent*)anEvent;
@@ -1008,11 +1010,51 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 // the distance Safari uses for the same gesture.
 static CGFloat const kTabBarTearOffThreshold = 60;
 
+// A cheap, obviously synthetic stand-in for the plain tab image, swapped in
+// once a drag crosses the tear-off threshold (see
+// draggingSession:movedToPoint:) so the gesture reads as "this becomes a
+// window" instead of looking identical to an ordinary reorder. Deliberately
+// not a snapshot of the real document view -- that would be expensive to
+// produce mid-drag and would make things less smooth, not more.
+- (NSImage*)tearOffDragImageWithTitle:(NSString*)title
+{
+	NSRect const bounds   = NSMakeRect(0, 0, 220, 140);
+	NSRect const titleBar = NSMakeRect(0, NSMaxY(bounds) - 24, NSWidth(bounds), 24);
+
+	NSImage* image = [[NSImage alloc] initWithSize:bounds.size];
+	[image lockFocus];
+
+	NSBezierPath* outline = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(bounds, 0.5, 0.5) xRadius:8 yRadius:8];
+	[NSColor.windowBackgroundColor set];
+	[outline fill];
+
+	[[NSColor colorWithCalibratedWhite:0 alpha:0.12] set];
+	[NSBezierPath fillRect:titleBar];
+	[[NSColor colorWithCalibratedWhite:0 alpha:0.35] set];
+	[outline stroke];
+	[NSBezierPath strokeLineFromPoint:NSMakePoint(NSMinX(titleBar), NSMinY(titleBar)) toPoint:NSMakePoint(NSMaxX(titleBar), NSMinY(titleBar))];
+
+	NSMutableParagraphStyle* paragraph = [NSMutableParagraphStyle new];
+	paragraph.alignment     = NSTextAlignmentCenter;
+	paragraph.lineBreakMode = NSLineBreakByTruncatingTail;
+	NSDictionary* attributes = @{
+		NSFontAttributeName:            [NSFont systemFontOfSize:NSFont.smallSystemFontSize],
+		NSForegroundColorAttributeName: NSColor.secondaryLabelColor,
+		NSParagraphStyleAttributeName:  paragraph,
+	};
+	[(title ?: @"") drawInRect:NSInsetRect(titleBar, 8, 0) withAttributes:attributes];
+
+	[image unlockFocus];
+	return image;
+}
+
 - (void)didDragTabView:(OakTabView*)tabView
 {
 	NSDraggingItem* dragItem = [[NSDraggingItem alloc] initWithPasteboardWriter:tabView.tabItem];
-	if(NSImage* dragImage = tabView.dragImage)
-		[dragItem setDraggingFrame:[self convertRect:tabView.backgroundView.frame fromView:tabView] contents:dragImage];
+	self.plainDragImage = tabView.dragImage;
+	if(_plainDragImage)
+		[dragItem setDraggingFrame:[self convertRect:tabView.backgroundView.frame fromView:tabView] contents:_plainDragImage];
+	self.tearOffDragImage = [self tearOffDragImageWithTitle:tabView.tabItem.title];
 
 	self.draggedTabIndex      = [_tabItems indexOfObject:tabView.tabItem] == NSNotFound ? -1 : [_tabItems indexOfObject:tabView.tabItem];
 	self.dropTabAtIndex       = _draggedTabIndex+1;
@@ -1045,7 +1087,35 @@ static CGFloat const kTabBarTearOffThreshold = 60;
 	// Recorded continuously so the release decision below can reuse it
 	// instead of recomputing against a possibly-different final point --
 	// keeps the outcome consistent with whatever live feedback this drove.
-	self.pastTearOffThreshold = [self distanceFromTabBarToScreenPoint:screenPoint] > kTabBarTearOffThreshold;
+	BOOL const pastThreshold = [self distanceFromTabBarToScreenPoint:screenPoint] > kTabBarTearOffThreshold;
+	BOOL const crossed       = pastThreshold != self.pastTearOffThreshold;
+	self.pastTearOffThreshold = pastThreshold;
+
+	// AppKit's default (YES) animates the drag image back to where the drag
+	// began on a cancelled or failed drop. Tear-off always ends the session
+	// with NSDragOperationNone (see draggingSession:endedAtPoint:operation:
+	// below), which counts as "failed" here, so left at YES the tab image
+	// would rubber-band back into the bar and only then would the new window
+	// appear -- that snap-back was the reported jank. Disabled for as long as
+	// the drag is past the threshold so the released image just stays put.
+	session.animatesToStartingPositionsOnCancelOrFail = !pastThreshold;
+
+	if(!crossed)
+		return;
+
+	// Swap the drag image only on the threshold crossing, not on every move
+	// -- movedToPoint: fires continuously while dragging, and rebuilding an
+	// image each time would itself cause stutter, the very thing this is
+	// fixing. Both images were built once, up front, in didDragTabView:.
+	NSImage* image = pastThreshold ? _tearOffDragImage : _plainDragImage;
+	if(!image)
+		return;
+
+	NSSize const size  = image.size;
+	NSRect const frame = NSMakeRect(screenPoint.x - size.width/2, screenPoint.y - size.height/2, size.width, size.height);
+	[session enumerateDraggingItemsWithOptions:0 forView:nil classes:@[ [NSPasteboardItem class] ] searchOptions:@{ } usingBlock:^(NSDraggingItem* draggingItem, NSInteger idx, BOOL* stop){
+		[draggingItem setDraggingFrame:frame contents:image];
+	}];
 }
 
 - (void)draggingSession:(NSDraggingSession*)session endedAtPoint:(NSPoint)screenPoint operation:(NSDragOperation)operation
@@ -1055,6 +1125,9 @@ static CGFloat const kTabBarTearOffThreshold = 60;
 
 	BOOL pastThreshold = self.pastTearOffThreshold;
 	self.pastTearOffThreshold = NO;
+
+	self.plainDragImage   = nil;
+	self.tearOffDragImage = nil;
 
 	// A tab that no tab bar accepted, released far enough from this tab
 	// bar's own rect, means the user pulled it out to give it a window of
