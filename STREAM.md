@@ -23,6 +23,39 @@ Worth cleaning that message up regardless.
 **Merging PR #17 publishes v3.0.0-revived.24**, because `release.yml` fires on a push to `master`
 touching `CHANGELOG.md`. Do not merge casually.
 
+### Tear-off FEEL fixed after live testing (`7af7b720`)
+
+Maintainer tested `f01d67d0` and reported: *"it does work but not very smooth, no indication that its
+going to create a new window from the tab. And it loses focus so its not obvious what is happening."*
+Three distinct causes:
+
+**Snap-back was the "not smooth".** `NSDraggingSession.animatesToStartingPositionsOnCancelOrFail`
+defaults to **YES** (verified in `NSDraggingSession.h` — note: *not* `NSDragging.h`, which only
+forward-declares the class). Tear-off ends with `NSDragOperationNone`, so AppKit rubber-banded the
+tab image back to the drag's origin and only then showed the new window. Now set to `NO` while past
+the threshold, toggled on transitions only.
+
+**No affordance was my own omission.** The first implementer flagged that it had skipped the
+drag-image change and I accepted that in favour of "threshold correctness". Wrong call — a threshold
+you cannot see is indistinguishable from a bug. The drag image now swaps to a synthetic
+window-shaped image past 60 pt, via
+`enumerateDraggingItemsWithOptions:forView:classes:searchOptions:usingBlock:` plus
+`setDraggingFrame:contents:` (header: *"Any changes made to the properties of the draggingItem are
+reflected in the drag"*). Both images are built **once** in `didDragTabView:` and the enumerate call
+fires only on the threshold transition — `movedToPoint:` runs continuously and rebuilding per-move
+would add the very stutter being removed.
+
+**Focus had a precise cause, not the one I guessed.** `closeTabsAtIndexes:` was already the last
+call; the problem is that its `activate:YES` re-selects a remaining tab in the *source* window via
+`openAndSelectDocument:activate:YES` -> `makeTextViewFirstResponder:`, handing focus back, with
+nothing after it to correct that. Fixed with an explicit `[controller.window makeKeyAndOrderFront:self]`
+as the true final line.
+
+`Note: that agent ran bin/deploy-local, which MOVES the build. /Applications/TextMate.app is now
+the ad-hoc v3.0.0-revived.24 test build and ~/build/.../Release/TextMate.app no longer exists.
+Consequence: Check for Updates will refuse, correctly, because an ad-hoc build has no team
+identifier. brew upgrade --cask textmate-revived restores a signed install.`
+
 ### Tab drag: reviewer feedback fixed (`f01d67d0`)
 
 schriftgestalt on PR #15: *"having the tabs to drag off like that makes it very difficult to
