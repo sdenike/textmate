@@ -53,15 +53,30 @@ CFBundleShortVersionString and binary mtime before believing any GUI verificatio
 (`DocumentWindowController.mm:1849`). `registerForDraggedTypes:` is per-instance and unscoped, so
 AppKit already routes cross-window drags.
 
-### In progress — window-onto-tabbar merge
+### Window-onto-tabbar merge landed (`9e9162fc`) — UNVERIFIED, test this first
 
-Maintainer wants: drag a **whole window** by its title bar over another window's tab bar, hold ~1 s,
-merge its tabs in. Confirmed it is a window being dragged, not a tab.
+Drag a whole window over another window's tab bar, hold 1.0 s, its tabs merge in.
 
-The design problem: `performWindowDragWithEvent:` hands the drag loop to AppKit and yields **no
-progress callbacks**, so the gesture has to be observed indirectly via `NSWindowDidMoveNotification`
-plus a hit-test against other controllers' tab-bar rects. Must not merge on release without the
-hold, or every window moved near a tab bar becomes destructive.
+**Hooked via `windowDidMove:`**, an `NSWindowDelegate` method `DocumentWindowController` already
+conforms to — not `NSNotificationCenter`. `performWindowDragWithEvent:` hands the drag to the window
+server and returns immediately (its own SDK header says so), so there is no completion callback;
+`windowDidMove:` fires continuously during that drag because it is the same underlying mechanism as
+ordinary titlebar dragging.
+
+**The safety gate that makes this non-destructive:** armed only when
+`NSEvent.pressedMouseButtons & 1` — session restore, cascade and zoom all fire `windowDidMove:` too,
+and without that gate restoring a session could silently consolidate windows.
+
+Feedback is a `controlAccentColor` border on the target bar (`OakTabBarView.mergeTargetHighlighted`);
+there is no live `NSDraggingSession` to reuse the existing drop feedback, because a window is moving
+rather than a tab. Merge reuses `insertDocuments:atIndex:selecting:andClosing:` — the same primitive
+single-tab cross-window drop uses — inserting **before** closing the source window, with
+`andClosing:nil` so nothing is discarded.
+
+`Ruling: the one real risk is unverified. mergeIntoWindow: closes the source window while its
+controller still references the documents that just moved, so a document with unsaved changes could
+prompt to save after it has already moved. mergeAllWindows: has always done the same thing, so the
+precedent holds -- but nobody has watched it happen. Test with an unsaved document before shipping.`
 
 ### Open design question, not blocking
 

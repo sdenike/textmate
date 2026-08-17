@@ -30,6 +30,11 @@ Opening a file is substantially faster, and the app is smaller.
   and the helper programs bundled with it are now built for Apple Silicon only,
   where three of them still carried unused Intel code.
 
+* Windows can be consolidated by dragging one over another window's tab bar and
+  holding it there for a moment. The target's tab bar highlights while it waits,
+  and releasing before then does nothing, so an ordinary window move cannot merge
+  anything by accident.
+
 ### Fixed
 
 * Dragging a tab sideways to rearrange it no longer risks pulling it out into a
