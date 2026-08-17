@@ -127,10 +127,17 @@ rather than a tab. Merge reuses `insertDocuments:atIndex:selecting:andClosing:` 
 single-tab cross-window drop uses — inserting **before** closing the source window, with
 `andClosing:nil` so nothing is discarded.
 
-`Ruling: the one real risk is unverified. mergeIntoWindow: closes the source window while its
-controller still references the documents that just moved, so a document with unsaved changes could
-prompt to save after it has already moved. mergeAllWindows: has always done the same thing, so the
-precedent holds -- but nobody has watched it happen. Test with an unsaved document before shipping.`
+**The unsaved-document risk resolves, by design rather than luck.** `windowShouldClose:`
+(`DocumentWindowController.mm:740`) does prompt for any document where `isDocumentEdited == YES` —
+but `mergeIntoWindow:` calls **`[self.window close]`, not `performClose:`**, and AppKit's `close`
+does not invoke `windowShouldClose:`. So no prompt fires for a document that has already moved.
+Ownership has transferred before the close: the target controller retains the `OakDocument`s, so
+`windowWillClose:` setting `self.documents = nil` on the source is harmless. Unsaved state lives in
+the document, not the window, and moves with it.
+
+This is the same `[delegate.window close]` pattern `mergeAllWindows:` has always used, so it is
+consistent with existing behaviour rather than a new assumption. **Still worth exercising once with
+a genuinely dirty buffer** — the reasoning is sound but unobserved.
 
 ### Open design question, not blocking
 
