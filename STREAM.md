@@ -4,7 +4,60 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-17 — RESUME HERE: .24 shipped; Phase 6 found to be incomplete
+## 2026-08-17 — RESUME HERE: QuickLook extension built, needs one human check
+
+Branch `phase-6/quicklook-extension` at `2785d96b`. **Not merged.** Merging publishes
+v3.0.0-revived.25.
+
+### What landed
+
+The dead `TextMateQL.qlgenerator` is gone; `Contents/PlugIns/QuickLookExtension.appex` replaces it.
+Principal class conforms to `QLPreviewingController` and implements
+`providePreviewForFileRequest:completionHandler:`, ported from `GeneratePreviewForURL`'s body with
+the four helpers unchanged. Sandboxed (`app-sandbox` + `files.user-selected.read-only`), matching
+Apple's own template and Safari's shipped `.appex`.
+
+Registration confirmed: `pluginkit -m -p com.apple.quicklook.preview` lists
+`com.shelbydenike.TextMate.QuickLookExtension(3.0.0-revived.24)`.
+
+### Two corrections about the tooling — worth knowing before testing anything QuickLook
+
+**`qlmanage -m plugins` cannot see app extensions at all.** I set that as the verification gate and
+it was the wrong gate. Safari's own `.appex` is equally absent from it; that command's man page
+predates app-extension QuickLook by 14 years. **Use `pluginkit -m -p com.apple.quicklook.preview`.**
+
+**`qlmanage -p` crashes on any `.appex`** — `NSInvalidArgumentException` in
+`EXConcreteExtension makeExtensionContextAndXPCConnectionForRequest:`. Reproduced identically
+against Apple's own `com.apple.osanalytics.IPSExtension`, so it is a broken system tool, not our
+code. There is **no CLI route to prove a preview renders**; Finder's Space-bar preview is the test.
+
+The original "QuickLook is broken" diagnosis still stands: `.qlgenerator` is the legacy type
+`qlmanage -m plugins` *does* enumerate, and it listed every Apple generator while omitting ours.
+
+### THE OPEN QUESTION — one Finder keypress answers it
+
+`initialize()` reads grammars and themes from `~/Library/Application Support/TextMate/` and
+`~/Library/Caches/`. **A sandboxed extension may not reach them**, and the pre-existing
+`fileType == NULL_STR` / `!output` fallback degrades to plain text rather than failing loudly. So:
+
+| Space-bar a `.rb` in Finder | Meaning |
+|---|---|
+| syntax-highlighted, themed | fully working |
+| plain unstyled text | renders, but the sandbox is blocking grammars/themes |
+| nothing, or a generic icon | not rendering |
+
+The middle case is silent and plausible. If it happens, the fix is an entitlement or embedding a
+minimal grammar set — but it has to be observed first.
+
+### If interrupted here
+
+1. Get that Finder check done, then merge (publishes .25).
+2. Phase 6 remainder after that: onboarding as the first SwiftUI island is the cheapest way to prove
+   the `CLANG_ENABLE_MODULES = NO` interaction before committing to the larger islands.
+3. Scope bar and back/forward need **no work** — already done since 2014 and 2018.
+4. Do not adopt `NSRulerView` for the gutter; do not port #1469/#1467.
+
+## 2026-08-17 — .24 shipped; Phase 6 found to be incomplete
 
 ### v3.0.0-revived.24 is out and verified
 

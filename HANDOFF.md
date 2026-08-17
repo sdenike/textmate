@@ -40,19 +40,30 @@ were never started:
 | `NSGlassEffectView` on chrome surfaces | **done** | — |
 | Scope bar | **already done — since 2014** | none |
 | Back/forward navigation | **already done — since 2018** | none |
-| **QuickLook extension** | **BROKEN IN SHIPPED BUILDS** | medium |
+| **QuickLook extension** | **built on `phase-6/quicklook-extension`, unmerged** | done, needs one check |
 | SwiftUI islands: onboarding | not done — no existing implementation | small-medium |
 | SwiftUI islands: Preferences, About, update sheet | not done | large |
 | `NSSplitViewController` sidebar | not started | large — defer |
 | `NSRulerView` gutter | not done | large — **do not do** |
 
-**QuickLook is not deprecated, it is dead.** `qlmanage -m plugins` does not list `TextMateQL` even
-after a forced `qlmanage -r` rescan, though the bundle is on disk. Every QuickLook callback
-`Applications/QuickLookGenerator/src/generate.mm` uses carries
-`API_DEPRECATED(..., macos(10.0, 12.0))` in the current SDK — dead since macOS 12, fourteen majors
-below this fork's floor. Users get no preview today. Migration needs an `app-extension` target type
-this project has never used, a `QLPreviewProvider` principal class, an `NSExtension` Info.plist and
-its own entitlements; the render logic in `generate.mm:190-243` ports across with light changes.
+**QuickLook was dead, and is rebuilt.** The old `.qlgenerator` used callbacks retired at macOS 12 and
+macOS had stopped loading it entirely, so previews silently did not work.
+`Contents/PlugIns/QuickLookExtension.appex` replaces it — sandboxed, conforming to
+`QLPreviewingController`, reusing the old render logic. Built on `phase-6/quicklook-extension`,
+**not merged**.
+
+**Two QuickLook tooling facts that will waste your time otherwise:**
+
+- **`qlmanage -m plugins` cannot see app extensions.** Safari's own `.appex` is absent from it too;
+  the command predates app-extension QuickLook by 14 years. Use
+  `pluginkit -m -p com.apple.quicklook.preview`.
+- **`qlmanage -p` crashes on any `.appex`**, including Apple's own. There is no CLI way to prove a
+  preview renders — Finder's Space-bar preview is the only test.
+
+**Unresolved:** the extension is sandboxed, but `initialize()` reads grammars and themes from
+`~/Library/Application Support/TextMate/`. If the sandbox blocks that, the existing fallback quietly
+degrades to unstyled plain text rather than failing. Space-bar a `.rb` in Finder: highlighted means
+working, plain text means the sandbox is blocking, nothing means not rendering.
 
 **Scope bar and back/forward were never missing.** `OakScopeBarView` dates to 2014 with five live
 callers; `goBack:`/`goForward:` to 2018, wired into the menu. Both are original upstream features
