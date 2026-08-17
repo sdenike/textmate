@@ -33,18 +33,39 @@ Closing it was based on `NSVisualEffectView` being gone from the tree. That is t
 criterion, not the phase**. The spec's Phase 6 paragraph is far wider, and this was found only by
 reading it back when the maintainer asked what was next.
 
-| Spec item | Status |
-|---|---|
-| Tahoe tab bar | done |
-| `NSGlassEffectView` on chrome | done |
-| **QuickLook extension replacing the deprecated generator** | **not done** — still `TextMateQL.qlgenerator` |
-| **SwiftUI islands** (Preferences, About, onboarding, update sheet) via #1467's `OakSwiftUI` bridge | **not done** — **zero `.swift` files in the tree** |
-| `NSRulerView` gutter | not done — zero references |
-| `NSSplitViewController` sidebar | partial — 1 file |
-| Scope bar, back/forward navigation | unclear — references exist, may predate the phase |
+Sized afterwards; full survey at `$CLAUDE_JOB_DIR/tmp/phase6-scope.md`. **Three entries in the first
+version of this table were wrong** and are corrected here.
 
-**QuickLook is the only one with a clock on it.** `.qlgenerator` is deprecated and this fork exists
-to be forward compatible with macOS 26+; the rest is polish.
+| Spec item | Status | Size |
+|---|---|---|
+| Tahoe tab bar | done | — |
+| `NSGlassEffectView` on chrome | done | — |
+| Scope bar | **already done — `OakScopeBarView`, 2014, five live callers** | none |
+| Back/forward navigation | **already done — `goBack:`/`goForward:`, 2018, menu-wired** | none |
+| **QuickLook extension** | **BROKEN IN SHIPPED BUILDS, not merely deprecated** | medium |
+| SwiftUI island: onboarding | not done, and no existing implementation to match | small-medium |
+| SwiftUI islands: Preferences, About, update sheet | not done — ~1,945 lines of working AppKit to reach parity with | large |
+| `NSSplitViewController` sidebar | not started — earlier "partial" was a false positive | large, defer |
+| `NSRulerView` gutter | not done | large, **do not do** |
+
+**QuickLook is dead, not dying.** `qlmanage -m plugins` does not list `TextMateQL` even after a
+forced `qlmanage -r`, though the bundle is on disk. Every callback `generate.mm` uses carries
+`API_DEPRECATED(..., macos(10.0, 12.0))` in the current SDK. **Users have no preview today.**
+
+**Corrections to the earlier table:** scope bar and back/forward were never missing — both predate
+this fork by a decade and match the spec's wording by coincidence. The sidebar's "1 file" was
+`BundleEditor.mm` (2021, upstream), the Bundle Editor's *own* internal split, nothing to do with the
+file browser.
+
+**#1469/#1467 will not port.** #1469 is `+19,490/−5,877` across 550 files and adds whole new
+applications — the Liquid Glass spec already ruled it out as not lifting out as a single piece.
+#1467's `OakSwiftUI` was built against a tree that had deleted `SoftwareUpdate` and `CrashReporter`,
+so its views do not correspond to anything here. Write from scratch.
+
+**Swift is pre-wired but unproven.** `Xcode/Base.xcconfig:59-61` already sets `SWIFT_VERSION = 6.0`,
+commented as being there for exactly these islands. The landmine is `CLANG_ENABLE_MODULES = NO` at
+`:43-57`, marked "REQUIRED off, do not remove" after an xdiff/Darwin module collision — Swift↔ObjC++
+interop normally wants modules on. **Prove that interaction before committing to any SwiftUI work.**
 
 `Ruling: a phase closed against one of its criteria is not a phase closed. Phases 0-5 and 7 stand;
 Phase 6 is reopened as a remainder. Read the spec paragraph before declaring any future phase done,

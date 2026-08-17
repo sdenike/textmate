@@ -34,19 +34,49 @@ criterion, not the phase. The spec's Phase 6 paragraph
 (`docs/superpowers/specs/2026-08-12-textmate-revived-design.md`) is much wider, and several items
 were never started:
 
-| Spec item | Status |
-|---|---|
-| Tahoe tab bar | **done** |
-| `NSGlassEffectView` on chrome surfaces | **done** — nothing references `NSVisualEffectView` |
-| QuickLook **extension** replacing the deprecated generator | **not done** — still ships `Contents/Library/QuickLook/TextMateQL.qlgenerator` |
-| SwiftUI islands: Preferences, About, onboarding, update sheet | **not done** — there are **zero `.swift` files in the tree** |
-| `NSRulerView` gutter | **not done** — zero references |
-| `NSSplitViewController` sidebar | partial — one file references it |
-| Scope bar, back/forward navigation | unclear — some references exist, may predate the phase |
+| Spec item | Status | Size |
+|---|---|---|
+| Tahoe tab bar | **done** | — |
+| `NSGlassEffectView` on chrome surfaces | **done** | — |
+| Scope bar | **already done — since 2014** | none |
+| Back/forward navigation | **already done — since 2018** | none |
+| **QuickLook extension** | **BROKEN IN SHIPPED BUILDS** | medium |
+| SwiftUI islands: onboarding | not done — no existing implementation | small-medium |
+| SwiftUI islands: Preferences, About, update sheet | not done | large |
+| `NSSplitViewController` sidebar | not started | large — defer |
+| `NSRulerView` gutter | not done | large — **do not do** |
 
-**QuickLook is the one with a deadline attached.** `.qlgenerator` is deprecated, and this fork's
-entire premise is forward compatibility with macOS 26+. It is a working-today, gone-tomorrow
-dependency, unlike the rest of the list which is polish.
+**QuickLook is not deprecated, it is dead.** `qlmanage -m plugins` does not list `TextMateQL` even
+after a forced `qlmanage -r` rescan, though the bundle is on disk. Every QuickLook callback
+`Applications/QuickLookGenerator/src/generate.mm` uses carries
+`API_DEPRECATED(..., macos(10.0, 12.0))` in the current SDK — dead since macOS 12, fourteen majors
+below this fork's floor. Users get no preview today. Migration needs an `app-extension` target type
+this project has never used, a `QLPreviewProvider` principal class, an `NSExtension` Info.plist and
+its own entitlements; the render logic in `generate.mm:190-243` ports across with light changes.
+
+**Scope bar and back/forward were never missing.** `OakScopeBarView` dates to 2014 with five live
+callers; `goBack:`/`goForward:` to 2018, wired into the menu. Both are original upstream features
+that happen to match the spec's wording. The spec item is stale, not unbuilt.
+
+**The sidebar entry in an earlier version of this table was a false positive.** The one
+`NSSplitViewController` reference is `BundleEditor.mm` (2021, upstream) — the Bundle Editor's own
+internal split, unrelated to the file browser, which is still hand-sized by frame maths.
+
+**Do not adopt `NSRulerView` for the gutter.** `GutterView` is a ~600-line multi-column
+data-source/delegate design drawing per-line icons; `NSRulerView` models tick marks and has no
+equivalent concept. Adopting it means reimplementing everything inside a worse-fitting container.
+
+**#1469 and #1467 are not portable.** #1469 is `+19,490/−5,877` across 550 files and adds whole new
+applications; the Liquid Glass spec already ruled it out as "a fork-sized rewrite [that] does not
+lift out as a single piece". #1467's `OakSwiftUI` was built against a tree that had *deleted*
+`SoftwareUpdate` and `CrashReporter`, so its views do not correspond to this fork's code. Treat the
+remainder as write-from-scratch.
+
+**Swift groundwork is already laid, with one landmine.** `Xcode/Base.xcconfig:59-61` sets
+`SWIFT_VERSION = 6.0` with a comment naming Phase 6's islands as the first consumer. But
+`CLANG_ENABLE_MODULES = NO` is marked "REQUIRED off, do not remove" (an xdiff/Darwin module
+collision), and Swift↔ObjC++ interop normally wants modules on. That interaction is **untested** and
+is the first thing to prove before committing to any SwiftUI work.
 
 The lesson worth carrying: a phase closed against one of its criteria is not a phase closed. Check
 the spec paragraph, not the thing you happened to be working on.
