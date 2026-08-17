@@ -1,5 +1,6 @@
+#import "QuickLookPreviewProvider.h"
 #import <OSAKit/OSAKit.h>
-#import "plugin.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <buffer/buffer.h>
 #import <bundles/bundles.h>
 #import <file/bytes.h>
@@ -15,15 +16,20 @@
 #import <theme/theme.h>
 #import <OakFoundation/NSString Additions.h>
 
-OAK_EXTERN_C_BEGIN
+// Rendering logic ported from the retired TextMateQL CFPlugIn generator
+// (Applications/QuickLookGenerator/src/generate.mm, generate.mm:1-137 for
+// these four helpers, generate.mm:190-243 for what is now
+// -providePreviewForFileRequest:completionHandler: below). None of it
+// touched the deprecated QuickLook C API -- only the request/reply plumbing
+// did, and that plumbing is what changed.
 
-static void initialize (CFBundleRef generatorBundle)
+static void initialize (NSBundle* extensionBundle)
 {
 	static dispatch_once_t onceToken;
 	dispatch_once(&onceToken, ^{
-		// Load settings
-		NSURL* bundleURL = (__bridge_transfer NSURL*)CFBundleCopyBundleURL(generatorBundle);
-		NSString* parentBundlePath = [[[[[[bundleURL filePathURL] path] stringByDeletingLastPathComponent] stringByDeletingLastPathComponent] stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
+		// extensionBundle is .../TextMate.app/Contents/PlugIns/QuickLookExtension.appex --
+		// three path components up (the .appex itself, PlugIns, Contents) reaches the app bundle.
+		NSString* parentBundlePath = [[[[extensionBundle bundlePath] stringByDeletingLastPathComponent] stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
 		NSBundle* parentBundle = [NSBundle bundleWithPath:parentBundlePath];
 
 		settings_t::set_default_settings_path([[parentBundle pathForResource:@"Default" ofType:@"tmProperties"] fileSystemRepresentation]);
@@ -136,112 +142,61 @@ static NSAttributedString* create_attributed_string (ng::buffer_t& buffer, std::
 	return output;
 }
 
-// =========================
-// = QLGenerator interface =
-// =========================
+// ==========================
+// = QLPreviewingController =
+// ==========================
 
-OSStatus TextMateQuickLookPlugIn_GenerateThumbnailForURL (void* instance, QLThumbnailRequestRef request, CFURLRef url, CFStringRef contentTypeUTI, CFDictionaryRef options, CGSize maxSize)
+@implementation QuickLookPreviewProvider
+
+- (void)providePreviewForFileRequest:(QLFilePreviewRequest*)request completionHandler:(void (^)(QLPreviewReply* _Nullable reply, NSError* _Nullable error))handler
 {
-	initialize(QLThumbnailRequestGetGeneratorBundle(request));
+	initialize([NSBundle bundleForClass:[self class]]);
+
+	NSURL* url = request.fileURL;
+	CFURLRef cfURL = (__bridge CFURLRef)url;
 
 	// Load file
 	ng::buffer_t buffer;
-	setup_buffer(url, buffer, 1024, 50);
-
-	// Check if cancelled
-	if(QLThumbnailRequestIsCancelled(request))
-		return noErr;
-
-	NSFont* font = [NSFont userFixedPitchFontOfSize:4];
-	NSAttributedString* output = create_attributed_string(buffer, kMacClassicThemeUUID, to_s([font fontName]), [font pointSize]);
-
-	// Check if cancelled
-	if(QLThumbnailRequestIsCancelled(request))
-		return noErr;
-
-	// w/e the 3rd parameter, the context will always be a bitmap context
-	CGContextRef bitmapContext = QLThumbnailRequestCreateContext(request, maxSize, true, NULL);
-	if(bitmapContext)
-	{
-		NSGraphicsContext* context = [NSGraphicsContext graphicsContextWithGraphicsPort:bitmapContext flipped:YES];
-		if(context)
-		{
-			[NSGraphicsContext saveGraphicsState];
-			[NSGraphicsContext setCurrentContext:context];
-			CGContextSaveGState(bitmapContext);
-			CGContextTranslateCTM(bitmapContext, 0.0, maxSize.height);
-			CGContextScaleCTM(bitmapContext, 1.0, -1.0);
-			[output drawAtPoint:NSZeroPoint];
-			CGContextRestoreGState(bitmapContext);
-			[NSGraphicsContext restoreGraphicsState];
-		}
-		QLThumbnailRequestFlushContext(request, bitmapContext);
-		CGContextRelease(bitmapContext);
-	}
-
-	return noErr;
-}
-
-void TextMateQuickLookPlugIn_CancelThumbnailGeneration (void* instance, QLThumbnailRequestRef request)
-{
-}
-
-OSStatus TextMateQuickLookPlugIn_GeneratePreviewForURL (void* instance, QLPreviewRequestRef request, CFURLRef url, CFStringRef contentTypeUTI, CFDictionaryRef options)
-{
-	initialize(QLPreviewRequestGetGeneratorBundle(request));
-
-	// Load file
-	ng::buffer_t buffer;
-	std::string fileType = setup_buffer(url, buffer);
+	std::string fileType = setup_buffer(cfURL, buffer);
 
 	if(fileType == NULL_STR)
 	{
 		// We don't know the type, let the system handle it
-		NSData* data = [NSData dataWithContentsOfURL:(__bridge NSURL*)url];
-		QLPreviewRequestSetDataRepresentation(request, (__bridge CFDataRef)data, kUTTypePlainText, nil);
-		return noErr;
+		QLPreviewReply* reply = [[QLPreviewReply alloc] initWithDataOfContentType:UTTypePlainText contentSize:CGSizeZero dataCreationBlock:^NSData* (QLPreviewReply* replyToUpdate, NSError** error) {
+			return [NSData dataWithContentsOfURL:url];
+		}];
+		handler(reply, nil);
+		return;
 	}
-
-	// Check if cancelled
-	if(QLPreviewRequestIsCancelled(request))
-		return noErr;
 
 	NSUserDefaults* userDefaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.shelbydenike.TextMate"];
 	NSString* appearance = [userDefaults stringForKey:@"themeAppearance"];
 	BOOL darkMode = [appearance isEqualToString:@"dark"];
-	if(@available(macos 10.14, *))
-	{
-		if(!darkMode && ![appearance isEqualToString:@"light"]) // If it is not ‘light’ then assume ‘auto’
-			darkMode = [[NSAppearance.currentAppearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]] isEqualToString:NSAppearanceNameDarkAqua];
-	}
+	if(!darkMode && ![appearance isEqualToString:@"light"]) // If it is not ‘light’ then assume ‘auto’
+		darkMode = [[NSAppearance.currentAppearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]] isEqualToString:NSAppearanceNameDarkAqua];
 	NSString* themeUUID = [userDefaults stringForKey:darkMode ? @"darkModeThemeUUID" : @"universalThemeUUID"];
 
-	settings_t const settings = settings_for_path(URLtoString(url), fileType);
+	settings_t const settings = settings_for_path(URLtoString(cfURL), fileType);
 	theme_ptr theme;
 	NSFont* font = [NSFont userFixedPitchFontOfSize:0];
 	NSAttributedString* output = create_attributed_string(buffer, to_s(themeUUID), settings.get(kSettingsFontNameKey, to_s([font fontName])), settings.get(kSettingsFontSizeKey, [font pointSize]), &theme);
 	if(!output)
 	{
-		NSData* data = [NSData dataWithContentsOfURL:(__bridge NSURL*)url];
-		QLPreviewRequestSetDataRepresentation(request, (__bridge CFDataRef)data, kUTTypePlainText, nil);
-		return noErr;
+		QLPreviewReply* reply = [[QLPreviewReply alloc] initWithDataOfContentType:UTTypePlainText contentSize:CGSizeZero dataCreationBlock:^NSData* (QLPreviewReply* replyToUpdate, NSError** error) {
+			return [NSData dataWithContentsOfURL:url];
+		}];
+		handler(reply, nil);
+		return;
 	}
 
-	// Check if cancelled
-	if(QLPreviewRequestIsCancelled(request))
-		return noErr;
-
-	NSData* outputData = [output RTFFromRange:NSMakeRange(0, [output length]) documentAttributes:@{
-		NSDocumentTypeDocumentAttribute:    [NSString stringWithCxxString:fileType],
-		NSBackgroundColorDocumentAttribute: theme ? [NSColor colorWithCGColor:theme->background(fileType)] : [NSColor whiteColor],
+	QLPreviewReply* reply = [[QLPreviewReply alloc] initWithDataOfContentType:UTTypeRTF contentSize:CGSizeZero dataCreationBlock:^NSData* (QLPreviewReply* replyToUpdate, NSError** error) {
+		return [output RTFFromRange:NSMakeRange(0, [output length]) documentAttributes:@{
+			NSDocumentTypeDocumentAttribute:    [NSString stringWithCxxString:fileType],
+			NSBackgroundColorDocumentAttribute: theme ? [NSColor colorWithCGColor:theme->background(fileType)] : [NSColor whiteColor],
+		}];
 	}];
 
-	QLPreviewRequestSetDataRepresentation(request, (__bridge CFDataRef)outputData, kUTTypeRTF, nil);
-	return noErr;
+	handler(reply, nil);
 }
 
-void TextMateQuickLookPlugIn_CancelPreviewGeneration (void* instance, QLPreviewRequestRef request)
-{
-}
-
-OAK_EXTERN_C_END
+@end

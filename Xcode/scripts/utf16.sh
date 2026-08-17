@@ -8,7 +8,7 @@
 #       utf-8 -t utf-16 < $in > $out~ && mv $out~ $out; fi
 #
 # Only real user in this tree: English.lproj/InfoPlist.strings (TextMate,
-# Dialog, Dialog2 -- TextMateQL has no .strings file).
+# Dialog, Dialog2).
 #
 # Usage:
 #   utf16.sh <src> <dst>

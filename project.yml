@@ -2009,13 +2009,12 @@ targets:
         link: false
         copy:
           destination: plugins
-      - target: TextMateQL
+      - target: QuickLookExtension
         embed: true
         codeSign: true
         link: false
         copy:
-          destination: wrapper
-          subpath: "Contents/Library/QuickLook"
+          destination: plugins
       - target: CommitWindowTool
         embed: true
         codeSign: true
@@ -2225,24 +2224,25 @@ targets:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
     dependencies:
       - sdk: Foundation.framework
-  TextMateQL:
-    type: bundle
+  QuickLookExtension:
+    type: app-extension
     platform: macOS
     sources:
-      - path: "Applications/QuickLookGenerator/src/factory.c"
-        compilerFlags: "-include $(SRCROOT)/Shared/PCH/prelude.c"
-      - path: "Applications/QuickLookGenerator/src/generate.mm"
+      - path: "Applications/QuickLookExtension/src/QuickLookPreviewProvider.h"
+      - path: "Applications/QuickLookExtension/src/QuickLookPreviewProvider.mm"
         compilerFlags: "-include $(SRCROOT)/Shared/PCH/prelude.mm"
     settings:
       base:
-        WRAPPER_EXTENSION: qlgenerator
-        INFOPLIST_FILE: "Applications/QuickLookGenerator/Info.plist"
+        PRODUCT_BUNDLE_IDENTIFIER: com.shelbydenike.TextMate.QuickLookExtension
+        INFOPLIST_FILE: "Applications/QuickLookExtension/Info.plist"
         HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff"
         OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
-    postBuildScripts:
-      - script: "\"$SRCROOT/Xcode/scripts/assemble_resources.sh\" TextMateQL"
-        name: "Assemble resources (TextMateQL)"
-        basedOnDependencyAnalysis: false
+    entitlements:
+      path: "Xcode/generated/QuickLookExtension.entitlements"
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.files.user-selected.read-only: true
+        com.apple.security.get-task-allow: false
     dependencies:
       - target: OakFoundation
         link: true
@@ -2293,7 +2293,7 @@ targets:
       - target: xdiff
         link: true
       - sdk: CoreFoundation.framework
-      - sdk: QuickLook.framework
+      - sdk: UniformTypeIdentifiers.framework
       - sdk: AppKit.framework
       - sdk: OSAKit.framework
       - sdk: Cocoa.framework

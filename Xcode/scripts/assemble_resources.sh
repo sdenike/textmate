@@ -1,18 +1,23 @@
 #!/bin/bash
 # Xcode Run Script build-phase interpreter for the `files`/`copy` directives
-# on Task 6's four bundle-like targets (TextMate.app, Dialog.tmplugin,
-# Dialog2.tmplugin, TextMateQL.qlgenerator) -- the resource-assembly half of
-# what rave2yaml's emit_app_target/emit_bundle_target can't express as a
-# native Xcode build phase (there is no XcodeGen equivalent of rave's
-# per-extension `files` transform dispatch over an arbitrary directory
-# glob). Each target's manifest below is a line-by-line transcription of its
-# own default.rave `files`/`copy` directives, verified by hand against the
-# source file (same rationale as bin/rave2yaml's VENDOR_EXTRA/EMBED tables:
-# this shape is a one-off for four targets, not worth teaching the generic
-# parser).
+# on Task 6's three bundle-like targets (TextMate.app, Dialog.tmplugin,
+# Dialog2.tmplugin) -- the resource-assembly half of what rave2yaml's
+# emit_app_target/emit_bundle_target can't express as a native Xcode build
+# phase (there is no XcodeGen equivalent of rave's per-extension `files`
+# transform dispatch over an arbitrary directory glob). Each target's
+# manifest below is a line-by-line transcription of its own default.rave
+# `files`/`copy` directives, verified by hand against the source file (same
+# rationale as bin/rave2yaml's VENDOR_EXTRA/EMBED tables: this shape is a
+# one-off for three targets, not worth teaching the generic parser).
+#
+# TextMateQL.qlgenerator, the fourth target this comment used to name, was
+# retired for QuickLookExtension.appex (Phase 6): a modern app-extension
+# target with no rave heritage, so it needs none of this -- INFOPLIST_FILE
+# uses native Xcode `$(VAR)` substitution and there is no other resource to
+# assemble, so it carries no postBuildScripts entry at all.
 #
 # NOT this script's job: embedding another target's OWN build product
-# (@PrivilegedTool, @mate, @tm_query, @Dialog, @Dialog2, @TextMateQL,
+# (@PrivilegedTool, @mate, @tm_query, @Dialog, @Dialog2, @QuickLookExtension,
 # @tm_dialog, @tm_dialog2) -- native `dependencies: embed: true, copy:
 # {destination, subpath}` (project.yml) -- or Entitlements.plist (rave2yaml's
 # native `entitlements:` key writes that one at `xcodegen generate` time, not
@@ -34,10 +39,10 @@
 # invocation CompileXib uses (bin/rave:650-659, IB_FLAGS from default.rave:18).
 #
 # Usage (from a project.yml postBuildScripts `script:`):
-#   "$SRCROOT/Xcode/scripts/assemble_resources.sh" <TextMate|Dialog|Dialog2|TextMateQL>
+#   "$SRCROOT/Xcode/scripts/assemble_resources.sh" <TextMate|Dialog|Dialog2>
 set -euo pipefail
 
-name="${1:?usage: assemble_resources.sh <TextMate|Dialog|Dialog2|TextMateQL>}"
+name="${1:?usage: assemble_resources.sh <TextMate|Dialog|Dialog2>}"
 : "${SRCROOT:?assemble_resources.sh must run as an Xcode build-phase script}"
 : "${TARGET_BUILD_DIR:?assemble_resources.sh must run as an Xcode build-phase script}"
 : "${CONTENTS_FOLDER_PATH:?assemble_resources.sh must run as an Xcode build-phase script}"
@@ -79,11 +84,6 @@ assemble_plugin() { # <rave-source-dir>
 	expand_utf16 "$dir/English.lproj/InfoPlist.strings" "$contents/Resources/English.lproj/InfoPlist.strings"
 }
 
-# QuickLookGenerator/default.rave:1-11 -- only `files Info.plist "."`.
-assemble_textmateql() {
-	expand_plist "$SRCROOT/Applications/QuickLookGenerator/Info.plist" "$contents/Info.plist"
-}
-
 # Applications/TextMate/default.rave:26-32, in order (minus Entitlements.plist
 # -- not a files/copy line, and not this script's job, see the file header):
 #   files resources/* icons/*.icns @PrivilegedTool "Resources"
@@ -91,8 +91,7 @@ assemble_textmateql() {
 #   files about/* ../../CHANGELOG.md "Resources/About"
 #   files Info.plist         "."
 #   copy  support/*          "SharedSupport"
-#   copy  @Dialog @Dialog2   "PlugIns"                       (native embed)
-#   copy  @TextMateQL        "Library/QuickLook"             (native embed)
+#   copy  @Dialog @Dialog2 @QuickLookExtension "PlugIns"    (native embed)
 assemble_textmate() {
 	local app="$SRCROOT/Applications/TextMate"
 	local header="$app/templates/header.html" footer="$app/templates/footer.html"
@@ -192,7 +191,6 @@ assemble_textmate() {
 case "$name" in
 Dialog) assemble_plugin PlugIns/dialog-1.x ;;
 Dialog2) assemble_plugin PlugIns/dialog ;;
-TextMateQL) assemble_textmateql ;;
 TextMate) assemble_textmate ;;
 *)
 	echo >&2 "assemble_resources.sh: unknown target '$name'"
