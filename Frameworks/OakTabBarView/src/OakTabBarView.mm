@@ -215,6 +215,9 @@ static NSString* const OakTabItemPasteboardType = @"com.macromates.TextMate.tabI
 @property (nonatomic) NSButton* createNewTabButton;
 @property (nonatomic) NSTrackingArea* trackingArea;
 @property (nonatomic, getter = isDragging) BOOL dragging;
+@property (nonatomic) BOOL pastTearOffThreshold;
+@property (nonatomic) NSImage* plainDragImage;
+@property (nonatomic) NSImage* tearOffDragImage;
 - (void)didClickCloseButtonForTabView:(OakTabView*)tabView;
 - (void)didClickOverflorButtonForTabView:(OakTabView*)tabView;
 - (NSMenu*)menuForTabView:(OakTabView*)tabView withEvent:(NSEvent*)anEvent;
@@ -731,6 +734,7 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 	{
 		self.accessibilityRole  = NSAccessibilityTabGroupRole;
 		self.accessibilityLabel = @"Open files";
+		self.wantsLayer         = YES; // so setMergeTargetHighlighted: has a layer to put a border on
 
 		_minimumTabSize = [NSUserDefaults.standardUserDefaults integerForKey:kUserDefaultsTabItemMinWidthKey];
 		_maximumTabSize = [NSUserDefaults.standardUserDefaults integerForKey:kUserDefaultsTabItemMaxWidthKey];
@@ -999,21 +1003,135 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 // = Drag’n’drop =
 // ===============
 
+// A tab drag must end at least this many points outside the tab bar’s own
+// rect before it counts as pulling the tab out to give it a window of its
+// own, rather than a reorder. Without this, the small vertical wobble in an
+// ordinary left/right reorder drag would tear the tab off; this is roughly
+// the distance Safari uses for the same gesture.
+static CGFloat const kTabBarTearOffThreshold = 60;
+
+// A cheap, obviously synthetic stand-in for the plain tab image, swapped in
+// once a drag crosses the tear-off threshold (see
+// draggingSession:movedToPoint:) so the gesture reads as "this becomes a
+// window" instead of looking identical to an ordinary reorder. Deliberately
+// not a snapshot of the real document view -- that would be expensive to
+// produce mid-drag and would make things less smooth, not more.
+- (NSImage*)tearOffDragImageWithTitle:(NSString*)title
+{
+	NSRect const bounds   = NSMakeRect(0, 0, 220, 140);
+	NSRect const titleBar = NSMakeRect(0, NSMaxY(bounds) - 24, NSWidth(bounds), 24);
+
+	NSImage* image = [[NSImage alloc] initWithSize:bounds.size];
+	[image lockFocus];
+
+	NSBezierPath* outline = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(bounds, 0.5, 0.5) xRadius:8 yRadius:8];
+	[NSColor.windowBackgroundColor set];
+	[outline fill];
+
+	[[NSColor colorWithCalibratedWhite:0 alpha:0.12] set];
+	[NSBezierPath fillRect:titleBar];
+	[[NSColor colorWithCalibratedWhite:0 alpha:0.35] set];
+	[outline stroke];
+	[NSBezierPath strokeLineFromPoint:NSMakePoint(NSMinX(titleBar), NSMinY(titleBar)) toPoint:NSMakePoint(NSMaxX(titleBar), NSMinY(titleBar))];
+
+	NSMutableParagraphStyle* paragraph = [NSMutableParagraphStyle new];
+	paragraph.alignment     = NSTextAlignmentCenter;
+	paragraph.lineBreakMode = NSLineBreakByTruncatingTail;
+	NSDictionary* attributes = @{
+		NSFontAttributeName:            [NSFont systemFontOfSize:NSFont.smallSystemFontSize],
+		NSForegroundColorAttributeName: NSColor.secondaryLabelColor,
+		NSParagraphStyleAttributeName:  paragraph,
+	};
+	[(title ?: @"") drawInRect:NSInsetRect(titleBar, 8, 0) withAttributes:attributes];
+
+	[image unlockFocus];
+	return image;
+}
+
 - (void)didDragTabView:(OakTabView*)tabView
 {
 	NSDraggingItem* dragItem = [[NSDraggingItem alloc] initWithPasteboardWriter:tabView.tabItem];
-	if(NSImage* dragImage = tabView.dragImage)
-		[dragItem setDraggingFrame:[self convertRect:tabView.backgroundView.frame fromView:tabView] contents:dragImage];
+	self.plainDragImage = tabView.dragImage;
+	if(_plainDragImage)
+		[dragItem setDraggingFrame:[self convertRect:tabView.backgroundView.frame fromView:tabView] contents:_plainDragImage];
+	self.tearOffDragImage = [self tearOffDragImageWithTitle:tabView.tabItem.title];
 
-	self.draggedTabIndex = [_tabItems indexOfObject:tabView.tabItem] == NSNotFound ? -1 : [_tabItems indexOfObject:tabView.tabItem];
-	self.dropTabAtIndex  = _draggedTabIndex+1;
+	self.draggedTabIndex      = [_tabItems indexOfObject:tabView.tabItem] == NSNotFound ? -1 : [_tabItems indexOfObject:tabView.tabItem];
+	self.dropTabAtIndex       = _draggedTabIndex+1;
+	self.pastTearOffThreshold = NO;
 
 	[self beginDraggingSessionWithItems:@[ dragItem ] event:self.window.currentEvent source:self];
 }
 
 - (NSDragOperation)draggingSession:(NSDraggingSession*)session sourceOperationMaskForDraggingContext:(NSDraggingContext)context
 {
-	return context == NSDraggingContextOutsideApplication ? (NSDragOperationCopy|NSDragOperationGeneric) : (NSDragOperationCopy|NSDragOperationMove|NSDragOperationLink);
+	// Outside this application: nothing. A tab item also writes kUTTypeFileURL
+	// to the pasteboard, so any app that accepts files — Terminal, Finder, a
+	// browser — will take the drop and paste the path. That sets a non-None
+	// operation, and tearing a tab off into its own window requires the
+	// opposite: that no one accepted it. The two cannot both work for one
+	// gesture, and whichever app happened to be behind the window would decide
+	// which you got.
+	//
+	// Tear-off wins, so external destinations see no acceptable operation. The
+	// file URL stays on the pasteboard for in-application destinations, which
+	// are reached through the WithinApplication context below and are
+	// unaffected: OakTextView (drop a tab into text to insert its path) and the
+	// file browser both still work.
+	if(context == NSDraggingContextOutsideApplication)
+		return NSDragOperationNone;
+
+	return NSDragOperationCopy|NSDragOperationMove|NSDragOperationLink;
+}
+
+// Shortest distance from `screenPoint` to the tab bar’s own frame, converted
+// to screen coordinates. This is zero anywhere over the bar itself (any x,
+// so long as y is within it) and only grows once the point leaves that rect
+// -- measured from the rect rather than its centre so that horizontal travel
+// along the bar, which is exactly what rearranging a tab looks like, never
+// by itself counts toward tearing it off.
+- (CGFloat)distanceFromTabBarToScreenPoint:(NSPoint)screenPoint
+{
+	NSRect rect = [self.window convertRectToScreen:[self convertRect:self.bounds toView:nil]];
+	CGFloat dx = MAX(0, MAX(NSMinX(rect) - screenPoint.x, screenPoint.x - NSMaxX(rect)));
+	CGFloat dy = MAX(0, MAX(NSMinY(rect) - screenPoint.y, screenPoint.y - NSMaxY(rect)));
+	return hypot(dx, dy);
+}
+
+- (void)draggingSession:(NSDraggingSession*)session movedToPoint:(NSPoint)screenPoint
+{
+	// Recorded continuously so the release decision below can reuse it
+	// instead of recomputing against a possibly-different final point --
+	// keeps the outcome consistent with whatever live feedback this drove.
+	BOOL const pastThreshold = [self distanceFromTabBarToScreenPoint:screenPoint] > kTabBarTearOffThreshold;
+	BOOL const crossed       = pastThreshold != self.pastTearOffThreshold;
+	self.pastTearOffThreshold = pastThreshold;
+
+	// AppKit's default (YES) animates the drag image back to where the drag
+	// began on a cancelled or failed drop. Tear-off always ends the session
+	// with NSDragOperationNone (see draggingSession:endedAtPoint:operation:
+	// below), which counts as "failed" here, so left at YES the tab image
+	// would rubber-band back into the bar and only then would the new window
+	// appear -- that snap-back was the reported jank. Disabled for as long as
+	// the drag is past the threshold so the released image just stays put.
+	session.animatesToStartingPositionsOnCancelOrFail = !pastThreshold;
+
+	if(!crossed)
+		return;
+
+	// Swap the drag image only on the threshold crossing, not on every move
+	// -- movedToPoint: fires continuously while dragging, and rebuilding an
+	// image each time would itself cause stutter, the very thing this is
+	// fixing. Both images were built once, up front, in didDragTabView:.
+	NSImage* image = pastThreshold ? _tearOffDragImage : _plainDragImage;
+	if(!image)
+		return;
+
+	NSSize const size  = image.size;
+	NSRect const frame = NSMakeRect(screenPoint.x - size.width/2, screenPoint.y - size.height/2, size.width, size.height);
+	[session enumerateDraggingItemsWithOptions:0 forView:nil classes:@[ [NSPasteboardItem class] ] searchOptions:@{ } usingBlock:^(NSDraggingItem* draggingItem, NSInteger idx, BOOL* stop){
+		[draggingItem setDraggingFrame:frame contents:image];
+	}];
 }
 
 - (void)draggingSession:(NSDraggingSession*)session endedAtPoint:(NSPoint)screenPoint operation:(NSDragOperation)operation
@@ -1021,15 +1139,21 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 	NSInteger draggedIndex = self.draggedTabIndex;
 	self.draggedTabIndex = -1;
 
-	// A tab that no tab bar accepted, released outside the window it came from,
-	// means the user pulled it out to give it a window of its own.
+	BOOL pastThreshold = self.pastTearOffThreshold;
+	self.pastTearOffThreshold = NO;
+
+	self.plainDragImage   = nil;
+	self.tearOffDragImage = nil;
+
+	// A tab that no tab bar accepted, released far enough from this tab
+	// bar's own rect, means the user pulled it out to give it a window of
+	// its own.
 	//
-	// Both conditions are needed. NSDragOperationNone on its own also covers a
-	// drop on some spot inside the window that refused it, and dropping a tab
-	// back onto its own window should do nothing at all.
-	if(operation != NSDragOperationNone || draggedIndex == -1)
-		return;
-	if(NSPointInRect(screenPoint, self.window.frame))
+	// All three conditions matter. NSDragOperationNone on its own also covers
+	// a drop on some spot inside the window that refused it; and a release
+	// close to the bar -- even one that lands outside the window's frame --
+	// is still a rearrange attempt, not a tear-off.
+	if(operation != NSDragOperationNone || draggedIndex == -1 || !pastThreshold)
 		return;
 
 	if([self.delegate respondsToSelector:@selector(tabBarView:didDragTabOutOfWindowAtIndex:screenPoint:)])
@@ -1118,6 +1242,21 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 - (void)concludeDragOperation:(id <NSDraggingInfo>)sender
 {
 	self.dragging = NO;
+}
+
+// Toggle a layer border so a window being held over this tab bar (see
+// DocumentWindowController's window-merge gesture) has something to look
+// at. There is no NSDraggingSession here to hook the existing drop
+// feedback into, since no drag-and-drop is actually in progress -- this is
+// a whole window being moved, not a tab.
+- (void)setMergeTargetHighlighted:(BOOL)flag
+{
+	if(_mergeTargetHighlighted == flag)
+		return;
+	_mergeTargetHighlighted = flag;
+
+	self.layer.borderWidth = flag ? 2 : 0;
+	self.layer.borderColor = NSColor.controlAccentColor.CGColor;
 }
 
 // ==========

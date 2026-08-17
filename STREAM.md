@@ -4,6 +4,729 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-17 — RESUME HERE: tab drag reworked; PR #17 open and blocked on CI
+
+### PR #17 is open and CANNOT merge yet
+
+`phase-7/performance` is pushed; PR #17 is open against `master`. **CI's test job failed** —
+`scm_test` hung and the job hit its 30-minute limit:
+
+```
+Terminate orphan process: pid (24129) (scm_test)
+```
+
+`master`'s own CI was green before this branch, so it is either new or flaky. A rerun was started;
+its result is the gate. Locally `scm_test` exits 0 but prints a hint referencing `ninja scm/coerce`
+— **stale, ninja was removed in Phase 2** — and wants `subversion`, which it skips without.
+Worth cleaning that message up regardless.
+
+**Merging PR #17 publishes v3.0.0-revived.24**, because `release.yml` fires on a push to `master`
+touching `CHANGELOG.md`. Do not merge casually.
+
+### TEAR-OFF WAS BEING SWALLOWED BY OTHER APPS — fixed
+
+Maintainer: *"When I try to drag a tab off the main window it simply pasted a path into this terminal
+and did not make a new window with that tab."*
+
+Not a bug in the new code — a **fundamental conflict with long-standing upstream behaviour**.
+`OakTabItem` writes `kUTTypeFileURL` to the pasteboard alongside the internal type, and
+`sourceOperationMaskForDraggingContext:` returned `Copy|Generic` for
+`NSDraggingContextOutsideApplication`. So Terminal, Finder or any app that accepts files takes the
+drop and pastes the path — which sets a non-None operation, and tear-off is guarded on
+`operation == NSDragOperationNone`.
+
+**The two cannot both work for one gesture**, and whichever app happened to sit behind the window
+decided which you got. Predates this fork (`503d493f` only moved the file).
+
+`Ruling: maintainer chose tear-off. sourceOperationMaskForDraggingContext: now returns
+NSDragOperationNone for NSDraggingContextOutsideApplication. The file URL stays on the pasteboard --
+in-application destinations go through the WithinApplication context and are unaffected, so dropping
+a tab into OakTextView to insert its path, and onto the file browser, both still work. What is lost
+is dragging a tab into another application to hand it the file.`
+
+### Tear-off FEEL fixed after live testing (`7af7b720`)
+
+Maintainer tested `f01d67d0` and reported: *"it does work but not very smooth, no indication that its
+going to create a new window from the tab. And it loses focus so its not obvious what is happening."*
+Three distinct causes:
+
+**Snap-back was the "not smooth".** `NSDraggingSession.animatesToStartingPositionsOnCancelOrFail`
+defaults to **YES** (verified in `NSDraggingSession.h` — note: *not* `NSDragging.h`, which only
+forward-declares the class). Tear-off ends with `NSDragOperationNone`, so AppKit rubber-banded the
+tab image back to the drag's origin and only then showed the new window. Now set to `NO` while past
+the threshold, toggled on transitions only.
+
+**No affordance was my own omission.** The first implementer flagged that it had skipped the
+drag-image change and I accepted that in favour of "threshold correctness". Wrong call — a threshold
+you cannot see is indistinguishable from a bug. The drag image now swaps to a synthetic
+window-shaped image past 60 pt, via
+`enumerateDraggingItemsWithOptions:forView:classes:searchOptions:usingBlock:` plus
+`setDraggingFrame:contents:` (header: *"Any changes made to the properties of the draggingItem are
+reflected in the drag"*). Both images are built **once** in `didDragTabView:` and the enumerate call
+fires only on the threshold transition — `movedToPoint:` runs continuously and rebuilding per-move
+would add the very stutter being removed.
+
+**Focus had a precise cause, not the one I guessed.** `closeTabsAtIndexes:` was already the last
+call; the problem is that its `activate:YES` re-selects a remaining tab in the *source* window via
+`openAndSelectDocument:activate:YES` -> `makeTextViewFirstResponder:`, handing focus back, with
+nothing after it to correct that. Fixed with an explicit `[controller.window makeKeyAndOrderFront:self]`
+as the true final line.
+
+`Note: that agent ran bin/deploy-local, which MOVES the build. /Applications/TextMate.app is now
+the ad-hoc v3.0.0-revived.24 test build and ~/build/.../Release/TextMate.app no longer exists.
+Consequence: Check for Updates will refuse, correctly, because an ad-hoc build has no team
+identifier. brew upgrade --cask textmate-revived restores a signed install.`
+
+### Tab drag: reviewer feedback fixed (`f01d67d0`)
+
+schriftgestalt on PR #15: *"having the tabs to drag off like that makes it very difficult to
+drag-rearrange tabs. Let the tab move horizontally and start the drag off only if the mouse is some
+distance from the tabbar (like Safari is doing it)."*
+
+**The key structural fact:** reorder and tear-off are phases of **one** `NSDraggingSession` started
+at `OakTabBarView.mm:1002`. Tear-off is not a separate gesture — it is the fallback taken only when
+nothing accepted the drop (`operation == NSDragOperationNone`), evaluated once at release. There was
+no live distance signal anywhere in the file.
+
+Fixed by replacing the window-frame test with distance from the **tab bar's own rect**, threshold
+60 pt, measured to the rect not its centre so horizontal travel along the bar contributes nothing.
+`draggingSession:movedToPoint:` records the state continuously, so dragging out and back cancels it.
+
+**Unverified by drag.** This sandbox cannot synthesise a sustained mouse-down/move/up. Four gestures
+need a human: sideways reorder, short drag below the bar, long drag to tear off, drop onto a second
+window's bar.
+
+`Ruling: a previous agent claimed to have verified tab behaviour in the running app, but had
+launched /Applications/TextMate.app -- an older installed release, not its own build. Always confirm
+CFBundleShortVersionString and binary mtime before believing any GUI verification claim.`
+
+### Already working, do not rebuild it
+
+**Dragging a single tab onto another window's tab bar and releasing already merges it** —
+`performDragOperation:` (`OakTabBarView.mm:1093`) to `performDropOfTabItem:fromTabBar:index:toTabBar:index:`
+(`DocumentWindowController.mm:1849`). `registerForDraggedTypes:` is per-instance and unscoped, so
+AppKit already routes cross-window drags.
+
+### Window-onto-tabbar merge landed (`9e9162fc`) — UNVERIFIED, test this first
+
+Drag a whole window over another window's tab bar, hold 1.0 s, its tabs merge in.
+
+**Hooked via `windowDidMove:`**, an `NSWindowDelegate` method `DocumentWindowController` already
+conforms to — not `NSNotificationCenter`. `performWindowDragWithEvent:` hands the drag to the window
+server and returns immediately (its own SDK header says so), so there is no completion callback;
+`windowDidMove:` fires continuously during that drag because it is the same underlying mechanism as
+ordinary titlebar dragging.
+
+**The safety gate that makes this non-destructive:** armed only when
+`NSEvent.pressedMouseButtons & 1` — session restore, cascade and zoom all fire `windowDidMove:` too,
+and without that gate restoring a session could silently consolidate windows.
+
+Feedback is a `controlAccentColor` border on the target bar (`OakTabBarView.mergeTargetHighlighted`);
+there is no live `NSDraggingSession` to reuse the existing drop feedback, because a window is moving
+rather than a tab. Merge reuses `insertDocuments:atIndex:selecting:andClosing:` — the same primitive
+single-tab cross-window drop uses — inserting **before** closing the source window, with
+`andClosing:nil` so nothing is discarded.
+
+**The unsaved-document risk resolves, by design rather than luck.** `windowShouldClose:`
+(`DocumentWindowController.mm:740`) does prompt for any document where `isDocumentEdited == YES` —
+but `mergeIntoWindow:` calls **`[self.window close]`, not `performClose:`**, and AppKit's `close`
+does not invoke `windowShouldClose:`. So no prompt fires for a document that has already moved.
+Ownership has transferred before the close: the target controller retains the `OakDocument`s, so
+`windowWillClose:` setting `self.documents = nil` on the source is harmless. Unsaved state lives in
+the document, not the window, and moves with it.
+
+This is the same `[delegate.window close]` pattern `mergeAllWindows:` has always used, so it is
+consistent with existing behaviour rather than a new assumption. **Still worth exercising once with
+a genuinely dirty buffer** — the reasoning is sound but unobserved.
+
+### Open design question, not blocking
+
+schriftgestalt also objected to tabs in the title bar at all: *"There is not one properer mac app
+that is doing this."* The maintainer has since used it and kept it. Worth a considered decision
+rather than leaving it implicitly settled.
+
+### If interrupted here
+
+1. **Get CI green**, then decide whether to merge PR #17 (which releases .24).
+2. Finish or discard the window-merge gesture.
+3. Get a human to exercise the four tab-drag gestures above.
+4. Phase 8 (shared modules) and Phase 9 (optional LSP) remain.
+
+## 2026-08-16 — Phase 7 closed, released as .24, everything in sync
+
+Phase 7 is done and merged. `HANDOFF.md` is the polished snapshot; this file keeps the evidence.
+
+### Two audits the maintainer asked for, both answered
+
+**The Legal page: all four credits stay.** Onigmo (BSD-2), kvdb (MIT), xdiff (LGPLv2.1) and
+Dialog/Dialog2 (repo GPLv3) are each present, compiled into the app target, linked, **and actively
+called** — `regexp.cc:35` `onig_new()`, `Favorites.mm:15`, `gutter_diff.cc:192` `xdl_diff()`, and the
+two embedded `.tmplugin`s. Each licence carries an attribution clause. The reverse sweep found
+nothing shipped-but-uncredited; the only uncredited LICENSE in the tree is `bin/CxxTest`, which no
+target compiles and no header path references (our runner is a home-grown reimplementation), so it
+needs no credit.
+
+**The `mate` CLI needs no separate optimisation.** `mate`, `tm_query` and `CommitWindowTool` all
+inherit the project-wide flags with **zero overrides** — same `-Os`, thin LTO, dead-stripping,
+arm64-only, hardened runtime as the app. And `mate` is a thin client: it posts a file-open request to
+the running app over a Unix domain socket (`/tmp/textmate-{uid}.sock`, `Applications/mate/src/mate.mm`)
+and does no real work itself, so its own speed is not a lever. It reaches `PATH` via the Terminal
+preferences pane (`TerminalPreferences.mm:134`), offering `/usr/local/bin` or `~/bin`.
+
+### Test baseline — know which failures are expected
+
+- `buffer_test` **23/26**: three pre-existing spellchecking failures at `t_buffer.mm:117,136,151`.
+- `settings_test` **passes in parallel, fails 1/9 under `--no-parallel`** — the documented flake;
+  `t_track_paths.cc` needs real wall-clock time to pass between filesystem operations.
+- scope, bundles, document, regexp, io, text, plist: all pass.
+
+Anything else is a regression.
+
+### If interrupted here
+
+1. Phase 8 (shared modules) and Phase 9 (optional LSP) are what remain.
+2. Before more micro-optimising: **the whole file is parsed at open, not the visible region**
+   (`set_grammar` dirties the entire buffer, `buffer.cc:202`; batching stops at EOF, never at the
+   viewport). That is the next real lever and a bigger change than anything in Phase 7.
+3. The machine drifts badly — identical builds varied 28% across three rounds today. Any further
+   perf work needs a quiet machine or it cannot be measured.
+
+---
+
+## 2026-08-16 — Phase 7, the levers are not where the spec said
+
+Branch **`phase-7/performance`** (4 commits, unpushed). `master` is back at `origin/master`; two
+Phase 7 commits had landed on it directly by mistake and were moved off. No PR yet.
+
+### The two findings that reframe Phase 7
+
+**1. The build is compiled for size, not speed.** `Xcode/Base.xcconfig` sets
+`GCC_OPTIMIZATION_LEVEL = s`. `-Os` is precisely the flag that tells clang to suppress the inlining
+and unrolling that make hot loops fast, and TextMate's hot loops are `oak::basic_tree_t`, the layout
+engine and Onigmo's scanner — what a user feels when typing and scrolling.
+
+Meanwhile the design doc named LTO and dead-stripping as Phase 7's levers. Both were **already on**
+before Phase 7 began (`LLVM_LTO = YES_THIN`, `DEAD_CODE_STRIPPING = YES`). The one flag that
+actually trades speed for size pointed at size, and nobody had looked.
+
+`Not yet tested. -Os -> -O2 must be measured, not assumed -- assuming is what produced the
+wrong-sign benchmark recorded in the entry below.`
+
+**2. Bundle size is dominated by resources, not by binaries.**
+
+```
+55 document .icns   10040 KB   36%      <- largest single category, ~177 KB each
+main TextMate        6040 KB   22%
+Assets.car           2836 KB   10%
+About/Contributions  1536 KB    6%      <- removed today
+QuickLook+Bundles    4464 KB   16%
+everything else      2788 KB   10%
+```
+
+Dead-strip and LTO act on `MacOS/` (7072 KB). `Resources/` is 15460 KB — more than twice that.
+
+**Sequencing that follows from these two:** the size gate had only 224 KB of slack against `undead`
+(27704 vs 27928). `-Os -> -O2` typically costs 10-20% of code size, which on a 6 MB binary would
+blow that gate outright. Shrink first, then spend. Removing Contributions bought 1536 KB of room.
+
+### Done today
+
+| Commit | What |
+|---|---|
+| `3b59b4eb` | Removed the About window's Contributions page, `bin/gen_credits.rb`, its CSS and JS; added a contributors link to `About.md` |
+| `ad635a95` | Dropped stale Contributions references from `bin/build`, `README.md`, CI workflow |
+| `6915872e` | Corrected the fork's bundle id in `measure.sh` and the Phase 0 baseline |
+
+**Why Contributions went, beyond the 1536 KB:** `bin/gen_credits.rb` called `api.github.com`
+*during the build*, making builds non-hermetic and differently broken offline; the About window
+fetched an avatar per contributor over the network when displayed; the page listed every commit in
+the repo, so it grew without bound (26,887 lines). Its removal also deletes the DBM-cache failure
+mode CLAUDE.md documented at length. Contributors are still credited — `About.md` now links
+`/graphs/contributors` and `/commits/master`, which matters because that page was the only place in
+the shipped app the ~26 upstream contributors were named at all (`Legal.md` names *framework*
+authors, a different set).
+
+### Two traps found, both worth not re-walking
+
+**`xctrace --launch <path>` resolves through Launch Services by bundle id, not by the path given.**
+Three Instruments runs aimed at the build tree profiled `/Applications/TextMate.app` instead,
+confirmed from each trace's own `<process path=...>`. The launch profile is therefore **still
+unmeasured**. To fix: copy the build to a scratch path with a distinct `CFBundleIdentifier` so
+Launch Services can resolve it uniquely, then `--launch` that copy.
+
+**The fork's bundle id is `com.shelbydenike.TextMate`, not `com.macromates.TextMate`.** Two
+documents still said otherwise. This inverts which collision to guard against: there is now no
+collision with `official`/`undead` at all, and the one that does bite is a `bin/deploy-local` copy
+in `/Applications` sharing the id with the build under measurement. `measure.sh` itself needed no
+change — it matches on executable name, not id — so the recorded launch numbers stand.
+
+### Two GUI benchmarks cannot run concurrently
+
+I dispatched the launch profiler and the large-file-open harness at the same time; both drive the
+same app, and the profiler correctly stopped when it found the other one's `measure-open.sh` mid-run
+rather than killing a process it had not started. Sequence GUI measurements one at a time.
+
+### THE REAL FINDING — a 1 MB file takes 19-118 seconds to open
+
+Large-file open, the gate metric left unmeasured through six phases, was finally measured. Opening
+a **1 MB** C file pegs the CPU at 100% for **19-118 seconds**. A comment-only 1 MB control file
+takes the same ~90 s, so it is not symbol count. This — not launch time, not bundle size — is what
+"slow and clunky" means.
+
+A 1 ms `sample` of the stalled process puts **1,774 of 2,475 main-thread samples (72%)** here:
+
+```
+ng::buffer_t::initiate_repair -> update_scopes -> did_parse
+  -> ng::symbols_t::did_parse          symbols.cc:111
+    -> bundles::value_for_setting      wrappers.cc:188
+      -> query -> search -> scope::types::path_t::does_match
+```
+
+**Root cause, in one function.** `value_for_setting` already memoizes, with correct invalidation via
+`bundles_did_change`. Both defects are in keying and bounding:
+
+- the cache key was `setting + "\037" + to_s(scope)` — **built on every call, including hits**.
+  `to_s` walks the whole node chain and allocates; `scope::scope_t::to_s_helper` appears ~1,900
+  times in the sampled stacks. Meanwhile `scope_t::hash()` (`scope.cc:178`) is
+  `return node ? node->_hash : 0` — an O(1) read of a field computed once at construction.
+- `if(cache.map.size() > 1000) cache.map.clear()` — **discards the entire cache**, so a large file
+  fills it, wipes it, refills it, degenerating to no caching exactly when caching matters.
+
+### THE FIX WAS TRIED AND IT IS 13x WORSE — do not retry it
+
+Attempted: `std::unordered_map` keyed on `(setting, context_t)` using `scope_t::hash()`, no string
+built at all, bound raised 1000 -> 50000. **Measured, twice, by two operators, on the 1 MB file:**
+
+```
+before (unfixed)   15597 / 15559 / 15405 ms      median 15559 ms   (also 16505/16314/17061 earlier)
+after  (fixed)     timeout:200s x 3              never completed a single timed run
+```
+
+Baseline provenance was verified rather than assumed: `nm` shows **0** `key_hash` symbols in
+`/private/tmp/tm-before` and **5** in `tm-after`, so the two binaries genuinely differ by this
+change and nothing else.
+
+**Why it failed — `scope_t::hash()` is not safe to bucket on.** `scope.cc:16`:
+
+```cpp
+_hash(std::hash<std::string>()(atoms) ^ (parent ? parent->_hash : 0))
+```
+
+XOR is self-cancelling, and scope paths repeat atoms whenever constructs nest — `meta.block.c`
+inside `meta.block.c` is ordinary C. Each repeated pair cancels to zero, so large families of
+distinct scopes collapse onto one hash value. Harmless as a change-detector, which is presumably
+why it survived; fatal as an `unordered_map` key, because entries pile into shared buckets and every
+lookup degenerates to a linear walk resolved by `operator==`. Raising the bound to 50000 made those
+walks fifty times longer.
+
+**The expensive string key was load-bearing.** `std::hash` over the serialized scope distributes
+properly; the cached `_hash` does not.
+
+`Ruling: reverted. Change preserved as stash@{0} and as
+$CLAUDE_JOB_DIR/tmp/cachefix.patch, for reference only -- do not reapply as-is. The 72% hot-path
+diagnosis stands (measured three independent ways); only this remedy is disproven.`
+
+### THEN THE RIGHT EXPERIMENT RAN — bound alone, 2.7x faster
+
+**I had misread my own profile.** Of the 1774 samples in `value_for_setting`, **1770 are below it**
+in `query`/`search`/`does_match` — the *miss* path. Only a handful are in `to_s` and the map lookup.
+The `to_s_helper` frames I seized on were deep in the recursive stack, not the leaf cost. The string
+key was never the bottleneck; **the cache missing was**. The failed experiment changed key *and*
+bound together, and the bad hash swamped whatever the bound bought.
+
+Changing **only** the bound, string key untouched (`wrappers.cc`, 1000 -> 50000):
+
+```
+before (bound 1000)   15597 / 15559 / 15405     median 15559 ms
+after  (bound 50000)  15961 /  5820 /  5802     median  5820 ms
+```
+
+**Read the shape, not the median.** With the old bound all three runs are identical ~15.5 s — the
+cache filled, wiped, and every open started cold. With the bound raised, run 1 is unchanged (~16 s,
+populating the cache) and runs 2-3 drop to 5.8 s. The cache now survives between opens instead of
+destroying itself. That is the thrash hypothesis confirmed directly.
+
+Honest scope of the win: the **first** file opened in a session is unchanged at ~16 s; every file
+after it is **2.7x faster**. Provenance verified — the bound-only build has 0 `key_hash` symbols.
+
+**5.8 s for a 1 MB file is still bad.** Root cause now established by instrumentation, below.
+
+### ROOT CAUSE OF THE REMAINING COST — instrumented, not inferred
+
+Temporary counters were added to `value_for_setting` (calls, misses, clears, per-setting breakdown),
+built, and run against two 1 MB files. **The instrumentation has been removed; the tree is back at
+the committed 50000 bound.**
+
+| setting | synthetic 1 MB | real 1 MB C++ (28,510 lines of this repo) |
+|---|---|---|
+| `showInSymbolList` | 47,684 calls / **38,374 misses** | 114,606 calls / **61,346 misses** |
+| `softWrap` | 150,371 calls / 52 misses | 280,369 calls / 74 misses |
+| `foldingStartMarker` | 109 calls / 50 misses | 218 calls / 73 misses |
+| totals | 200,000 calls / 40,132 misses / 0 clears | 400,000 calls / 64,882 misses / **1 clear** |
+
+**The arithmetic.** 53 bundle settings items declare `showInSymbolList`, with 53 distinct scope
+selectors, and `cache_search` evaluates every one of them per miss. So a real 1 MB file costs
+**61,346 x 53 = ~3.25 million scope-selector evaluations**, on the main thread.
+
+**Why so many distinct scopes:** nesting *extends the scope path*, so deeply nested code produces
+unboundedly many distinct scope strings — roughly two new scopes per line of real C++. Caching
+cannot fix this; the misses are genuinely new lookups. Note the real file **cleared even the 50000
+bound once**, so real source is worse than the synthetic test file, not better.
+
+**Ruled out by the same data — do not re-investigate:**
+
+- `folds.cc` — 218 calls, not per-line. An earlier survey and my own per-line theory were both wrong.
+- `softWrap` — 280,369 calls but only 74 misses, so essentially all cache hits. Matches the sample
+  showing almost no time in `to_s`.
+- `item_t::does_match` (`item.cc`) — lean, a multimap range scan, no allocations.
+- `scope_t::operator==` against `scope::wildcard` — short-circuits in O(1) when the wildcard node is
+  null, so the guard before the matcher is not the cost.
+
+The cost is genuinely `scope::selector_t::does_match`, which the sample independently confirms
+(8,237 of 11,344 main-thread samples in `composite_t::does_match` and below).
+
+**Concrete fix design for next session — a root-atom pre-filter.** Selector roots across the 53:
+`source.*` 33, `meta.*` 9, `entity.*` 6, `text.*` 2, `support.*` 1, `constant.*` 1, wildcard 1.
+**35 of 53 are rooted at `source.*`/`text.*`**, so a single atom comparison against the query
+scope's root can reject about two thirds of candidates before running the recursive matcher. The 18
+non-language-rooted selectors must stay in every bucket, so expect ~2.5-3x on the dominant cost, not
+more. Bigger win, bigger risk: stop computing the symbol list synchronously during the initial parse
+at all.
+
+### DEFERRAL SURVEY — what is and is not on the critical path
+
+Full survey at `$CLAUDE_JOB_DIR/tmp/deferral-survey.md`. Headlines:
+
+**Parsing is already off the main thread; the expensive part is not.** `initiate_repair`
+(`parsing.cc:55`) dispatches grammar parsing to a global queue, but the completion is bounced back
+via `CFRunLoopPerformBlock` to the **main** run loop every ~10-20 lines, and that completion is what
+runs `did_parse` -> `symbols_t::did_parse` -> the settings lookups. So millions of selector matches
+land on the main thread in thousands of slices, for the whole file.
+
+**The symbol list is genuinely deferrable.** Every consumer that can block is user-initiated
+(Jump to Symbol, the status-bar popup, QuickLook), and they already call `wait_for_repair()`
+themselves before reading. The only consumer firing automatically at open is `updateSymbol`
+(`OakTextView.mm:3587`), a cheap non-blocking `upper_bound` read. So `symbols_t::did_parse` computes
+the full cost for every buffer whether or not anything ever asks. **Not yet implemented** — it is a
+visible behaviour change (the status-bar symbol would be empty until first requested), so it needs
+the maintainer's call.
+
+**The whole file is parsed at open, not the visible region** — `set_grammar` marks the entire buffer
+dirty (`buffer.cc:202`) and batching stops at EOF, never at the viewport.
+
+**Launch re-parses restored documents.** A `sample` of launch: 241 samples in `initiate_repair`,
+164 in `update_scopes`, against 97 for all of `applicationWillFinishLaunching:` and 84 for
+`restoreSession`. So launch cost is dominated by re-parsing whatever was open at quit, not by
+bundle or plugin loading. Undetermined: whether background tabs load eagerly too.
+
+**Checked and NOT worth pursuing:** the unconditional `createBundlesIndex:` after `cache.load()`
+(`BundlesManager.mm:969`) looks like a wasteful rebuild but the cache makes the walk cheap and the
+profile agrees it is minor; `layout_t`'s glyph layout is already correctly viewport-bounded
+(`layout.cc:410-420`) — only the row-splitting pass is whole-buffer.
+
+**Rust/Swift would not help.** The cost is ~3.25M selector evaluations; a rewrite runs the same
+number with modestly better codegen, while adding a second toolchain to a build Phase 2 deliberately
+unified, and Swift/C++ interop still handles the templated `oak::basic_tree_t` / scope node graphs
+poorly. Algorithm beats language here.
+
+### THE FAST-REJECT LANDED — 2.3x on a cold open (`72fa771f`)
+
+The one lever that reduces the work rather than moving it. `path_t` precomputes its literal
+(wildcard-free) first scope component at parse time; `does_match` scans the ancestor chain for it
+before running the recursive matcher.
+
+```
+cold 1 MB open   85.6 s -> 37.1 s     2.3x, consistent across two runs
+differential     6,500,000+ comparisons, 0 disagreements
+scope 14/14   bundles 5/5   buffer 23/26 (same pre-existing spellchecking failures)
+```
+
+*(The absolute seconds are far above the 5-14 s measured earlier — the machine was heavily loaded by
+then. The ratio is same-session against the same file, so it is the trustworthy figure.)*
+
+**My design for this was unsound and the implementer caught it.** I specified comparing the query
+scope's **root** atom. But `test_rank`, already in the suite, matches selector `source.php` against a
+scope rooted at `text.html.php` with `source.php` as a *non-root ancestor* — PHP embedded in HTML.
+An unanchored path's first component may match below the root, and every embedded-language grammar
+depends on it. A root-equality reject would have silently broken PHP-in-HTML, JS-in-HTML,
+Ruby-in-ERB. Hence the ancestor-chain scan: O(depth) rather than O(1), still much cheaper than the
+full matcher because it skips the rank and backtrack bookkeeping every caller pays for.
+
+`has_dotted_prefix` is `strncmp` plus a boundary check for `\0` or `.`, so `source.c` matches
+`source.c.foo` but **not** `source.c++` — components compare whole. Getting that wrong would reject
+valid matches.
+
+**Falls back to the full matcher** (always correct, never rejects) for: any `*` in the first
+component, and `group_t` parenthesised sub-selectors entirely, including any negation wrapping a
+group. Negation is handled by gating only the un-negated `path_t` and letting the caller apply the
+negation; comma alternatives are gated per composite.
+
+**The reopen median is flat and that is expected** — reopening the same file in one session hits the
+settings cache almost entirely after the first open, so that metric barely exercises `does_match`.
+Both numbers are recorded rather than only the flattering one.
+
+### `-Os` -> `-O2` MEASURED AND REVERTED — inconclusive, and `-Os` is Apple's own default
+
+The last untested lever from the original Phase 7 plan. Built at `-O2`, measured cold 1 MB opens
+against `-Os`, alternating sides so machine drift hit both equally:
+
+```
+        -Os        -O2       delta
+r1    37045      35676       O2 -1369
+r2    38890      42299       O2 +3409
+r3    47400      35454       O2 -11946
+median 38890     35676
+spread 10355      6845
+```
+
+**The within-build spread is as large as the between-build difference.** `-Os` varied by 10.4 s
+against *itself* across three rounds (37.0 -> 38.9 -> 47.4, drifting monotonically upward as the
+session wore on), which is bigger than any effect being measured. Two of three rounds favour `-O2`
+and its median is 8.3% better, but that cannot be distinguished from drift at this sample size.
+
+Cost side is certain: binary 6184752 -> 6733360 bytes (+8.9%), bundle 26012 -> 26920 KB (+908 KB).
+The size gate would still have passed — 1008 KB under `undead` — so the gate was not the blocker.
+
+`Ruling: reverted. A certain 908 KB for an unmeasurable speed change is a bad trade, and -Os is
+Xcode's own default for Release builds -- it is Apple's deliberate choice, not an oversight
+inherited from upstream, which removes the main argument for switching. Worth one more attempt on a
+quiet machine; the numbers above are the baseline to beat.`
+
+### APPLE SILICON AUDIT — clean apart from three vendored binaries
+
+Asked whether everything is optimised for Apple Silicon. Surveyed, and the answer is mostly yes:
+
+| | |
+|---|---|
+| Compiled architectures | arm64 only; no universal slice in anything we build |
+| x86 intrinsics, `__SSE*`, `__x86_64__` paths | **none anywhere in the tree** |
+| rpath dylibs | 0 — fully static |
+| NEON / Accelerate / SIMD | none used, and none needed: the hot loops chase pointers through scope node chains and AA-tree nodes, which do not vectorise |
+| Vendored universal binaries | **were** shipping 144 KB of dead Intel — fixed, `fa72745c` |
+
+`find_app` 134880->52960, `plist.bundle` 89536->56768, `keychain.bundle` 85648->52880. Enforced in
+`bin/fetch_embedded_bundles.sh` rather than only in the checked-in copies, because a pin bump would
+otherwise silently reintroduce them.
+
+**The one real gap is still `GCC_OPTIMIZATION_LEVEL = s`** in `Xcode/Base.xcconfig` — the build is
+compiled for size, and `-Os` is precisely the setting that suppresses the inlining and unrolling
+that make hot loops fast. It has been the known outstanding lever since early in Phase 7 and is
+**still untested**. Size headroom is comfortable for it: 26,164 KB against `undead`'s 27,928, so a
+10-20% code-growth from `-O2` cannot breach the size gate. That headroom is why the Contributions
+removal was sequenced first.
+
+### CRASH ON QUIT — the off-thread cache warming was reverted
+
+`938179fa` (warm `value_for_setting`'s cache from the parser's background queue) **crashed the app on
+quit** and has been reverted. It bought 8%; it cost a SIGSEGV. Bad trade, and my defect.
+
+```
+Thread 0 (main):    exit -> __cxa_finalize_ranges -> cache_t::~cache_t()      wrappers.cc:190
+Thread 4 (crashed): initiate_repair block -> value_for_setting -> map::find   parsing.cc:79 -> wrappers.cc:211
+EXC_BAD_ACCESS (SIGSEGV) at 0x19bc5
+```
+
+Quitting runs `exit()`, which runs static destructors on the main thread and destroys
+`value_for_setting`'s function-local `static cache_t`. A parse block still in flight on
+`com.apple.root.default-qos` then calls into that cache and reads freed memory.
+
+**The mutex is no defence — the mutex is a member of the object being destroyed.**
+
+**The general rule this violated:** `value_for_setting` had only ever been called from the main
+thread (via the `CFRunLoopPerformBlock` completion), so it could never race static destruction.
+Moving those calls to a background queue turned a single-threaded invariant into a cross-thread one,
+and nothing in the type system or the tests flagged it. **Before calling any function with
+function-local statics from a new thread, check what happens to those statics at `exit()`.**
+
+A targeted fix exists — give the static a deliberately leaked heap allocation
+(`static cache_t& cache = *new cache_t();`) so it is never destroyed, the standard idiom for exactly
+this. It was **not** applied, because `query()`/`cache_search()` reach further statics in
+`query.cc` (`AllItems`, `cache()`) with the same exposure, so fixing one site would likely just move
+the crash. Doing this properly means auditing every static on the bundles query path, and it is not
+worth it for 8%.
+
+### DEFERRING THE SYMBOL LIST DOES NOT HELP — tried twice, do not try a third time
+
+The maintainer's proposal — draw the window first, fill the symbol list in behind — was implemented
+twice, correctly, and **measured no improvement either time**. The implementation was discarded.
+
+**Attempt 1, fixed delay.** `symbols_t` disabled during load, accumulating parsed ranges, flushed by
+a `dispatch_after` a few hundred ms after load. Result: `5820 -> 5981 ms`, flat. Instrumentation
+showed why: the flush fired with only **~80 of ~4000+ chunks** pending, so 98% of the file still
+computed inline. A fixed delay cannot work against a parse that runs 5-10 seconds.
+
+**Attempt 2, debounce plus sliced catch-up.** Flush re-armed on every chunk and fired only after
+250 ms of no parsing, so the whole initial parse was deferred; catch-up processed in bounded slices
+(300 scopes) re-dispatched to the main queue so the freeze could not simply move to the end.
+Lifetime via `weak_ptr<symbols_t>` + `enable_shared_from_this`. Correctness verified: 6 slices,
+`_symbols` growing monotonically, `symbols()` returning the complete list.
+
+```
+time-to-responsive   before median 471 ms   after median 466 ms   (10 runs/side)
+open (quiescence)    before median 5200 ms  after median 5473 ms  (flat within noise)
+```
+
+**Why it cannot help: the parser already yields.** `initiate_repair` (`parsing.cc`) bounces its
+completion through `CFRunLoopPerformBlock` every ~10-20 lines, so the main thread was already
+answering Apple Events in ~470 ms *before any change*. There is no monolithic freeze to break up —
+the work was already arriving in small slices. Deferral reschedules work that was never blocking.
+
+`Ruling: the remaining cost is the total amount of work, not its scheduling. Stop trying to move it;
+make it smaller. The one lever left is the root-atom pre-filter.`
+
+**Also learned: `measure-open.sh`'s metric cannot show a deferral win at all**, because it waits for
+CPU quiescence, which includes deferred work by definition. `bin/bench/measure-responsive.sh` was
+added for this — it measures how long the main thread stays too busy to answer a bounded Apple
+Event, requiring three consecutive fast replies so a lull between chunks cannot fake success.
+**It contains a bash 3.2 workaround**: macOS's stock `/bin/bash` is 3.2 and its parser fails on
+`case` inside `$( ... | while ... )` with ``syntax error near `;;'`` — fine under Homebrew bash 5.x,
+broken exactly where the harness runs. The `case` lives in a named function for that reason.
+
+### A MEASUREMENT TRAP THAT INVALIDATED TWO NUMBERS
+
+**TextMate restores previously-open documents at launch.** An ad-hoc timing loop that does
+`open -a`, sleeps, then waits for CPU quiescence measures *session restore*, not the open — and if
+the file is already restored, it returns immediately. That produced a nonsensical **-929 ms** and
+retroactively invalidated two real-file timings taken the same way (118 s and 199 s). Both are
+struck. `bin/bench/measure.sh` and `measure-open.sh` close windows between runs and do not have this
+problem; **use them, and do not hand-roll an open-and-wait loop.**
+
+Consequence: raising the bound 50000 -> 500000 was tried and **reverted**, because its only evidence
+was one of those unsound measurements. The trustworthy numbers today remain the harness ones on the
+synthetic file: 15,559 -> 5,820 ms.
+
+Tests, for the record: `bundles_test` 5/5, `scope_test` 13/13, `buffer_test` 23/26 — the three
+failures are pre-existing spellchecking ones, reproduced with the change stashed out.
+
+**Three more instances of the same pattern** were found and are NOT yet fixed:
+
+| Site | Defect |
+|---|---|
+| `layout.cc:812` | `scope::to_s(_buffer.scope(0).left)` in the **per-frame draw path** |
+| `folds.cc:367` | scope stringification in fold detection |
+| `settings.cc:147-151` | another self-clearing cache — threshold **64** |
+
+### Verified since
+
+- `bin/build` succeeds with both the Contributions removal and the cache fix applied.
+- Bundle is **26,164 KB**, down from 27,704 — the full 1,540 KB, and now **1,764 KB under
+  `undead`** rather than 224 KB over. Artwork set-difference check prints nothing.
+- `73a3299a` records why the first post-removal measurement showed the bundle getting *larger*:
+  `assemble_resources.sh` copies but never deletes, so an incremental build keeps resources you
+  removed. Delete `Resources/About` before trusting any local size figure.
+
+### If interrupted here
+
+1. **The cache fix is measured, rejected and reverted** — see above. Nothing outstanding on it.
+2. **`layout.cc:812` is the best remaining candidate.** `_theme->background(scope::to_s(_buffer.scope(0).left))`
+   inside `layout_t::draw()`, reached from `OakTextView.mm:432,765,1266` — a scope-chain walk plus a
+   string allocation **on every frame**, for a colour that almost never changes. Cache it against the
+   previous scope and recompute only on change; remember to invalidate on theme switch.
+   Note `folds.cc:367` is a fallback that only runs when no folding pattern matched, and
+   `settings.cc:147` is **not** the same defect — its `clear()` fires only on an explicit
+   `sections(NULL_STR)` flush, not per lookup. A survey called it a defect; reading it says otherwise.
+3. **Then the `-Os` -> `-O2` experiment** (`Xcode/Base.xcconfig`), both builds measured back to back.
+4. Small dead-code sweep: 3 dead `@available` guards (`fs_cache.mm:66,217`,
+   `OakDocumentView.mm:336`) and 4 uncompiled utilities (`gtm.cc`, `indent.cc`, `pretty_plist.cc`,
+   `NewApplication/`). Housekeeping only — none of it ships, so none of it is a speed or size win.
+5. Do not push or open a PR without the maintainer saying so.
+
+---
+
+## 2026-08-16 — Phase 6 shipped as .23; Phase 7 baselined and already ahead
+
+**Read this first on resume.** Everything below is merged to master and released.
+
+### State
+
+| | |
+|---|---|
+| Released | **v3.0.0-revived.23**, verified: cask SHA256 matched, Developer ID signed, notarized, stapled |
+| Phases done | 0-6 complete. **Phase 6 is closed** — `NSVisualEffectView` appears nowhere in `Frameworks/` or `Applications/` |
+| Phase in progress | **7 — performance.** Baselined, not yet optimised |
+| Phases left | 7, 8 (shared modules), 9 (optional LSP) |
+| Working tree | clean, on `master` |
+
+### Phase 7 baseline — measured today, same machine, same session
+
+```
+| build       | size KB | archs | rpath dylibs | launch ms      | RSS MB |
+| undead      |   27928 | arm64 |            0 | 1141/1160/1110 |    146 |
+| revived.23  |   27820 | arm64 |            0 |  813/ 819/ 824 |    136 |
+```
+
+**We are ~320 ms (28%) faster than `undead` on launch, 10 MB lighter in RSS, and 108 KB smaller.**
+Phase 7's stated gate — "measured improvement over the `undead` baseline on launch time, installed
+size, and large-file open" — is already met on two of three. Large-file open not yet measured.
+
+### The trap that nearly produced the opposite conclusion
+
+Comparing revived.23's ~818 ms against the **Phase 0 baseline document's** figure of 661 ms for
+`undead` shows a 24% *regression*, and that is what I first reported. It is wrong.
+
+`undead` measured **661 ms** at Phase 0 and measures **~1137 ms** on this machine today. Nothing
+about `undead` changed — it is the same notarized binary. The ~475 ms is macOS drift across the
+months between the two measurements, and it dwarfs anything this fork has changed.
+
+`Ruling: every number in docs/benchmarks/2026-08-12-baseline.md is now unusable as a comparison
+point. Phase 7 measures both sides in the same session, on the same machine, or it measures nothing.
+A cross-session comparison here produced a confident 24% regression that was actually a 28%
+improvement -- the sign was wrong, not just the magnitude.`
+
+### Two false starts worth not repeating
+
+- **`measure.sh` printed a skip warning and a number in the same run** (`1178 ms`). Its three
+  bundle-id guards are nested, so that should be impossible — a warning at any level leaves
+  `LAUNCH_MS` as the "not measured" string. Cause not established. The number was contention from my
+  own earlier `open -n` launches; clean re-runs gave a tight 813/819/824. **Treat any `measure.sh`
+  run that prints a warning as void, whatever number follows it.**
+- **`undead` timed out three times, then measured fine on retry** with no change. I wrongly
+  attributed it to an Automation/TCC denial; `osascript` reaches `com.macromates.TextMate` normally
+  when the app is actually running, and both `open -a` and the readiness poll work in isolation. The
+  `-1728` I saw was "no such running app" because I had already killed it. Cause of the original
+  timeout unexplained — possibly first-launch Gatekeeper scanning of a freshly extracted bundle.
+  Kill every TextMate process and re-run before believing a timeout.
+
+### Where the bytes actually are
+
+```
+Contents/Resources      15460 KB   ← 56% of the bundle
+Contents/MacOS           7072 KB
+Contents/Library         2332 KB
+Contents/SharedSupport   2132 KB
+```
+
+The spec's named size levers — dead-strip and LTO tuning — act on `MacOS`, the smaller half.
+`Resources` is more than double it and has not been broken down yet. Do that before tuning link
+flags.
+
+### Maintainer decisions this session
+
+- **The gate is "be fast", not a specific wording.** Asked whether to keep the spec's `undead`
+  comparison or re-base it: *"The original code was slow and clunky, we need to be fast! So whatever
+  we can do to be faster is what we are aiming for, wording is just wording."* Optimise for real
+  speed; do not lawyer the spec's phrasing.
+- Automation permission was offered if needed for benchmarking. It turned out not to be needed.
+- **Georg Seifert (@schriftgestalt), author of upstream PR #1469, has been asked to open a PR with
+  just the UI work.** The maintainer replied to him directly and will say when it arrives. Nothing to
+  do until then.
+- **Session links are no longer added to commits or PR bodies.** Stripped from PRs #12-14. The 53
+  already in `master`'s commit messages are deliberately left alone — removing them rewrites
+  published history, breaks tags `.4`-`.23`, and invalidates clones. Needs an explicit decision.
+
+### Next steps for Phase 7
+
+1. Measure **large-file open** (the third gate metric) — the harness has a method for it; the Phase 0
+   doc says it uses a generated 100 MB file, recorded separately.
+2. Break down the 15,460 KB of `Resources` before touching link flags.
+3. Profile the ~818 ms launch in Instruments to find where the time actually goes, rather than
+   assuming it is the subsystems the spec guessed at.
+4. Then propose targets, against evidence.
+5. Phase 7's own test requirement, per the design doc: benchmark assertions with thresholds that fail
+   CI on regression.
+
+---
+
 ## 2026-08-16 — Phase 6 adoption complete: `NSVisualEffectView` is gone from the tree
 
 **`6c7a46cb`** moves the last six surfaces onto glass — both choosers' footer bars, the Bundles

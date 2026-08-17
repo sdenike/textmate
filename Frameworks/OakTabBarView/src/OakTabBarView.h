@@ -11,6 +11,11 @@
 - (void)performClose:(id)sender;
 
 @property (nonatomic) BOOL neverHideLeftBorder;
+
+// Set while another window is being held over this tab bar as a merge
+// target (see DocumentWindowController's window-merge gesture). Purely a
+// visual affordance -- no NSDraggingSession is involved.
+@property (nonatomic, getter = isMergeTargetHighlighted) BOOL mergeTargetHighlighted;
 @end
 
 @protocol OakTabBarViewDelegate <NSObject>

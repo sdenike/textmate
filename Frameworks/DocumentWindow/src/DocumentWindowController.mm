@@ -94,6 +94,9 @@ static void show_command_error (std::string const& message, oak::uuid_t const& u
 
 	NSView*                                _tabBarContainer;
 	NSLayoutConstraint*                    _tabBarLeadingConstraint;
+
+	__weak DocumentWindowController*       _mergeHoverTargetController;
+	NSTimer*                               _mergeHoverTimer;
 }
 @property (nonatomic) NSTitlebarAccessoryViewController* titlebarViewController;
 @property (nonatomic) ProjectLayoutView*          layoutView;
@@ -133,6 +136,12 @@ static void show_command_error (std::string const& message, oak::uuid_t const& u
 
 - (void)takeNewTabIndexFrom:(id)sender;   // used by newDocumentInTab:
 - (void)takeTabsToTearOffFrom:(id)sender; // used by moveDocumentToNewWindow:
+- (void)tearOffTabsAtIndexes:(NSIndexSet*)indexSet nearScreenPoint:(NSValue*)screenPointValue;
+- (void)positionWindowNearScreenPoint:(NSPoint)screenPoint;
+
+- (void)cancelWindowMergeHover;
+- (void)mergeHoverTimerDidFire:(NSTimer*)aTimer;
+- (void)mergeIntoWindow:(DocumentWindowController*)targetController;
 @end
 
 namespace
@@ -356,6 +365,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	if((([self.window styleMask] & NSWindowStyleMaskFullScreen) != NSWindowStyleMaskFullScreen) && !self.window.isZoomed)
 		[NSUserDefaults.standardUserDefaults setObject:NSStringFromRect([self windowFrame]) forKey:@"DocumentControllerWindowFrame"];
 
+	[self cancelWindowMergeHover];
 	[_arrayController unbind:NSContentBinding];
 
 	self.documents           = nil;
@@ -380,6 +390,71 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	// neither an Auto Layout width constraint nor NSViewWidthSizable has any
 	// effect on it -- both measured. So the width is maintained by hand.
 	_tabBarContainer.frameSize = NSMakeSize(NSWidth(self.window.frame), NSHeight(_tabBarContainer.frame));
+}
+
+// How long a dragged window's titlebar must hover over another window's tab
+// bar before its tabs merge into that window -- long enough that a window
+// passing through on its way somewhere else can't trigger it by accident,
+// short enough that a deliberate pause reads as a merge gesture.
+static NSTimeInterval const kWindowMergeHoldDuration = 1.0;
+
+- (void)windowDidMove:(NSNotification*)aNotification
+{
+	if((self.window.styleMask & NSWindowStyleMaskFullScreen) == NSWindowStyleMaskFullScreen)
+		return;
+
+	// performWindowDragWithEvent: (see OakTabView's mouseDragged:) hands the
+	// drag off to the window server and "will return right away" (its own
+	// header comment) -- there is no progress or completion callback to hook.
+	// This is driven off the window's frame changing instead, which is also
+	// how ordinary titlebar dragging works under the hood.
+	//
+	// That notification also fires for programmatic moves -- session restore,
+	// cascading, zoom -- which must never arm the merge timer. Requiring the
+	// left mouse button to actually be down rules those out.
+	if((NSEvent.pressedMouseButtons & 1) == 0)
+	{
+		[self cancelWindowMergeHover];
+		return;
+	}
+
+	NSRect frame        = self.window.frame;
+	NSRect contentRect  = [NSWindow contentRectForFrameRect:frame styleMask:self.window.styleMask];
+	NSRect titleBarRect = frame;
+	titleBarRect.origin.y    = NSMaxY(contentRect);
+	titleBarRect.size.height = NSMaxY(frame) - NSMaxY(contentRect);
+
+	DocumentWindowController* target = nil;
+	for(DocumentWindowController* candidate in SortedControllers())
+	{
+		if(candidate == self || candidate.window.isMiniaturized)
+			continue;
+		if((candidate.window.styleMask & NSWindowStyleMaskFullScreen) == NSWindowStyleMaskFullScreen)
+			continue;
+
+		NSRect tabBarRect = [candidate.tabBarView.window convertRectToScreen:[candidate.tabBarView convertRect:candidate.tabBarView.bounds toView:nil]];
+		if(NSIntersectsRect(titleBarRect, tabBarRect))
+		{
+			target = candidate;
+			break;
+		}
+	}
+
+	if(target != _mergeHoverTargetController)
+		[self cancelWindowMergeHover];
+
+	if(target && !_mergeHoverTimer)
+	{
+		_mergeHoverTargetController = target;
+		target.tabBarView.mergeTargetHighlighted = YES;
+
+		// Added to NSRunLoopCommonModes rather than scheduled normally: a
+		// timer only registered in the default mode would be starved for the
+		// duration of an event-tracking loop, and this must fire while the
+		// mouse button is still down and the drag is effectively idle.
+		_mergeHoverTimer = [NSTimer timerWithTimeInterval:kWindowMergeHoldDuration target:self selector:@selector(mergeHoverTimerDidFire:) userInfo:nil repeats:NO];
+		[NSRunLoop.mainRunLoop addTimer:_mergeHoverTimer forMode:NSRunLoopCommonModes];
+	}
 }
 
 - (void)showWindow:(id)sender
@@ -898,7 +973,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	// The count guard matters as much here as there: tearing off the only tab
 	// would empty this window and open a near-identical one, so it is a no-op.
 	if(_documents.count > 1)
-		[self takeTabsToTearOffFrom:[NSIndexSet indexSetWithIndex:anIndex]];
+		[self tearOffTabsAtIndexes:[NSIndexSet indexSetWithIndex:anIndex] nearScreenPoint:[NSValue valueWithPoint:aPoint]];
 }
 
 - (IBAction)mergeAllWindows:(id)sender
@@ -917,6 +992,44 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 		if(delegate != self && !delegate.window.isMiniaturized)
 			[delegate.window close];
 	}
+}
+
+- (void)cancelWindowMergeHover
+{
+	[_mergeHoverTimer invalidate];
+	_mergeHoverTimer = nil;
+
+	_mergeHoverTargetController.tabBarView.mergeTargetHighlighted = NO;
+	_mergeHoverTargetController = nil;
+}
+
+- (void)mergeHoverTimerDidFire:(NSTimer*)aTimer
+{
+	DocumentWindowController* target = _mergeHoverTargetController;
+	[self cancelWindowMergeHover];
+
+	// Mirrors the guard in windowDidMove: -- if the button came up between
+	// the last move and the timer firing, this was an ordinary drop (which
+	// must keep doing nothing), not a hold.
+	if(!target || (NSEvent.pressedMouseButtons & 1) == 0)
+		return;
+
+	[self mergeIntoWindow:target];
+}
+
+// Moves every document from this window into targetController and closes
+// this window -- the same insertDocuments:... primitive that
+// performDropOfTabItem:fromTabBar:index:toTabBar:index:operation: uses to
+// move a single tab, so a document mid-edit moves with its unsaved state
+// intact rather than being asked to save or discard.
+//
+// targetController's own selection is left alone, the same choice
+// mergeAllWindows: makes for the surviving window.
+- (void)mergeIntoWindow:(DocumentWindowController*)targetController
+{
+	OakDocument* selection = targetController.selectedDocument ?: targetController.documents.firstObject;
+	[targetController insertDocuments:self.documents atIndex:targetController.documents.count selecting:selection andClosing:nil];
+	[self.window close];
 }
 
 - (NSUUID*)disposableDocument
@@ -1744,19 +1857,62 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 - (void)takeTabsToTearOffFrom:(id)sender
 {
 	if(NSIndexSet* indexSet = [self tryObtainIndexSetFrom:sender])
+		[self tearOffTabsAtIndexes:indexSet nearScreenPoint:nil];
+}
+
+// Shared by the menu/keyboard “Move Tab to New Window” action and dragging a
+// tab out of the tab bar. screenPointValue is where the tab was released, so
+// the new window can open near it instead of TextMate's usual cascade; pass
+// nil for the menu/keyboard case, which has no such point.
+- (void)tearOffTabsAtIndexes:(NSIndexSet*)indexSet nearScreenPoint:(NSValue*)screenPointValue
+{
+	NSArray<OakDocument*>* documents = [_documents objectsAtIndexes:indexSet];
+	if(documents.count == 1)
 	{
-		NSArray<OakDocument*>* documents = [_documents objectsAtIndexes:indexSet];
-		if(documents.count == 1)
+		DocumentWindowController* controller = [DocumentWindowController new];
+		controller.documents = documents;
+		if(path::is_child(to_s(documents.firstObject.path), to_s(self.projectPath)))
+			controller.defaultProjectPath = self.projectPath;
+		[controller openAndSelectDocument:documents.firstObject activate:YES];
+		[controller showWindow:self];
+		if(screenPointValue)
+			[controller positionWindowNearScreenPoint:screenPointValue.pointValue];
+
+		// closeTabsAtIndexes:...activate: (below) re-selects whatever tab
+		// remains in *this* (source) window and, with activate:YES, makes its
+		// text view first responder -- which lands after showWindow: above
+		// made the new window key, handing focus straight back to this one.
+		// The tear-off then reads as though nothing happened. Re-assert the
+		// new window as key/front as the true last step so it wins.
+		[self closeTabsAtIndexes:indexSet askToSaveChanges:NO createDocumentIfEmpty:YES activate:YES];
+		[controller.window makeKeyAndOrderFront:self];
+	}
+}
+
+// Centers the window on screenPoint and clamps it fully inside the visible
+// frame of whichever screen contains that point, so a tab torn off near a
+// screen edge doesn't open partially off-screen.
+- (void)positionWindowNearScreenPoint:(NSPoint)screenPoint
+{
+	NSScreen* screen = self.window.screen ?: NSScreen.mainScreen;
+	for(NSScreen* candidate in NSScreen.screens)
+	{
+		if(NSPointInRect(screenPoint, candidate.frame))
 		{
-			DocumentWindowController* controller = [DocumentWindowController new];
-			controller.documents = documents;
-			if(path::is_child(to_s(documents.firstObject.path), to_s(self.projectPath)))
-				controller.defaultProjectPath = self.projectPath;
-			[controller openAndSelectDocument:documents.firstObject activate:YES];
-			[controller showWindow:self];
-			[self closeTabsAtIndexes:indexSet askToSaveChanges:NO createDocumentIfEmpty:YES activate:YES];
+			screen = candidate;
+			break;
 		}
 	}
+
+	NSRect frame = self.window.frame;
+	frame.origin.x = screenPoint.x - NSWidth(frame)/2;
+	frame.origin.y = screenPoint.y - NSHeight(frame)/2;
+
+	NSRect visible = screen.visibleFrame;
+	frame.origin.x = std::min(std::max(frame.origin.x, NSMinX(visible)), NSMaxX(visible) - NSWidth(frame));
+	frame.origin.y = std::min(std::max(frame.origin.y, NSMinY(visible)), NSMaxY(visible) - NSHeight(frame));
+
+	[self.window setFrame:frame display:YES];
 }
 
 - (IBAction)toggleSticky:(id)sender

@@ -171,13 +171,12 @@ assemble_textmate() {
 		-exec find {} \( -type f -o -type l \) \( -name '*.png' -o -name '*.pdf' -o -name '*.tiff' \) -print0 \;)
 
 	# about/* + ../../CHANGELOG.md -- files -> Resources/About.
-	mkdir -p "$contents/Resources/About/css" "$contents/Resources/About/js"
-	for f in About Legal Contributions; do
+	mkdir -p "$contents/Resources/About/css"
+	for f in About Legal; do
 		markdown "$app/about/$f.md" "$contents/Resources/About/$f.html" "$header" "$footer"
 	done
 	markdown "$changelog" "$contents/Resources/About/CHANGELOG.html" "$header" "$footer"
 	cp -p "$app/about/css/"* "$contents/Resources/About/css/"
-	cp -p "$app/about/js/"* "$contents/Resources/About/js/"
 
 	# support/* -- copy, never a compiler transform (rave's `copy` directive
 	# bypasses Compiler.transform entirely -- always a literal byte copy), so

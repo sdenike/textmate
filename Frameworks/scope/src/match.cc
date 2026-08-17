@@ -30,8 +30,37 @@ namespace scope
 			return *lhs == '\0' && (*rhs == '\0' || *rhs == '.');
 		}
 
+		// Same dotted-prefix rule as prefix_match, minus wildcard handling: root_prefix
+		// is only ever set from a literal (no '*') scope, so a plain byte compare plus
+		// a boundary check ('\0' or '.') is equivalent and cheaper.
+		static bool has_dotted_prefix (std::string const& prefix, char const* atoms)
+		{
+			size_t len = prefix.size();
+			return strncmp(prefix.c_str(), atoms, len) == 0 && (atoms[len] == '\0' || atoms[len] == '.');
+		}
+
 		bool path_t::does_match (scope::scope_t const& unused, scope::scope_t const& scope, double* rank) const
 		{
+			if(root_prefix)
+			{
+				bool possible = false;
+				for(auto n = scope.node; n; n = n->parent())
+				{
+					if(has_dotted_prefix(*root_prefix, n->c_str()))
+					{
+						possible = true;
+						break;
+					}
+				}
+
+				if(!possible)
+				{
+					if(rank)
+						*rank = 0;
+					return false;
+				}
+			}
+
 			auto node    = scope.node;
 			auto sel     = this->scopes.rbegin();
 			double score = 0;

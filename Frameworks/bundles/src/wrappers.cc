@@ -211,7 +211,15 @@ namespace bundles
 		auto iter = cache.map.find(key);
 		if(iter == cache.map.end())
 		{
-			if(cache.map.size() > 1000)
+			// Was 1000, which a large file blows through: the cache filled, wiped
+			// itself wholesale, refilled, and degenerated to no caching at all
+			// precisely when it mattered. A 1 ms sample of a stalled 1 MB open put
+			// 1770 of 1774 samples in this function below the miss path, so misses
+			// -- not the key construction -- are the cost. Keep the string key: it
+			// distributes well, and scope_t::hash() does NOT (it XOR-chains atoms
+			// into the parent hash, and nesting repeats atoms, so distinct scopes
+			// collapse). Substituting it measured 13x slower. See STREAM.md.
+			if(cache.map.size() > 50000)
 				cache.map.clear();
 
 			auto items = query(kFieldSettingName, setting, scope, kItemTypeSettings);

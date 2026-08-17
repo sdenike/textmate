@@ -134,3 +134,33 @@ void test_match ()
 	OAK_ASSERT( match("foo > bar > baz $",     "foo bar baz foo bar baz"));
 	OAK_ASSERT(!match("^ foo > bar > baz $",   "foo bar baz foo bar baz"));
 }
+
+// Coverage for the root-atom fast-reject in path_t::does_match (match.cc).
+void test_root_fast_reject ()
+{
+	auto match = [](scope::selector_t const& sel, scope::scope_t const& scope){ return sel.does_match(scope); };
+
+	// Should match, and must not be wrongly rejected by the fast-reject.
+	OAK_ASSERT( match("source.c++ meta.function", "source.c++ meta.function.free.definition"));
+
+	// Embedded language: "source.php" is not the query’s root (“text.html.php” is,
+	// same shape as test_rank’s scope) — it matches a node in the middle of the
+	// chain instead. The fast-reject must not assume the first scope has to equal
+	// the root, only that it must appear somewhere in the chain.
+	OAK_ASSERT( match("source.php", "text.html.php meta.embedded.block.php source.php comment.block.php"));
+
+	// Should not match — "source.go" appears nowhere in the chain — and is rejected.
+	OAK_ASSERT(!match("source.go meta.function", "source.c++ meta.function.free"));
+
+	// Negated selector: the fast-reject only answers for the un-negated path_t;
+	// the caller (composite_t) still applies the negation on top of that.
+	OAK_ASSERT( match("-source.go",  "source.c++"));
+	OAK_ASSERT(!match("-source.c++", "source.c++"));
+
+	// Comma alternative: the first composite is rejected, the second matches.
+	OAK_ASSERT( match("source.go, source.c++", "source.c++ meta.function"));
+
+	// Leading wildcard: the first scope is unanalysable ('*' matches any atom), so
+	// root_prefix is left unset and does_match always falls back to the full match.
+	OAK_ASSERT( match("* source.css", "text.html source.css.embedded"));
+}

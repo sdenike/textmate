@@ -58,18 +58,13 @@ bin/deploy-local                   # Install the built app to /Applications, rep
 xcodebuild -project TextMate.xcodeproj -scheme TextMate -configuration Release build
 ```
 
-**Prefer `bin/build` over bare `xcodebuild`.** Two environment problems break Xcode's Ruby-based
-script phases (`bin/gen_test`, `bin/gen_html`, `bin/gen_credits.rb` all still shell out to system
-Ruby) with errors that point at the wrong culprit, and `bin/build` handles both:
-
-1. Ruby version managers (chruby, rbenv, rvm) export `GEM_HOME`/`GEM_PATH`. The build's helper
-   scripts run under system Ruby 2.6 via `#!/usr/bin/env ruby` and then try to dlopen native gems
-   built for a different Ruby, failing with `Symbol not found: _rb_cArray (LoadError)`. That reads
-   like a broken build; it is a leaked shell environment.
-2. `bin/gen_credits.rb` opens a DBM cache at `~/Library/Caches/com.macromates.TextMate/githubcredits.db`.
-   If any earlier build ran under `sudo`, that file is root-owned and `DBM.new` fails `EACCES` even
-   though the directory is yours. Removing it needs write permission on the directory, not the file,
-   so no `sudo` is required to clear it.
+**Prefer `bin/build` over bare `xcodebuild`.** An environment problem breaks Xcode's Ruby-based
+script phases (`bin/gen_test` and `bin/gen_html` still shell out to system Ruby) with an error that
+points at the wrong culprit, and `bin/build` guards against it: Ruby version managers (chruby,
+rbenv, rvm) export `GEM_HOME`/`GEM_PATH`. The build's helper scripts run under system Ruby 2.6 via
+`#!/usr/bin/env ruby` and then try to dlopen native gems built for a different Ruby, failing with
+`Symbol not found: _rb_cArray (LoadError)`. That reads like a broken build; it is a leaked shell
+environment.
 
 Build output goes to `~/build/textmate-revived/xcode` — `SYMROOT`/`OBJROOT`/`SHARED_PRECOMPS_DIR`
 are overridden in `Xcode/Base.xcconfig` because xcodebuild otherwise writes a launchable
@@ -218,6 +213,23 @@ comm -23 <(find Frameworks -type f \( -name '*.png' -o -name '*.pdf' -o -name '*
 Flattening relies on every image basename under `Frameworks/` being unique. Check that with
 `find Frameworks -name '*.png' -o -name '*.pdf' | xargs -n1 basename | sort | uniq -d`.
 
+**`assemble_resources.sh` copies but never deletes, so an incremental build keeps resources you
+removed from the source.** After the About window's Contributions page was deleted on 2026-08-16,
+`** BUILD SUCCEEDED **` still produced a bundle containing the stale 1,536 KB `Contributions.html`
+and its `js/` directory — the script regenerates `About.html`, `Legal.html` and `CHANGELOG.html`
+and simply leaves anything else already sitting in `Resources/` untouched. The bundle measured
+*larger* after the removal, not smaller.
+
+CI builds clean so releases are unaffected, but any local measurement of bundle size, and any check
+that a resource is really gone, must delete the target directory first:
+
+```sh
+rm -rf ~/build/textmate-revived/xcode/Release/TextMate.app/Contents/Resources/About && bin/build
+```
+
+The size only dropped — 27,704 KB to 26,164 KB — once that was done. Treat a size figure from an
+incremental build as an upper bound, never as evidence a resource was removed.
+
 **Check Reduce Transparency before drawing any conclusion from a screenshot.** macOS flattens every
 vibrancy and glass material at the compositor when it is on:
 
@@ -312,6 +324,83 @@ failed, so the assertion actively destroys the information it exists to give you
 the tell. `OAK_ASSERT_EQ` is fine on numbers, `BOOL`, `std::string` and anything else with a real
 `to_s`.
 
+## Performance (Phase 7)
+
+Two hot paths dominate opening a file, and both are now fixed. Read this before
+optimising anything here — several plausible-looking changes were measured and
+rejected, and the reasons are not obvious from the code.
+
+**`bundles::value_for_setting` (`Frameworks/bundles/src/wrappers.cc`) memoises its
+query, and the bound matters.** It discarded the *entire* cache past 1000 entries;
+a real 1 MB C++ file produces ~61,000 distinct scope contexts, because nesting
+extends the scope path, so the cache filled, wiped and refilled without ever
+paying off. Raised to 50000 — a 1 MB reopen went from 15,559 ms to 5,820 ms.
+
+**Do not key that cache on `scope_t::hash()`.** It looks like the obvious
+improvement over building a string key, and it measured **13× slower**.
+`scope.cc:16` XOR-chains each node's atoms into its parent's hash; XOR is
+self-cancelling and scope paths repeat atoms whenever constructs nest, so distinct
+scopes collapse onto shared values and `unordered_map` lookups degenerate into
+linear bucket walks. The hash is fine as a change detector, unusable as a bucket
+key. The expensive-looking string key distributes properly and is load-bearing.
+
+**`scope::selector_t::does_match` has a fast-reject** (`Frameworks/scope/src/match.cc`).
+`path_t` precomputes its literal first scope component at parse time, and
+`does_match` scans the ancestor chain for it before running the recursive matcher.
+It scans the **whole chain, not just the root** — an unanchored path's first
+component may match below the root, which is how `source.php` matches a scope
+rooted at `text.html.php`. A root-only check would silently break every embedded
+language. It falls back to the full matcher for any `*` in the first component and
+for parenthesised sub-selectors.
+
+**Deferring work off the main thread is not the lever it appears to be.**
+`initiate_repair` (`parsing.cc`) already parses on a background queue and bounces
+the completion back every ~10-20 lines, so the main thread answers Apple Events in
+~470 ms during a load *without* any change. Deferring the symbol list until after
+first paint was implemented twice, correctly, and measured flat both times.
+
+**And calling into the bundles layer from a background thread crashes on quit.**
+`value_for_setting`'s cache is a function-local `static`; `exit()` destroys it on
+the main thread while an in-flight parse block still uses it. The mutex does not
+help — it is a member of the object being destroyed. `query()`/`cache_search()`
+reach further statics in `query.cc` with the same exposure.
+
+## Benchmarking
+
+`bin/bench/` has three harnesses and they measure different things:
+
+- `measure.sh` — launch time and RSS
+- `measure-open.sh` — file open, waiting for **CPU quiescence**
+- `measure-responsive.sh` — **time-to-responsive**, how long the main thread stays
+  too busy to answer a bounded Apple Event
+
+`measure-open.sh` cannot show a win from deferring work, because quiescence
+includes the deferred work by definition. Use `measure-responsive.sh` for that.
+
+**Never hand-roll an open-and-wait-for-idle loop.** TextMate restores previously
+open documents at launch, so such a loop times session restore rather than the
+open; this produced a nonsensical negative reading and invalidated two figures.
+
+`measure-responsive.sh` contains a **bash 3.2 workaround**: macOS's stock
+`/bin/bash` is 3.2 and its parser fails on `case` inside `$( ... | while ... )`
+with ``syntax error near `;;'``. It parses fine under Homebrew bash 5.x — broken
+exactly where the harness runs.
+
+Two measurement traps, both of which have already produced wrong conclusions here:
+
+- **Cross-session comparisons are invalid.** The unchanged `undead` binary measured
+  661 ms at Phase 0 and ~1137 ms months later; that drift is larger than anything
+  this fork has changed, and comparing across it once produced a confident "24%
+  regression" that was really a 28% improvement — the sign was wrong.
+- **This machine drifts within a session too.** Identical builds have varied 28%
+  across three consecutive rounds. Alternate sides and report spreads, not medians
+  alone.
+
+`xctrace --launch <path>` resolves through Launch Services by bundle id, **not** by
+the path given, so it profiles `/Applications/TextMate.app` instead of your build.
+Changing the copy's `CFBundleIdentifier` does not help. Use `sample` on a directly
+executed binary.
+
 ## Bundle delivery
 
 Only **three** bundles are actually forked. `Frameworks/BundlesManager/src/MandatoryBundles.h` pins
@@ -361,10 +450,15 @@ TextMate is one-bundle-per-repository by design.
 `bin/fetch_embedded_bundles.sh` now also scrubs `src/`. Bundle Support ships `find_app.cc` and a
 `default.rave` there; the prebuilt `find_app` binary ships separately, so they have no runtime
 use, and without the scrub every pin bump silently reintroduced a `.rave` file that `d07cc0c8`
-had deleted. (Note for later: that prebuilt `find_app` is a universal x86_64+arm64 binary we did
-not build. It is vendored upstream content rather than an x86_64 fallback added to our build, so
-it does not breach the arm64-only rule — but now that we own the fork, it could be rebuilt
-arm64-only.)
+had deleted.
+
+**The same script also thins every prebuilt Mach-O in the embedded bundles to arm64.** Upstream
+ships `find_app`, `plist.bundle` and `keychain.bundle` universal, which put 144 KB of dead Intel
+code in the app. These are vendored artifacts we do not compile, so the fetch script is the only
+place the arm64-only rule can be enforced — thinning the checked-in copies alone would be undone by
+the next pin bump, exactly like the `src/` scrub beside it. The pass skips already-thin binaries
+(`lipo` errors on those) and warns rather than failing if a fat binary has no arm64 slice, since
+silently shipping an Intel-only helper is worse than a noisy fetch.
 
 ### Historical — the blocker this replaced
 

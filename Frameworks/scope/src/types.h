@@ -32,6 +32,13 @@ namespace scope
 			bool anchor_to_bol;
 			bool anchor_to_eol;
 
+			// Fast-reject: when set, some node in the candidate scope’s chain (root
+			// to leaf, either side of a possible embedded language) must have this
+			// as a dotted-prefix, or the path cannot match. Unset ("unknown") for
+			// anything not proven safe — e.g. the first scope contains a '*' — in
+			// which case does_match always falls through to the full algorithm.
+			std::optional<std::string> root_prefix;
+
 			bool does_match (scope::scope_t const& lhs, scope::scope_t const& rhs, double* rank) const;
 			std::string to_s () const;
 		};

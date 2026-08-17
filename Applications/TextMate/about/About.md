@@ -8,4 +8,6 @@ There is a [FAQ](https://github.com/textmate/textmate/wiki/FAQ) and [hidden sett
 
 For comments, questions, and general feedback see <https://github.com/sdenike/textmate/issues>
 
+TextMate is the work of many hands. Thank you to everyone listed among the [contributors](https://github.com/sdenike/textmate/graphs/contributors) and in the [commit history](https://github.com/sdenike/textmate/commits/master).
+
 _TextMate is a trademark of Allan Odgaard and the program is <script>document.write(TextMate.copyright)</script>._

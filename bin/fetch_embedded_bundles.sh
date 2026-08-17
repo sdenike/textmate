@@ -92,6 +92,44 @@ for (( i = 0; i < count; i += 5 )); do
 	rm -rf "$dest_dir/Support/shared/bin/CocoaDialog.app"
 	rm -rf "$dest_dir/src"
 
+	# Thin every prebuilt Mach-O to arm64.
+	#
+	# Upstream ships find_app, plist.bundle and keychain.bundle as universal
+	# x86_64+arm64 binaries — 144 KB of the embedded copy is a dead Intel slice
+	# this fork can never execute, and shipping it contradicts the arm64-only
+	# rule the project declares. These are vendored artifacts we do not compile,
+	# so thinning here is the only place it can be enforced; doing it in the
+	# checked-in copy alone would be undone by the next pin bump, exactly as the
+	# src/ scrub above exists to prevent.
+	#
+	# lipo fails on a thin binary, so only convert files that really are fat.
+	find "$dest_dir" -type f -perm +111 -print0 | while IFS= read -r -d '' bin; do
+		archs=$(lipo -archs "$bin" 2>/dev/null) || continue
+		case "$archs" in
+		*\ *)
+			case "$archs" in
+			*arm64*)
+				if lipo -thin arm64 "$bin" -output "$bin.arm64" 2>/dev/null; then
+					# lipo's output does not inherit the executable bit. chmod
+					# --reference would be the precise way to copy it, but that is a
+					# GNU extension and macOS ships BSD chmod; the find above already
+					# selected only executables, so +x restores what was there.
+					chmod +x "$bin.arm64"
+					mv "$bin.arm64" "$bin"
+					echo "  thinned to arm64: ${bin#$dest_dir/}"
+				else
+					rm -f "$bin.arm64"
+					echo >&2 "  WARNING: could not thin $bin (left universal)"
+				fi
+				;;
+			*)
+				echo >&2 "  WARNING: $bin has no arm64 slice ($archs) — left as is"
+				;;
+			esac
+			;;
+		esac
+	done
+
 	echo -n "$sha" > "$marker"
 
 	rm -rf "$tmp"
