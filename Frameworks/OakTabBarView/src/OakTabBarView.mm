@@ -215,6 +215,7 @@ static NSString* const OakTabItemPasteboardType = @"com.macromates.TextMate.tabI
 @property (nonatomic) NSButton* createNewTabButton;
 @property (nonatomic) NSTrackingArea* trackingArea;
 @property (nonatomic, getter = isDragging) BOOL dragging;
+@property (nonatomic) BOOL pastTearOffThreshold;
 - (void)didClickCloseButtonForTabView:(OakTabView*)tabView;
 - (void)didClickOverflorButtonForTabView:(OakTabView*)tabView;
 - (NSMenu*)menuForTabView:(OakTabView*)tabView withEvent:(NSEvent*)anEvent;
@@ -999,14 +1000,22 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 // = Drag’n’drop =
 // ===============
 
+// A tab drag must end at least this many points outside the tab bar’s own
+// rect before it counts as pulling the tab out to give it a window of its
+// own, rather than a reorder. Without this, the small vertical wobble in an
+// ordinary left/right reorder drag would tear the tab off; this is roughly
+// the distance Safari uses for the same gesture.
+static CGFloat const kTabBarTearOffThreshold = 60;
+
 - (void)didDragTabView:(OakTabView*)tabView
 {
 	NSDraggingItem* dragItem = [[NSDraggingItem alloc] initWithPasteboardWriter:tabView.tabItem];
 	if(NSImage* dragImage = tabView.dragImage)
 		[dragItem setDraggingFrame:[self convertRect:tabView.backgroundView.frame fromView:tabView] contents:dragImage];
 
-	self.draggedTabIndex = [_tabItems indexOfObject:tabView.tabItem] == NSNotFound ? -1 : [_tabItems indexOfObject:tabView.tabItem];
-	self.dropTabAtIndex  = _draggedTabIndex+1;
+	self.draggedTabIndex      = [_tabItems indexOfObject:tabView.tabItem] == NSNotFound ? -1 : [_tabItems indexOfObject:tabView.tabItem];
+	self.dropTabAtIndex       = _draggedTabIndex+1;
+	self.pastTearOffThreshold = NO;
 
 	[self beginDraggingSessionWithItems:@[ dragItem ] event:self.window.currentEvent source:self];
 }
@@ -1016,20 +1025,45 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 	return context == NSDraggingContextOutsideApplication ? (NSDragOperationCopy|NSDragOperationGeneric) : (NSDragOperationCopy|NSDragOperationMove|NSDragOperationLink);
 }
 
+// Shortest distance from `screenPoint` to the tab bar’s own frame, converted
+// to screen coordinates. This is zero anywhere over the bar itself (any x,
+// so long as y is within it) and only grows once the point leaves that rect
+// -- measured from the rect rather than its centre so that horizontal travel
+// along the bar, which is exactly what rearranging a tab looks like, never
+// by itself counts toward tearing it off.
+- (CGFloat)distanceFromTabBarToScreenPoint:(NSPoint)screenPoint
+{
+	NSRect rect = [self.window convertRectToScreen:[self convertRect:self.bounds toView:nil]];
+	CGFloat dx = MAX(0, MAX(NSMinX(rect) - screenPoint.x, screenPoint.x - NSMaxX(rect)));
+	CGFloat dy = MAX(0, MAX(NSMinY(rect) - screenPoint.y, screenPoint.y - NSMaxY(rect)));
+	return hypot(dx, dy);
+}
+
+- (void)draggingSession:(NSDraggingSession*)session movedToPoint:(NSPoint)screenPoint
+{
+	// Recorded continuously so the release decision below can reuse it
+	// instead of recomputing against a possibly-different final point --
+	// keeps the outcome consistent with whatever live feedback this drove.
+	self.pastTearOffThreshold = [self distanceFromTabBarToScreenPoint:screenPoint] > kTabBarTearOffThreshold;
+}
+
 - (void)draggingSession:(NSDraggingSession*)session endedAtPoint:(NSPoint)screenPoint operation:(NSDragOperation)operation
 {
 	NSInteger draggedIndex = self.draggedTabIndex;
 	self.draggedTabIndex = -1;
 
-	// A tab that no tab bar accepted, released outside the window it came from,
-	// means the user pulled it out to give it a window of its own.
+	BOOL pastThreshold = self.pastTearOffThreshold;
+	self.pastTearOffThreshold = NO;
+
+	// A tab that no tab bar accepted, released far enough from this tab
+	// bar's own rect, means the user pulled it out to give it a window of
+	// its own.
 	//
-	// Both conditions are needed. NSDragOperationNone on its own also covers a
-	// drop on some spot inside the window that refused it, and dropping a tab
-	// back onto its own window should do nothing at all.
-	if(operation != NSDragOperationNone || draggedIndex == -1)
-		return;
-	if(NSPointInRect(screenPoint, self.window.frame))
+	// All three conditions matter. NSDragOperationNone on its own also covers
+	// a drop on some spot inside the window that refused it; and a release
+	// close to the bar -- even one that lands outside the window's frame --
+	// is still a rearrange attempt, not a tear-off.
+	if(operation != NSDragOperationNone || draggedIndex == -1 || !pastThreshold)
 		return;
 
 	if([self.delegate respondsToSelector:@selector(tabBarView:didDragTabOutOfWindowAtIndex:screenPoint:)])

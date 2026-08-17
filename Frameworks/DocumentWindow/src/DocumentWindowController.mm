@@ -133,6 +133,8 @@ static void show_command_error (std::string const& message, oak::uuid_t const& u
 
 - (void)takeNewTabIndexFrom:(id)sender;   // used by newDocumentInTab:
 - (void)takeTabsToTearOffFrom:(id)sender; // used by moveDocumentToNewWindow:
+- (void)tearOffTabsAtIndexes:(NSIndexSet*)indexSet nearScreenPoint:(NSValue*)screenPointValue;
+- (void)positionWindowNearScreenPoint:(NSPoint)screenPoint;
 @end
 
 namespace
@@ -898,7 +900,7 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 	// The count guard matters as much here as there: tearing off the only tab
 	// would empty this window and open a near-identical one, so it is a no-op.
 	if(_documents.count > 1)
-		[self takeTabsToTearOffFrom:[NSIndexSet indexSetWithIndex:anIndex]];
+		[self tearOffTabsAtIndexes:[NSIndexSet indexSetWithIndex:anIndex] nearScreenPoint:[NSValue valueWithPoint:aPoint]];
 }
 
 - (IBAction)mergeAllWindows:(id)sender
@@ -1744,19 +1746,54 @@ static NSArray* const kObservedKeyPaths = @[ @"arrayController.arrangedObjects.p
 - (void)takeTabsToTearOffFrom:(id)sender
 {
 	if(NSIndexSet* indexSet = [self tryObtainIndexSetFrom:sender])
+		[self tearOffTabsAtIndexes:indexSet nearScreenPoint:nil];
+}
+
+// Shared by the menu/keyboard “Move Tab to New Window” action and dragging a
+// tab out of the tab bar. screenPointValue is where the tab was released, so
+// the new window can open near it instead of TextMate's usual cascade; pass
+// nil for the menu/keyboard case, which has no such point.
+- (void)tearOffTabsAtIndexes:(NSIndexSet*)indexSet nearScreenPoint:(NSValue*)screenPointValue
+{
+	NSArray<OakDocument*>* documents = [_documents objectsAtIndexes:indexSet];
+	if(documents.count == 1)
 	{
-		NSArray<OakDocument*>* documents = [_documents objectsAtIndexes:indexSet];
-		if(documents.count == 1)
+		DocumentWindowController* controller = [DocumentWindowController new];
+		controller.documents = documents;
+		if(path::is_child(to_s(documents.firstObject.path), to_s(self.projectPath)))
+			controller.defaultProjectPath = self.projectPath;
+		[controller openAndSelectDocument:documents.firstObject activate:YES];
+		[controller showWindow:self];
+		if(screenPointValue)
+			[controller positionWindowNearScreenPoint:screenPointValue.pointValue];
+		[self closeTabsAtIndexes:indexSet askToSaveChanges:NO createDocumentIfEmpty:YES activate:YES];
+	}
+}
+
+// Centers the window on screenPoint and clamps it fully inside the visible
+// frame of whichever screen contains that point, so a tab torn off near a
+// screen edge doesn't open partially off-screen.
+- (void)positionWindowNearScreenPoint:(NSPoint)screenPoint
+{
+	NSScreen* screen = self.window.screen ?: NSScreen.mainScreen;
+	for(NSScreen* candidate in NSScreen.screens)
+	{
+		if(NSPointInRect(screenPoint, candidate.frame))
 		{
-			DocumentWindowController* controller = [DocumentWindowController new];
-			controller.documents = documents;
-			if(path::is_child(to_s(documents.firstObject.path), to_s(self.projectPath)))
-				controller.defaultProjectPath = self.projectPath;
-			[controller openAndSelectDocument:documents.firstObject activate:YES];
-			[controller showWindow:self];
-			[self closeTabsAtIndexes:indexSet askToSaveChanges:NO createDocumentIfEmpty:YES activate:YES];
+			screen = candidate;
+			break;
 		}
 	}
+
+	NSRect frame = self.window.frame;
+	frame.origin.x = screenPoint.x - NSWidth(frame)/2;
+	frame.origin.y = screenPoint.y - NSHeight(frame)/2;
+
+	NSRect visible = screen.visibleFrame;
+	frame.origin.x = std::min(std::max(frame.origin.x, NSMinX(visible)), NSMaxX(visible) - NSWidth(frame));
+	frame.origin.y = std::min(std::max(frame.origin.y, NSMinY(visible)), NSMaxY(visible) - NSHeight(frame));
+
+	[self.window setFrame:frame display:YES];
 }
 
 - (IBAction)toggleSticky:(id)sender
