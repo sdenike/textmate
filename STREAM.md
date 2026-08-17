@@ -4,7 +4,60 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-17 — RESUME HERE: tab drag reworked; PR #17 open and blocked on CI
+## 2026-08-17 — RESUME HERE: .24 shipped; Phase 6 found to be incomplete
+
+### v3.0.0-revived.24 is out and verified
+
+PR #17 merged (`643ad295`), release published and checked end to end — not merely trusted from the
+workflow's exit code:
+
+```
+sha256   eaaad58219f0f4b2d3427624017c4b40ff8c095ef789879b45c895fbe8da7099
+cask     same sha256                                    -> brew upgrade works
+signing  Developer ID Application: Shelby Denike (485WH9DHS4)
+spctl    accepted, source=Notarized Developer ID
+stapler  The validate action worked!
+bundle   26,076 KB   (undead: 27,928)
+```
+
+Also: `/Applications/TextMate.app` currently holds the **ad-hoc** test build, because
+`bin/deploy-local` was run during tab testing and it *moves* rather than copies. Check for Updates
+will correctly refuse there. `brew upgrade --cask textmate-revived` restores a signed install.
+
+Replied to schriftgestalt on PR #15 crediting the drag-rearrange fix, and asked for his view on
+title-bar tabs rather than treating that objection as settled.
+
+### PHASE 6 WAS CLOSED EARLY — it is not complete
+
+Closing it was based on `NSVisualEffectView` being gone from the tree. That is the **glass
+criterion, not the phase**. The spec's Phase 6 paragraph is far wider, and this was found only by
+reading it back when the maintainer asked what was next.
+
+| Spec item | Status |
+|---|---|
+| Tahoe tab bar | done |
+| `NSGlassEffectView` on chrome | done |
+| **QuickLook extension replacing the deprecated generator** | **not done** — still `TextMateQL.qlgenerator` |
+| **SwiftUI islands** (Preferences, About, onboarding, update sheet) via #1467's `OakSwiftUI` bridge | **not done** — **zero `.swift` files in the tree** |
+| `NSRulerView` gutter | not done — zero references |
+| `NSSplitViewController` sidebar | partial — 1 file |
+| Scope bar, back/forward navigation | unclear — references exist, may predate the phase |
+
+**QuickLook is the only one with a clock on it.** `.qlgenerator` is deprecated and this fork exists
+to be forward compatible with macOS 26+; the rest is polish.
+
+`Ruling: a phase closed against one of its criteria is not a phase closed. Phases 0-5 and 7 stand;
+Phase 6 is reopened as a remainder. Read the spec paragraph before declaring any future phase done,
+not the criterion you happened to be working on.`
+
+### Note on Phase 8's sequencing
+
+Phase 8 extracts `RevivedUpdater`/`RevivedGlass`/`RevivedSettings` into a SwiftPM package for other
+apps, and its own spec says to *"extract only what a second app demonstrably needs"*. No second app
+consumes them yet, so that requirement is currently unknowable — designing the API now means
+guessing at every caller but one. The Phase 6 remainder is concrete by comparison.
+
+## 2026-08-17 — tab drag reworked; PR #17 merged
 
 ### PR #17 is open and CANNOT merge yet
 

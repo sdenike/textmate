@@ -21,10 +21,35 @@ maintainer and enforced throughout:
 | | |
 |---|---|
 | Released | **v3.0.0-revived.24** |
-| Phases complete | 0-7 |
-| Phases remaining | 8 (shared modules), 9 (optional LSP) |
+| Phases complete | 0-5, 7 |
+| Phase 6 | **partially complete — see below** |
+| Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |
 | Build | `TextMate.xcodeproj`, generated from `project.yml` by XcodeGen |
 | Bundle | 26,012 KB — **1,916 KB smaller than the `undead` baseline** |
+
+## Phase 6 was closed early — it is not complete
+
+Phase 6 was declared done when `NSVisualEffectView` disappeared from the tree. That was the glass
+criterion, not the phase. The spec's Phase 6 paragraph
+(`docs/superpowers/specs/2026-08-12-textmate-revived-design.md`) is much wider, and several items
+were never started:
+
+| Spec item | Status |
+|---|---|
+| Tahoe tab bar | **done** |
+| `NSGlassEffectView` on chrome surfaces | **done** — nothing references `NSVisualEffectView` |
+| QuickLook **extension** replacing the deprecated generator | **not done** — still ships `Contents/Library/QuickLook/TextMateQL.qlgenerator` |
+| SwiftUI islands: Preferences, About, onboarding, update sheet | **not done** — there are **zero `.swift` files in the tree** |
+| `NSRulerView` gutter | **not done** — zero references |
+| `NSSplitViewController` sidebar | partial — one file references it |
+| Scope bar, back/forward navigation | unclear — some references exist, may predate the phase |
+
+**QuickLook is the one with a deadline attached.** `.qlgenerator` is deprecated, and this fork's
+entire premise is forward compatibility with macOS 26+. It is a working-today, gone-tomorrow
+dependency, unlike the rest of the list which is polish.
+
+The lesson worth carrying: a phase closed against one of its criteria is not a phase closed. Check
+the spec paragraph, not the thing you happened to be working on.
 
 ## Performance, as measured
 
