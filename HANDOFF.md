@@ -93,6 +93,28 @@ credits on the About window's Legal page are required and must stay. Nothing
 shipped is uncredited. `bin/CxxTest` carries a licence but is provably not
 shipped — our test runner is a home-grown reimplementation.
 
+## Tab dragging
+
+Reorder and tear-off are phases of **one** `NSDraggingSession` (`OakTabBarView.mm:1002`). Tear-off
+is not a separate gesture — it is the fallback taken only when nothing accepted the drop, evaluated
+once at release. Knowing that is the difference between a five-line fix and a rewrite.
+
+Tear-off requires the release to be **60 pt from the tab bar's own rect**, measured to the rect
+rather than its centre, so travelling along the bar never detaches a tab however far it goes. This
+came from reviewer feedback on PR #15 that rearranging was too easy to turn into an accidental
+detach.
+
+**Dragging a single tab onto another window's tab bar already merges it on release** —
+`performDragOperation:` to `performDropOfTabItem:...`. Do not rebuild that.
+
+A window-onto-tabbar merge gesture (drag a whole window over another's tab bar, hold, merge) is in
+progress. `performWindowDragWithEvent:` gives no progress callbacks, so it must be observed via
+window-move notifications and a hit-test.
+
+**GUI gestures cannot be verified in the agent sandbox** — no way to synthesise a sustained
+mouse-down/move/up. Anything claiming otherwise should be checked: one such claim turned out to have
+been made against `/Applications/TextMate.app`, an older installed release, not the build under test.
+
 ## Next
 
 Phase 8 (shared modules) and Phase 9 (optional LSP). Before more micro-optimising,

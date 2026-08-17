@@ -30,6 +30,13 @@ Opening a file is substantially faster, and the app is smaller.
   and the helper programs bundled with it are now built for Apple Silicon only,
   where three of them still carried unused Intel code.
 
+### Fixed
+
+* Dragging a tab sideways to rearrange it no longer risks pulling it out into a
+  window of its own. A tab is only torn off once it is dragged clearly away from
+  the tab bar — travelling along the bar, however far, never detaches it.
+  Reported by @schriftgestalt.
+
 ## 2026-08-16 (v3.0.0-revived.23)
 
 Every material surface in the application now uses the macOS 26 glass material.

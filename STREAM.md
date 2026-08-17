@@ -4,7 +4,79 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-16 — RESUME HERE: Phase 7 closed, released as .24, everything in sync
+## 2026-08-17 — RESUME HERE: tab drag reworked; PR #17 open and blocked on CI
+
+### PR #17 is open and CANNOT merge yet
+
+`phase-7/performance` is pushed; PR #17 is open against `master`. **CI's test job failed** —
+`scm_test` hung and the job hit its 30-minute limit:
+
+```
+Terminate orphan process: pid (24129) (scm_test)
+```
+
+`master`'s own CI was green before this branch, so it is either new or flaky. A rerun was started;
+its result is the gate. Locally `scm_test` exits 0 but prints a hint referencing `ninja scm/coerce`
+— **stale, ninja was removed in Phase 2** — and wants `subversion`, which it skips without.
+Worth cleaning that message up regardless.
+
+**Merging PR #17 publishes v3.0.0-revived.24**, because `release.yml` fires on a push to `master`
+touching `CHANGELOG.md`. Do not merge casually.
+
+### Tab drag: reviewer feedback fixed (`f01d67d0`)
+
+schriftgestalt on PR #15: *"having the tabs to drag off like that makes it very difficult to
+drag-rearrange tabs. Let the tab move horizontally and start the drag off only if the mouse is some
+distance from the tabbar (like Safari is doing it)."*
+
+**The key structural fact:** reorder and tear-off are phases of **one** `NSDraggingSession` started
+at `OakTabBarView.mm:1002`. Tear-off is not a separate gesture — it is the fallback taken only when
+nothing accepted the drop (`operation == NSDragOperationNone`), evaluated once at release. There was
+no live distance signal anywhere in the file.
+
+Fixed by replacing the window-frame test with distance from the **tab bar's own rect**, threshold
+60 pt, measured to the rect not its centre so horizontal travel along the bar contributes nothing.
+`draggingSession:movedToPoint:` records the state continuously, so dragging out and back cancels it.
+
+**Unverified by drag.** This sandbox cannot synthesise a sustained mouse-down/move/up. Four gestures
+need a human: sideways reorder, short drag below the bar, long drag to tear off, drop onto a second
+window's bar.
+
+`Ruling: a previous agent claimed to have verified tab behaviour in the running app, but had
+launched /Applications/TextMate.app -- an older installed release, not its own build. Always confirm
+CFBundleShortVersionString and binary mtime before believing any GUI verification claim.`
+
+### Already working, do not rebuild it
+
+**Dragging a single tab onto another window's tab bar and releasing already merges it** —
+`performDragOperation:` (`OakTabBarView.mm:1093`) to `performDropOfTabItem:fromTabBar:index:toTabBar:index:`
+(`DocumentWindowController.mm:1849`). `registerForDraggedTypes:` is per-instance and unscoped, so
+AppKit already routes cross-window drags.
+
+### In progress — window-onto-tabbar merge
+
+Maintainer wants: drag a **whole window** by its title bar over another window's tab bar, hold ~1 s,
+merge its tabs in. Confirmed it is a window being dragged, not a tab.
+
+The design problem: `performWindowDragWithEvent:` hands the drag loop to AppKit and yields **no
+progress callbacks**, so the gesture has to be observed indirectly via `NSWindowDidMoveNotification`
+plus a hit-test against other controllers' tab-bar rects. Must not merge on release without the
+hold, or every window moved near a tab bar becomes destructive.
+
+### Open design question, not blocking
+
+schriftgestalt also objected to tabs in the title bar at all: *"There is not one properer mac app
+that is doing this."* The maintainer has since used it and kept it. Worth a considered decision
+rather than leaving it implicitly settled.
+
+### If interrupted here
+
+1. **Get CI green**, then decide whether to merge PR #17 (which releases .24).
+2. Finish or discard the window-merge gesture.
+3. Get a human to exercise the four tab-drag gestures above.
+4. Phase 8 (shared modules) and Phase 9 (optional LSP) remain.
+
+## 2026-08-16 — Phase 7 closed, released as .24, everything in sync
 
 Phase 7 is done and merged. `HANDOFF.md` is the polished snapshot; this file keeps the evidence.
 
