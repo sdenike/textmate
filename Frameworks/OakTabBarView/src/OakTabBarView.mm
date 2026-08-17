@@ -732,6 +732,7 @@ static void* kOakTabViewSelectedContext  = &kOakTabViewSelectedContext;
 	{
 		self.accessibilityRole  = NSAccessibilityTabGroupRole;
 		self.accessibilityLabel = @"Open files";
+		self.wantsLayer         = YES; // so setMergeTargetHighlighted: has a layer to put a border on
 
 		_minimumTabSize = [NSUserDefaults.standardUserDefaults integerForKey:kUserDefaultsTabItemMinWidthKey];
 		_maximumTabSize = [NSUserDefaults.standardUserDefaults integerForKey:kUserDefaultsTabItemMaxWidthKey];
@@ -1152,6 +1153,21 @@ static CGFloat const kTabBarTearOffThreshold = 60;
 - (void)concludeDragOperation:(id <NSDraggingInfo>)sender
 {
 	self.dragging = NO;
+}
+
+// Toggle a layer border so a window being held over this tab bar (see
+// DocumentWindowController's window-merge gesture) has something to look
+// at. There is no NSDraggingSession here to hook the existing drop
+// feedback into, since no drag-and-drop is actually in progress -- this is
+// a whole window being moved, not a tab.
+- (void)setMergeTargetHighlighted:(BOOL)flag
+{
+	if(_mergeTargetHighlighted == flag)
+		return;
+	_mergeTargetHighlighted = flag;
+
+	self.layer.borderWidth = flag ? 2 : 0;
+	self.layer.borderColor = NSColor.controlAccentColor.CGColor;
 }
 
 // ==========
