@@ -1,5 +1,6 @@
 #import "QuickLookPreviewProvider.h"
 #import <OSAKit/OSAKit.h>
+#import <os/log.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <buffer/buffer.h>
 #import <bundles/bundles.h>
@@ -147,6 +148,7 @@ static NSAttributedString* create_attributed_string (ng::buffer_t& buffer, std::
 // ==========================
 
 @implementation QuickLookPreviewProvider
+
 
 - (void)providePreviewForFileRequest:(QLFilePreviewRequest*)request completionHandler:(void (^)(QLPreviewReply* _Nullable reply, NSError* _Nullable error))handler
 {

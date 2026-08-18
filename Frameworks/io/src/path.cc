@@ -799,8 +799,24 @@ namespace path
 	passwd* passwd_entry ()
 	{
 		passwd* entry = getpwuid(getuid());
+
+		// The retry loop below shows a modal alert and asks again. That is only
+		// meaningful when a human can answer it. In a non-interactive context --
+		// an app extension, a command-line tool, a test runner --
+		// CFUserNotificationDisplayAlert returns immediately without displaying
+		// anything, so an unbounded loop here spins at 100% CPU forever.
+		//
+		// That is not hypothetical: a sandboxed Quick Look extension gets a
+		// perfectly good pw_dir it is not permitted to access(), and hung here
+		// indefinitely until this bound was added. Give up after a few attempts
+		// and return what getpwuid gave us; callers already cope with a path
+		// they cannot read, and hanging helps nobody.
+		size_t attempts = 0;
 		while(!entry || !entry->pw_dir || access(entry->pw_dir, R_OK) != 0) // Home folder might be missing <rdar://10261043>
 		{
+			if(++attempts > 3)
+				break;
+
 			char* errStr = strerror(errno);
 			std::string message = text::format("Unable to obtain basic system information such as your home folder.\n\ngetpwuid(%d): %s", getuid(), errStr);
 

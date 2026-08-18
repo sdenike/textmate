@@ -8,5 +8,15 @@
 	<true/>
 	<key>com.apple.security.get-task-allow</key>
 	<false/>
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+	<array>
+		<string>/</string>
+		<string>/Library/Application Support/TextMate/</string>
+		<string>/Library/Caches/com.shelbydenike.TextMate/</string>
+	</array>
+	<key>com.apple.security.temporary-exception.shared-preference.read-only</key>
+	<array>
+		<string>com.shelbydenike.TextMate</string>
+	</array>
 </dict>
 </plist>

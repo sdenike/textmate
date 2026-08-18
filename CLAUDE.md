@@ -401,6 +401,37 @@ the path given, so it profiles `/Applications/TextMate.app` instead of your buil
 Changing the copy's `CFBundleIdentifier` does not help. Use `sample` on a directly
 executed binary.
 
+
+## QuickLook
+
+`Contents/PlugIns/QuickLookExtension.appex` replaced the `.qlgenerator` in Phase 6. The generator
+was not merely deprecated — macOS had stopped loading it, so previews were silently broken in every
+shipped build.
+
+Four things about this cost a day between them; none is guessable from the code:
+
+- **`.appex` requires EXACT UTIs.** The legacy `.qlgenerator` matched by *conformance*, so declaring
+  `public.source-code` covered every language beneath it. `QLSupportedContentTypes` does not: a
+  `.rb` file is `public.ruby-script` and will not match `public.source-code`. The extension declares
+  ~165 exact UTIs for that reason. Carrying the old three-entry list across meant macOS never
+  invoked it at all.
+- **Extensions must be sandboxed.** Removing the sandbox makes the `.appex` unloadable —
+  `pkd` logs *"plug-ins must be sandboxed"* and it never registers. Access to
+  `~/Library/Application Support/TextMate/` and `~/Library/Caches/com.shelbydenike.TextMate/` comes
+  from temporary-exception entitlements. **The home root (`/`) must also be granted**, because
+  `path::passwd_entry()` validates it with `access(pw_dir, R_OK)`.
+- **`qlmanage` is useless here.** `qlmanage -m plugins` cannot see app extensions (Safari's own is
+  equally absent) and `qlmanage -p` *crashes* on any `.appex`, Apple's own included. Use
+  `pluginkit -m -p com.apple.quicklook.preview`. Deploying a new bundle drops the registration —
+  restore it with `pluginkit -a <path to .appex>`.
+- **Deleting a build does not unregister it.** Stale `TextMate.app` copies keep their LaunchServices
+  claims, and 62 of them advertising the retired `.qlgenerator` at Default rank pre-empted the new
+  extension entirely. Clean up with `lsregister -u <path>`, not just `rm -rf`.
+
+Diagnosing it needs care: `log show` returns nothing at all in some sandboxes, and reading that
+silence as "the extension never ran" sent two rounds of investigation the wrong way. Sampling the
+live process (`sample <pid>`) is what actually located the hang.
+
 ## Bundle delivery
 
 Only **three** bundles are actually forked. `Frameworks/BundlesManager/src/MandatoryBundles.h` pins
