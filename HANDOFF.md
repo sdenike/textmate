@@ -21,8 +21,9 @@ maintainer and enforced throughout:
 | | |
 |---|---|
 | Released | **v3.0.0-revived.24** |
+| Unreleased | **v3.0.0-revived.25** ready on `phase-6/quicklook-extension` |
 | Phases complete | 0-5, 7 |
-| Phase 6 | **partially complete — see below** |
+| Phase 6 | remainder in progress — QuickLook done, SwiftUI islands not started |
 | Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |
 | Build | `TextMate.xcodeproj`, generated from `project.yml` by XcodeGen |
 | Bundle | 26,012 KB — **1,916 KB smaller than the `undead` baseline** |
@@ -40,57 +41,45 @@ were never started:
 | `NSGlassEffectView` on chrome surfaces | **done** | — |
 | Scope bar | **already done — since 2014** | none |
 | Back/forward navigation | **already done — since 2018** | none |
-| **QuickLook extension** | **built on `phase-6/quicklook-extension`, unmerged** | done, needs one check |
+| **QuickLook extension** | **done and verified** — previews render syntax highlighted | — |
 | SwiftUI islands: onboarding | not done — no existing implementation | small-medium |
 | SwiftUI islands: Preferences, About, update sheet | not done | large |
 | `NSSplitViewController` sidebar | not started | large — defer |
 | `NSRulerView` gutter | not done | large — **do not do** |
 
-**QuickLook was dead, and is rebuilt.** The old `.qlgenerator` used callbacks retired at macOS 12 and
-macOS had stopped loading it entirely, so previews silently did not work.
-`Contents/PlugIns/QuickLookExtension.appex` replaces it — sandboxed, conforming to
-`QLPreviewingController`, reusing the old render logic. Built on `phase-6/quicklook-extension`,
-**not merged**.
+**QuickLook is fixed and verified.** The old `.qlgenerator` used callbacks retired at macOS 12 and
+macOS had stopped loading it, so previews were silently broken in every shipped build.
+`Contents/PlugIns/QuickLookExtension.appex` replaces it. Two real defects had to be fixed:
 
-**Two QuickLook tooling facts that will waste your time otherwise:**
+- **`.appex` requires EXACT UTIs.** `.qlgenerator` matched by *conformance*, so its three-entry list
+  covered every language beneath `public.source-code`. An extension gets no such treatment: a `.rb`
+  file is `public.ruby-script` and matches none of them, so macOS never invoked it. It now declares
+  ~165 exact UTIs.
+- **`path::passwd_entry()` (`Frameworks/io/src/path.cc`) looped forever.** It retries `getpwuid`
+  around a modal alert until `access(pw_dir, R_OK)` succeeds — unbounded, assuming a human answers.
+  Sandboxed, `access()` fails on a valid home and the alert cannot display, so it spun at 100% CPU.
+  **That would hang any non-interactive caller** — `mate`, `tm_query`, the test runners. Now bounded.
 
-- **`qlmanage -m plugins` cannot see app extensions.** Safari's own `.appex` is absent from it too;
-  the command predates app-extension QuickLook by 14 years. Use
-  `pluginkit -m -p com.apple.quicklook.preview`.
-- **`qlmanage -p` crashes on any `.appex`**, including Apple's own. There is no CLI way to prove a
-  preview renders — Finder's Space-bar preview is the only test.
+**A whole class of resources never shipped.** `assemble_resources.sh` globbed only `*.png`, `*.pdf`,
+`*.tiff`, so since Phase 2 every other framework resource was silently dropped: **12 xibs never
+compiled** (Terminal preferences, the entire Bundle Editor, encoding customisation, tab-size picker,
+pasteboard selector), plus `Charsets.plist`, `svn_status.xslt`, `bindings.plist`, 36 `.icns` and the
+HTMLOutput support files — all referenced by live code. `Contents/Resources` went 164 -> 216 files.
 
-**Unresolved:** the extension is sandboxed, but `initialize()` reads grammars and themes from
-`~/Library/Application Support/TextMate/`. If the sandbox blocks that, the existing fallback quietly
-degrades to unstyled plain text rather than failing. Space-bar a `.rb` in Finder: highlighted means
-working, plain text means the sandbox is blocking, nothing means not rendering.
+**This was the third recurrence of the same glob bug** and the first not about images. Each time it
+was found by a user noticing something drew empty, never by the build. `bin/verify_resources.sh` now
+does a full set-difference at build time and fails when a framework resource does not ship. Never
+verify this with a threshold; only a set comparison works.
 
-**Scope bar and back/forward were never missing.** `OakScopeBarView` dates to 2014 with five live
-callers; `goBack:`/`goForward:` to 2018, wired into the menu. Both are original upstream features
-that happen to match the spec's wording. The spec item is stale, not unbuilt.
+## Things that will mislead you about QuickLook
 
-**The sidebar entry in an earlier version of this table was a false positive.** The one
-`NSSplitViewController` reference is `BundleEditor.mm` (2021, upstream) — the Bundle Editor's own
-internal split, unrelated to the file browser, which is still hand-sized by frame maths.
-
-**Do not adopt `NSRulerView` for the gutter.** `GutterView` is a ~600-line multi-column
-data-source/delegate design drawing per-line icons; `NSRulerView` models tick marks and has no
-equivalent concept. Adopting it means reimplementing everything inside a worse-fitting container.
-
-**#1469 and #1467 are not portable.** #1469 is `+19,490/−5,877` across 550 files and adds whole new
-applications; the Liquid Glass spec already ruled it out as "a fork-sized rewrite [that] does not
-lift out as a single piece". #1467's `OakSwiftUI` was built against a tree that had *deleted*
-`SoftwareUpdate` and `CrashReporter`, so its views do not correspond to this fork's code. Treat the
-remainder as write-from-scratch.
-
-**Swift groundwork is already laid, with one landmine.** `Xcode/Base.xcconfig:59-61` sets
-`SWIFT_VERSION = 6.0` with a comment naming Phase 6's islands as the first consumer. But
-`CLANG_ENABLE_MODULES = NO` is marked "REQUIRED off, do not remove" (an xdiff/Darwin module
-collision), and Swift↔ObjC++ interop normally wants modules on. That interaction is **untested** and
-is the first thing to prove before committing to any SwiftUI work.
-
-The lesson worth carrying: a phase closed against one of its criteria is not a phase closed. Check
-the spec paragraph, not the thing you happened to be working on.
+- `qlmanage -m plugins` **cannot see app extensions** (Safari's own is absent too) and `qlmanage -p`
+  **crashes on any `.appex`**, Apple's included. Use `pluginkit -m -p com.apple.quicklook.preview`.
+  Deploying drops registration — restore with `pluginkit -a <path>`.
+- Extensions **must** be sandboxed; `pkd` refuses otherwise. The home root must be granted read-only
+  or `path::passwd_entry()`'s `access()` check fails.
+- Deleting a build does **not** unregister it. Stale LaunchServices claims from deleted copies
+  pre-empted the new extension; clean up with `lsregister -u`, not just `rm -rf`.
 
 ## Performance, as measured
 

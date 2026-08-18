@@ -4,7 +4,76 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-18 — RESUME HERE: QuickLook works; a Phase 2 resource regression found
+## 2026-08-18 — RESUME HERE: .25 ready on a branch, verified by the maintainer
+
+Branch `phase-6/quicklook-extension`, 7 commits, **pushed but NOT merged**. Merging publishes
+v3.0.0-revived.25 (`release.yml` fires on a `CHANGELOG.md` push to `master`).
+
+### Verified working by the maintainer
+
+- **Quick Look previews** render syntax highlighted (Space on a `.rb` in Finder).
+- **Bundle Editor** works — its 8 xibs had never shipped.
+- **Terminal settings pane** shows its own contents rather than the previous pane's.
+
+### What was actually wrong — two independent bugs, both shipping for months
+
+**QuickLook.** `.appex` requires EXACT UTIs where `.qlgenerator` matched by conformance, so
+inheriting the old three-entry list meant macOS never invoked the extension at all. And
+`path::passwd_entry()` (`Frameworks/io/src/path.cc`) had an unbounded retry loop around a modal
+alert; sandboxed, `access(pw_dir, R_OK)` fails on a valid home and the alert cannot display, so it
+spun at 100% CPU forever. **That would hang any non-interactive caller** — `mate`, `tm_query`, the
+test runners — not just this extension.
+
+**Resources.** `assemble_resources.sh` globbed only `*.png`, `*.pdf`, `*.tiff`, so since Phase 2
+every other framework resource was dropped: 12 uncompiled xibs (Terminal prefs, all 8 Bundle Editor,
+encoding customisation, tab-size picker, pasteboard selector), `Charsets.plist`, `svn_status.xslt`,
+`bindings.plist`, 36 `.icns`, HTMLOutput js and error page. 164 -> 216 files in `Contents/Resources`.
+`TMFileReference`'s icons needed `Resources/DocumentTypes/`, recovered from its deleted
+`default.rave` at `d07cc0c8^`.
+
+`Ruling: this was the THIRD time this glob was wrong and the first not about images. Each time a
+user found it, never the build. bin/verify_resources.sh now does a full set-difference at build time
+and fails when a framework resource does not ship. A threshold check is useless here; only set
+comparison works.`
+
+Also corrected `CLAUDE.md`'s own collision check — it used `xargs -n1 basename`, which splits on
+spaces and false-positives on names like "Bookmark Hover Add Template.pdf". Now NUL-delimited.
+
+### Diagnostic lessons that cost real time here
+
+- **`log show` returns NOTHING in the agent sandbox.** Reading its silence as "the extension never
+  ran" misdirected two full rounds. Verify the tool works before trusting a negative.
+- **A sandboxed extension's container is created at registration, not first run**, so its existence
+  proves nothing about execution. Write a marker file inside it instead.
+- **`sample <pid>` on the live process is what actually found the hang** — 1,859 of 2,156 samples in
+  `path::passwd_entry()`.
+- Two previous agents wasted effort trying to synthesise GUI input with `cliclick`/System Events.
+  It does not work here. Ask the maintainer.
+
+### The white-theme question — resolved, not a bug
+
+`universalThemeUUID` matches `kMacClassicThemeUUID`, which `AppController Menus.mm:68` registers as
+the **default**; `themeAppearance = light`; `darkModeThemeUUID` unset. That is an unchanged default
+configuration, not lost settings. Theme lives in **View -> Theme** (a menu, not a Settings pane),
+which also carries Auto/Light/Dark. Picking a theme while in Auto/Dark sets `darkModeThemeUUID`,
+which is the same key the Quick Look extension reads.
+
+### Open
+
+- **Quick Look preview theme** — uses `universalThemeUUID`, so a light editor theme looks wrong on
+  Quick Look's dark chrome, and `darkModeThemeUUID` is consulted in dark mode even when unset. Wants
+  its own preference. Recorded as a known gap in `2dda56c3`.
+- `BundleEditor/templates/*.plist` (8 files) — the old `.rave` shipped them, no current code
+  references them, deliberately left unshipped rather than copied blindly.
+
+### If interrupted here
+
+1. Merge the branch when ready — that publishes .25.
+2. Then Phase 6 remainder: onboarding is the cheapest first SwiftUI island, and proves the
+   `CLANG_ENABLE_MODULES = NO` interaction before committing to the larger ones.
+3. Phase 8 (shared modules) and 9 (optional LSP) after.
+
+## 2026-08-18 — QuickLook works; a Phase 2 resource regression found
 
 Branch `phase-6/quicklook-extension`. **Release deliberately held** — the maintainer asked to polish
 before shipping, and that call surfaced a much larger bug than the one being polished.
