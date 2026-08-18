@@ -30,13 +30,18 @@
 # each with its own wrapper script alongside this one (ExpandVariables ->
 # expand_plist.sh, CompileMarkdown -> markdown.sh, ConvertToUTF16 ->
 # utf16.sh); CompileIcon reuses bin/build_app_icon.sh, already written for
-# exactly this. CompileXib is native Xcode behaviour EXCEPT for
-# resources/English.lproj/MainMenu.xib specifically, which lives inside an
-# English.lproj directory this script reassembles by hand rather than through
-# Xcode's PBXVariantGroup localization mechanism (a single-language .lproj
-# with only two files isn't worth fighting Xcode's localized-variant-group
-# wiring for) -- so it is compiled directly here with the same `xcrun ibtool`
-# invocation CompileXib uses (bin/rave:650-659, IB_FLAGS from default.rave:18).
+# exactly this. CompileXib is native Xcode behaviour EXCEPT for two xibs,
+# both compiled here by hand with the same `xcrun ibtool` invocation
+# CompileXib uses (bin/rave:650-659, IB_FLAGS from default.rave:18):
+# resources/English.lproj/MainMenu.xib, which lives inside an English.lproj
+# directory this script reassembles by hand rather than through Xcode's
+# PBXVariantGroup localization mechanism (a single-language .lproj with only
+# two files isn't worth fighting Xcode's localized-variant-group wiring for);
+# and Frameworks/Preferences/resources/English.lproj/TerminalPreferences.xib,
+# which belongs to a statically-linked framework with no Resources bundle of
+# its own (see the framework image loop below), so its one xib has nowhere
+# else to compile to -- this was missed entirely by the Phase 2 rave->Xcode
+# migration and shipped with an empty Terminal preferences pane until fixed.
 #
 # Usage (from a project.yml postBuildScripts `script:`):
 #   "$SRCROOT/Xcode/scripts/assemble_resources.sh" <TextMate|Dialog|Dialog2>
@@ -111,6 +116,10 @@ assemble_textmate() {
 	xcrun ibtool --compile "$contents/Resources/English.lproj/MainMenu.nib" \
 		--errors --warnings --notices --output-format human-readable-text \
 		"$app/resources/English.lproj/MainMenu.xib"
+
+	xcrun ibtool --compile "$contents/Resources/English.lproj/TerminalPreferences.nib" \
+		--errors --warnings --notices --output-format human-readable-text \
+		"$SRCROOT/Frameworks/Preferences/resources/English.lproj/TerminalPreferences.xib"
 
 	"$SRCROOT/bin/build_app_icon.sh" "$app/resources/textmate_lives.icon" "$contents/Resources/Assets.car"
 
