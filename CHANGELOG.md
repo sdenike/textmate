@@ -2,6 +2,24 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-17 (v3.0.0-revived.25)
+
+Quick Look previews work again.
+
+### Fixed
+
+* Several parts of the application were missing the files they needed to draw
+  themselves, and so did nothing at all: the Terminal pane in Settings, the whole
+  Bundle Editor, the encoding customisation window, and the tab-size picker.
+  Their layout files had never been built into the application. Also restored:
+  the file-type icons, the encodings list, Subversion status parsing, and the
+  HTML output window's supporting files.
+
+* Pressing Space on a source file in Finder shows a TextMate preview again. The
+  old preview plug-in used an interface Apple retired in macOS 12, and macOS had
+  stopped loading it altogether — so previews had quietly not been working at
+  all. It is replaced by a modern Quick Look extension.
+
 ## 2026-08-16 (v3.0.0-revived.24)
 
 Opening a file is substantially faster, and the app is smaller.

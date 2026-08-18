@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Where the plan lives
+
+`HANDOFF.md` is the snapshot — current state, and its **Next** section holds the whole remaining
+phase plan with the design spec's own wording quoted for each phase. `STREAM.md` is the newest-first
+play-by-play; its top entry always says where the last session stopped. Read HANDOFF first, STREAM
+only when you need the reasoning behind a decision. The design spec itself is
+`docs/superpowers/specs/2026-08-12-textmate-revived-design.md`.
+
 ## Fork constraints
 
 This is `sdenike/textmate` (remote `origin`), a fork of `textmate/textmate` targeting macOS 26 /
@@ -98,6 +106,12 @@ brew install --cask textmate-revived     # or download the .tbz from Releases
 Self-hosted building (pressing ⌘B inside a running TextMate.app to rebuild TextMate itself, via
 the optional Ninja bundle and `.tm_properties`' old `TM_NINJA_TARGET` mapping) no longer works —
 neither ninja nor that mapping exist anymore. Build from Xcode or the command line instead.
+
+**No target in this tree has ever contained a Swift file, and `CLANG_ENABLE_MODULES = NO` is set in
+`Xcode/Base.xcconfig`.** Phase 6's remaining work is SwiftUI islands, so that interaction has to be
+proven before anything large depends on it — modules-off is exactly the setting Swift interop tends
+to need. Find out on the smallest island (onboarding, which has no existing AppKit implementation),
+not on Preferences.
 
 ## Architecture
 
@@ -210,8 +224,33 @@ comm -23 <(find Frameworks -type f \( -name '*.png' -o -name '*.pdf' -o -name '*
          <(ls "$APP" | sort -u)          # must print nothing
 ```
 
-Flattening relies on every image basename under `Frameworks/` being unique. Check that with
-`find Frameworks -name '*.png' -o -name '*.pdf' | xargs -n1 basename | sort | uniq -d`.
+**The glob has now been wrong three times, and the third was not about images at all.**
+`assemble_resources.sh` matched only `*.png`, `*.pdf`, `*.tiff`, so **every other resource type in
+every framework was silently dropped** from Phase 2 onward — xibs, plists, xslt, html, js. Confirmed
+missing from shipped builds while referenced by live code: `Charsets.plist`
+(`OakEncodingPopUpButton.mm`), `svn_status.xslt` (`scm/src/drivers/svn.cc`), `bindings.plist` and 36
+`.icns` (`TMFileReference.mm`), `HTMLOutputWKWebView.js` and `error_not_found.html`
+(`HOBrowserView.mm`), plus **12 xibs that were never compiled at all** — Terminal preferences, the
+whole Bundle Editor (8), `CustomizeEncodings`, `Pasteboard Selector`, `TabSizeSetting`.
+
+The symptom is always silence: the pane renders empty, the popup has no entries, the feature just
+does nothing. The Terminal preferences pane looked like a click that failed to register; it was
+actually an empty view being pinned to `fittingSize` of 0x0 by `OakTransitionViewController`, with
+the previous pane still visible underneath.
+
+Flattening relies on every resource basename under `Frameworks/` being unique. **`bin/verify_resources.sh`
+now checks the whole set difference at build time** and fails when anything does not ship, so this
+class of bug cannot recur silently.
+
+For a collision check by hand, use NUL delimiters — the obvious form is wrong:
+
+```sh
+# WRONG: splits on spaces, so "Bookmark Hover Add Template.pdf" yields false positives
+find Frameworks -name '*.png' -o -name '*.pdf' | xargs -n1 basename | sort | uniq -d
+
+# RIGHT
+find Frameworks -type f -print0 | xargs -0 -n1 basename | sort | uniq -d
+```
 
 **`assemble_resources.sh` copies but never deletes, so an incremental build keeps resources you
 removed from the source.** After the About window's Contributions page was deleted on 2026-08-16,
@@ -400,6 +439,37 @@ Two measurement traps, both of which have already produced wrong conclusions her
 the path given, so it profiles `/Applications/TextMate.app` instead of your build.
 Changing the copy's `CFBundleIdentifier` does not help. Use `sample` on a directly
 executed binary.
+
+
+## QuickLook
+
+`Contents/PlugIns/QuickLookExtension.appex` replaced the `.qlgenerator` in Phase 6. The generator
+was not merely deprecated — macOS had stopped loading it, so previews were silently broken in every
+shipped build.
+
+Four things about this cost a day between them; none is guessable from the code:
+
+- **`.appex` requires EXACT UTIs.** The legacy `.qlgenerator` matched by *conformance*, so declaring
+  `public.source-code` covered every language beneath it. `QLSupportedContentTypes` does not: a
+  `.rb` file is `public.ruby-script` and will not match `public.source-code`. The extension declares
+  ~165 exact UTIs for that reason. Carrying the old three-entry list across meant macOS never
+  invoked it at all.
+- **Extensions must be sandboxed.** Removing the sandbox makes the `.appex` unloadable —
+  `pkd` logs *"plug-ins must be sandboxed"* and it never registers. Access to
+  `~/Library/Application Support/TextMate/` and `~/Library/Caches/com.shelbydenike.TextMate/` comes
+  from temporary-exception entitlements. **The home root (`/`) must also be granted**, because
+  `path::passwd_entry()` validates it with `access(pw_dir, R_OK)`.
+- **`qlmanage` is useless here.** `qlmanage -m plugins` cannot see app extensions (Safari's own is
+  equally absent) and `qlmanage -p` *crashes* on any `.appex`, Apple's own included. Use
+  `pluginkit -m -p com.apple.quicklook.preview`. Deploying a new bundle drops the registration —
+  restore it with `pluginkit -a <path to .appex>`.
+- **Deleting a build does not unregister it.** Stale `TextMate.app` copies keep their LaunchServices
+  claims, and 62 of them advertising the retired `.qlgenerator` at Default rank pre-empted the new
+  extension entirely. Clean up with `lsregister -u <path>`, not just `rm -rf`.
+
+Diagnosing it needs care: `log show` returns nothing at all in some sandboxes, and reading that
+silence as "the extension never ran" sent two rounds of investigation the wrong way. Sampling the
+live process (`sample <pid>`) is what actually located the hang.
 
 ## Bundle delivery
 
