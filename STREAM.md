@@ -4,7 +4,49 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-18 — RESUME HERE: .25 ready on a branch, verified by the maintainer
+## 2026-08-18 — RESUME HERE: clean stop, PR #18 open, phase plan written down
+
+**Nothing is in flight.** Working tree clean, `phase-6/quicklook-extension` pushed at `a9196f06`,
+[PR #18](https://github.com/sdenike/textmate/pull/18) open against `master` with 8 commits.
+
+**If interrupted here / on resuming:** read `HANDOFF.md`'s **Next** section — the whole remaining
+phase plan now lives there rather than in a session that gets discarded. Then ask the maintainer
+whether to merge PR #18 before touching anything else.
+
+### Why merging PR #18 is not a docs decision
+
+`release.yml` fires on a `CHANGELOG.md` push to `master`, and the `.25` entry is already in the
+diff. Merging it signs, notarizes, staples, tags and publishes a release. The maintainer has not
+authorised that. Do not merge it unprompted.
+
+### What this session actually produced
+
+Everything technical landed in the two blocks below — Quick Look via an app extension, the bounded
+`path::passwd_entry()` loop, and the third recurrence of the resource glob bug now guarded by
+`bin/verify_resources.sh`. This entry adds only the plan.
+
+`Ruling: the remaining-phase plan was reported to the maintainer in chat and existed nowhere else.
+Written into HANDOFF.md's Next section with the spec's own text quoted for each phase, so a fresh
+session resumes without re-reading the design doc or the transcript. Cost if wrong: a stale plan
+section, which is cheap to correct — against a whole session spent re-deriving it, which is not.`
+
+### The one open technical question in Phase 6
+
+`Xcode/Base.xcconfig` sets `CLANG_ENABLE_MODULES = NO`, and **no target in the tree has ever
+contained a Swift file**. Whether Swift compiles here at all is untested. Onboarding is the right
+place to find out — it is the only SwiftUI island with no existing AppKit implementation to reach
+parity with, so a failure there costs nothing but the experiment.
+
+### Memory written this session
+
+`~/.claude/projects/-Users-shelby-Development-textmate/memory/` had three files and **no
+`MEMORY.md` index**, so none of them were loading. Index created, plus two standing corrections that
+existed only in conversation: no `Claude-Session` trailers or AI attribution in commits, and no
+signing credentials (Team ID, Apple ID) in the public repo.
+
+---
+
+## 2026-08-18 — .25 ready on a branch, verified by the maintainer
 
 Branch `phase-6/quicklook-extension`, 7 commits, **pushed but NOT merged**. Merging publishes
 v3.0.0-revived.25 (`release.yml` fires on a `CHANGELOG.md` push to `master`).

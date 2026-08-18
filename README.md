@@ -16,9 +16,10 @@ modern Mac, it updates itself, and it installs with `brew`.
 
 What that has meant in practice: replacing the retired `rave`/`ninja` build with a committed Xcode
 project, removing dependencies the editor no longer needed, moving off Ruby 1.8-era assumptions to
-the system Ruby 2.6.10, migrating the HTML output from `WebView` to `WKWebView`, and taking on the
-fork's own identity for bundle identifiers and the privileged helper so it can coexist with an
-official install.
+the system Ruby 2.6.10, migrating the HTML output from `WebView` to `WKWebView`, replacing the Quick
+Look generator macOS had stopped loading with a modern extension, and taking on the fork's own
+identity for bundle identifiers and the privileged helper so it can coexist with an official
+install.
 
 Long live TextMate.
 

@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Where the plan lives
+
+`HANDOFF.md` is the snapshot — current state, and its **Next** section holds the whole remaining
+phase plan with the design spec's own wording quoted for each phase. `STREAM.md` is the newest-first
+play-by-play; its top entry always says where the last session stopped. Read HANDOFF first, STREAM
+only when you need the reasoning behind a decision. The design spec itself is
+`docs/superpowers/specs/2026-08-12-textmate-revived-design.md`.
+
 ## Fork constraints
 
 This is `sdenike/textmate` (remote `origin`), a fork of `textmate/textmate` targeting macOS 26 /
@@ -98,6 +106,12 @@ brew install --cask textmate-revived     # or download the .tbz from Releases
 Self-hosted building (pressing ⌘B inside a running TextMate.app to rebuild TextMate itself, via
 the optional Ninja bundle and `.tm_properties`' old `TM_NINJA_TARGET` mapping) no longer works —
 neither ninja nor that mapping exist anymore. Build from Xcode or the command line instead.
+
+**No target in this tree has ever contained a Swift file, and `CLANG_ENABLE_MODULES = NO` is set in
+`Xcode/Base.xcconfig`.** Phase 6's remaining work is SwiftUI islands, so that interaction has to be
+proven before anything large depends on it — modules-off is exactly the setting Swift interop tends
+to need. Find out on the smallest island (onboarding, which has no existing AppKit implementation),
+not on Preferences.
 
 ## Architecture
 

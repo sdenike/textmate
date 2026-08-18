@@ -21,7 +21,7 @@ maintainer and enforced throughout:
 | | |
 |---|---|
 | Released | **v3.0.0-revived.24** |
-| Unreleased | **v3.0.0-revived.25** ready on `phase-6/quicklook-extension` |
+| Unreleased | **v3.0.0-revived.25** — pushed, **PR #18 open, not merged** |
 | Phases complete | 0-5, 7 |
 | Phase 6 | remainder in progress — QuickLook done, SwiftUI islands not started |
 | Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |
@@ -172,8 +172,71 @@ been made against `/Applications/TextMate.app`, an older installed release, not 
 
 ## Next
 
-Phase 8 (shared modules) and Phase 9 (optional LSP). Before more micro-optimising,
-note that the remaining open-time cost is structural: the whole file is parsed at
-open rather than the visible region (`set_grammar` dirties the entire buffer and
-batching stops at EOF, never at the viewport). That is the next real lever, and it
-is a larger change than anything in Phase 7.
+Nothing is in flight. The tree is clean, `phase-6/quicklook-extension` is pushed, and
+[PR #18](https://github.com/sdenike/textmate/pull/18) is open against `master`.
+
+**Merging that PR publishes v3.0.0-revived.25** — `release.yml` fires on a `CHANGELOG.md` push to
+`master`, and the `.25` entry is already in the diff. It is the maintainer's call and has not been
+given. Do not merge it without being asked.
+
+### Phase 6 remainder — SwiftUI islands
+
+The only spec item still genuinely open. The spec's own words
+(`docs/superpowers/specs/2026-08-12-textmate-revived-design.md:236`):
+
+> SwiftUI islands for Preferences, About, onboarding, update sheet, using #1467's `OakSwiftUI`
+> bridge. *Gate:* visual parity pass, no regressions in the responder chain or key equivalents.
+
+**Start with onboarding.** It is the only one of the four with no existing implementation, so there
+is nothing to reach parity with — everything built is new, and the interesting question gets answered
+cheaply: **does Swift compile in this project at all?** `Xcode/Base.xcconfig` sets
+`CLANG_ENABLE_MODULES = NO`, and no target in the tree has ever contained a Swift file. That
+interaction is untested. Prove it on the smallest island before committing to a large one.
+
+Preferences, About and the update sheet are each large: together roughly 1,945 lines of working
+AppKit whose behaviour a SwiftUI rewrite has to match exactly, including key equivalents and the
+responder chain the gate names.
+
+The rest of Phase 6 is settled and should not be reopened:
+
+- **Scope bar** and **back/forward navigation** — already present since 2014 and 2018.
+- **`NSRulerView` gutter** — recommended **against**. It would delete ~600 lines of better-fitted
+  code for a system class that does not model multi-column icons.
+- **`NSSplitViewController` sidebar** — large, with no forcing function. Defer.
+
+### Phase 8 — extract shared modules
+
+> SwiftPM package repo with `RevivedUpdater`, `RevivedGlass`, `RevivedSettings`. Consumed by
+> TextMate Revived; adopted by Hidden Bar / White Rabbit / Smilodon later. **Extract only what a
+> second app demonstrably needs.** *Gate:* TextMate Revived builds against the package as an
+> external dependency.
+
+That constraint is the blocker: no second app consumes these yet, so what a second app "demonstrably
+needs" is currently unknowable. Starting Phase 8 before one does means guessing at the API and
+extracting the wrong surface. Either adopt one of the three apps first, or accept that the extraction
+will be revised once a real consumer exists.
+
+### Phase 9 — optional: LSP and Copilot
+
+> #1467's LSP client, Copilot ghost text, Cmd+P palette. Gated on explicit approval; held out because
+> it is the largest chunk of new code, the one thing reviewers pushed back on, and not among the
+> stated goals.
+
+Do not start this without being asked for it by name.
+
+### Requested by the maintainer, belonging to no phase
+
+- **Quick Look preview theme picker.** The extension reads `darkModeThemeUUID`; the maintainer wants
+  the preview theme chosen explicitly rather than inherited.
+- **File-type association UI in Settings** — `LSSetDefaultRoleHandlerForContentType`, so TextMate can
+  claim file types from within the app. Scoped, not built.
+- **The window-merge gesture has never been tested by a human**, particularly with an unsaved
+  document. GUI gestures cannot be synthesised in the agent sandbox; this needs the maintainer.
+- **Georg Seifert (`schriftgestalt`) offered a UI PR.** Unanswered.
+
+### The next real performance lever
+
+Before any further micro-optimisation: the remaining open-time cost is structural. The whole file is
+parsed at open rather than the visible region — `set_grammar` dirties the entire buffer and batching
+stops at EOF, never at the viewport. That is a larger change than anything in Phase 7, and it is
+where the time actually is.
