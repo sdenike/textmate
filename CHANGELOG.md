@@ -8,6 +8,10 @@ Quick Look previews work again.
 
 ### Fixed
 
+* The Terminal pane in Settings was empty — clicking it left the previous pane's
+  options on screen. Its layout file was never being built into the application,
+  so the pane had nothing to show.
+
 * Pressing Space on a source file in Finder shows a TextMate preview again. The
   old preview plug-in used an interface Apple retired in macOS 12, and macOS had
   stopped loading it altogether — so previews had quietly not been working at

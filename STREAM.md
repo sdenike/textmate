@@ -4,7 +4,74 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-17 — RESUME HERE: QuickLook extension built, needs one human check
+## 2026-08-18 — RESUME HERE: QuickLook works; a Phase 2 resource regression found
+
+Branch `phase-6/quicklook-extension`. **Release deliberately held** — the maintainer asked to polish
+before shipping, and that call surfaced a much larger bug than the one being polished.
+
+### QuickLook works, verified by the maintainer
+
+Space-bar on a `.rb` file renders syntax highlighted. Instrumented build reached
+`STYLED: producing UTTypeRTF` rather than either plain-text fallback. Two real defects fixed:
+
+- **`.appex` requires EXACT UTIs.** `.qlgenerator` matched by *conformance*, so its three-entry list
+  (`public.source-code`, `public.plain-text`, `public.text`) covered everything beneath. An
+  extension gets no such treatment — `sample.rb` is `public.ruby-script` and matched none of them,
+  so macOS never invoked us. Now declares ~165 exact UTIs enumerated from `lsregister`.
+- **`path::passwd_entry()` looped forever.** It retries `getpwuid` around a modal alert until
+  `access(pw_dir, R_OK)` succeeds — unbounded, because it assumes a human is answering. Sandboxed,
+  `access()` fails on a perfectly good `/Users/<name>` and the alert cannot display, so it spun at
+  100% CPU. **That would hang any non-interactive caller** — `mate`, `tm_query`, the test runners.
+  Now bounded, and the home root is granted read-only so the check passes.
+
+### THE BIGGER FIND — resources have been missing since Phase 2
+
+The maintainer reported the Settings **Terminal** pane showing the previous pane's contents. Root
+cause: `TerminalPreferences.xib` — the only xib in the Preferences framework, every other pane being
+built in code — **was never compiled or copied**. No nib means an empty view, `fittingSize` of
+`0 x 0`, and `OakTransitionViewController` pins the incoming pane to zero size while the outgoing one
+stays visible. Title and toolbar update, so it looks like a click that did not register.
+
+Auditing outward found the same root cause everywhere: `assemble_resources.sh` globs only
+`*.png`, `*.pdf`, `*.tiff`, so **every other resource type in every framework has been dropped since
+Phase 2**:
+
+| Missing | Referenced by |
+|---|---|
+| 11 more xibs — Bundle Editor (8), `CustomizeEncodings`, `Pasteboard Selector`, `TabSizeSetting` | never compiled at all |
+| `Charsets.plist` | `OakEncodingPopUpButton.mm` |
+| `svn_status.xslt` | `scm/src/drivers/svn.cc` |
+| `bindings.plist` + 36 `.icns` | `TMFileReference.mm` |
+| `HTMLOutputWKWebView.js`, `error_not_found.html` | `HOBrowserView.mm` |
+
+`Ruling: this is the THIRD time this glob has been wrong -- CLAUDE.md already records it matching
+only gfx/*.png, then missing 40 PDFs. A fix alone is not enough; the widening must come with a
+build-time set-difference check that fails when a framework resource does not ship. A threshold
+check ("at least N files") is explicitly useless here and the docs already say so.`
+
+### Not regressions from this branch
+
+`path::passwd_entry()`'s new bound is inert for the app: it is unsandboxed, `access()` succeeds
+first time, and the Preferences code never calls `path::home()` at all. The Preferences sources are
+untouched since the Phase 1 merge.
+
+### Open, not addressed
+
+- **QuickLook theme.** The preview uses `universalThemeUUID` — a light theme against Quick Look's
+  dark chrome looks wrong — and consults `darkModeThemeUUID` in dark mode even when unset. Wants a
+  dedicated preview-theme preference. Recorded as a known gap in `2dda56c3`.
+- **The maintainer's editor theme showed white.** `themeAppearance = light` with
+  `darkModeThemeUUID` unset while the system is dark. Nothing on this branch writes those keys, but
+  the prefs file carries a `com.apple.macl` xattr proving the sandboxed extension read that domain,
+  so a side effect cannot be ruled out. Unresolved.
+
+### If interrupted here
+
+1. Finish the resource fix + its verification check, then re-test Settings panes and the Bundle Editor.
+2. Only then merge (publishes v3.0.0-revived.25).
+3. Theme picker for QuickLook previews after that.
+
+## 2026-08-17 — QuickLook extension built, needs one human check
 
 Branch `phase-6/quicklook-extension` at `2785d96b`. **Not merged.** Merging publishes
 v3.0.0-revived.25.

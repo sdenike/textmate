@@ -210,6 +210,20 @@ comm -23 <(find Frameworks -type f \( -name '*.png' -o -name '*.pdf' -o -name '*
          <(ls "$APP" | sort -u)          # must print nothing
 ```
 
+**The glob has now been wrong three times, and the third was not about images at all.**
+`assemble_resources.sh` matched only `*.png`, `*.pdf`, `*.tiff`, so **every other resource type in
+every framework was silently dropped** from Phase 2 onward — xibs, plists, xslt, html, js. Confirmed
+missing from shipped builds while referenced by live code: `Charsets.plist`
+(`OakEncodingPopUpButton.mm`), `svn_status.xslt` (`scm/src/drivers/svn.cc`), `bindings.plist` and 36
+`.icns` (`TMFileReference.mm`), `HTMLOutputWKWebView.js` and `error_not_found.html`
+(`HOBrowserView.mm`), plus **12 xibs that were never compiled at all** — Terminal preferences, the
+whole Bundle Editor (8), `CustomizeEncodings`, `Pasteboard Selector`, `TabSizeSetting`.
+
+The symptom is always silence: the pane renders empty, the popup has no entries, the feature just
+does nothing. The Terminal preferences pane looked like a click that failed to register; it was
+actually an empty view being pinned to `fittingSize` of 0x0 by `OakTransitionViewController`, with
+the previous pane still visible underneath.
+
 Flattening relies on every image basename under `Frameworks/` being unique. Check that with
 `find Frameworks -name '*.png' -o -name '*.pdf' | xargs -n1 basename | sort | uniq -d`.
 
