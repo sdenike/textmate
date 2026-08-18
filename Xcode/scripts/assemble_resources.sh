@@ -30,18 +30,21 @@
 # each with its own wrapper script alongside this one (ExpandVariables ->
 # expand_plist.sh, CompileMarkdown -> markdown.sh, ConvertToUTF16 ->
 # utf16.sh); CompileIcon reuses bin/build_app_icon.sh, already written for
-# exactly this. CompileXib is native Xcode behaviour EXCEPT for two xibs,
-# both compiled here by hand with the same `xcrun ibtool` invocation
-# CompileXib uses (bin/rave:650-659, IB_FLAGS from default.rave:18):
+# exactly this. CompileXib is native Xcode behaviour EXCEPT for xibs compiled
+# here by hand with the same `xcrun ibtool` invocation CompileXib uses
+# (bin/rave:650-659, IB_FLAGS from default.rave:18):
 # resources/English.lproj/MainMenu.xib, which lives inside an English.lproj
 # directory this script reassembles by hand rather than through Xcode's
 # PBXVariantGroup localization mechanism (a single-language .lproj with only
 # two files isn't worth fighting Xcode's localized-variant-group wiring for);
-# and Frameworks/Preferences/resources/English.lproj/TerminalPreferences.xib,
-# which belongs to a statically-linked framework with no Resources bundle of
-# its own (see the framework image loop below), so its one xib has nowhere
-# else to compile to -- this was missed entirely by the Phase 2 rave->Xcode
-# migration and shipped with an empty Terminal preferences pane until fixed.
+# and every Frameworks/*/resources/English.lproj/*.xib -- 12 of them, each
+# belonging to a statically-linked framework with no Resources bundle of its
+# own (see the framework resource loop below), so none has anywhere else to
+# compile to. Only TerminalPreferences.xib was wired up at first -- missed
+# entirely by the Phase 2 rave->Xcode migration and shipped with an empty
+# Terminal preferences pane until fixed -- the other 11 (OakAppKit x2,
+# OakTextView, BundleEditor x8) were still uncompiled, and so unreachable at
+# runtime, until this comment.
 #
 # Usage (from a project.yml postBuildScripts `script:`):
 #   "$SRCROOT/Xcode/scripts/assemble_resources.sh" <TextMate|Dialog|Dialog2>
@@ -117,9 +120,16 @@ assemble_textmate() {
 		--errors --warnings --notices --output-format human-readable-text \
 		"$app/resources/English.lproj/MainMenu.xib"
 
-	xcrun ibtool --compile "$contents/Resources/English.lproj/TerminalPreferences.nib" \
-		--errors --warnings --notices --output-format human-readable-text \
-		"$SRCROOT/Frameworks/Preferences/resources/English.lproj/TerminalPreferences.xib"
+	# Every framework xib, one ibtool invocation each -- see the CompileXib
+	# comment at the top of this file for why these can't use native Xcode
+	# CompileXib. Verified against each xib's own load site
+	# (initWithNibName:/initWithWindowNibName:/loadNibNamed:) that it resolves
+	# via +[NSBundle bundleForClass:], i.e. the app bundle, not the framework.
+	while IFS= read -r -d '' xib; do
+		xcrun ibtool --compile "$contents/Resources/English.lproj/$(basename "$xib" .xib).nib" \
+			--errors --warnings --notices --output-format human-readable-text \
+			"$xib"
+	done < <(find "$SRCROOT/Frameworks" -path '*/resources/English.lproj/*.xib' -print0)
 
 	"$SRCROOT/bin/build_app_icon.sh" "$app/resources/textmate_lives.icon" "$contents/Resources/Assets.car"
 
@@ -139,44 +149,65 @@ assemble_textmate() {
 	mkdir -p "$contents/Resources"
 	cp -p "$app/icons/"*.icns "$contents/Resources/"
 
-	# Framework image assets. The frameworks are statically linked into the
-	# app, so +[NSImage imageNamed:inSameBundleAsClass:] resolves through
-	# +[NSBundle bundleForClass:] to the app bundle itself -- these must sit
-	# flat in Resources/, not under a gfx/ subdirectory, or the lookup misses.
+	# Framework resource assets (images, plists, xslt, HTML, JS -- everything
+	# that isn't a xib, compiled separately above). The frameworks are
+	# statically linked into the app, so +[NSImage imageNamed:inSameBundleAsClass:],
+	# +[NSBundle bundleForClass:] and +[NSBundle mainBundle] all resolve to the
+	# app bundle itself -- these must sit flat in Resources/, not under a gfx/
+	# subdirectory, or the lookup misses.
 	#
 	# A miss is silent: imageNamed: returns nil, and an NSButton with neither
 	# image nor title falls back to drawing AppKit's default title, "Button".
 	# That is exactly what shipped in v3.0.0-revived.16 and .17 -- the tab
 	# overflow button and the per-tab close button both rendered as the word
-	# "Button". Verify after changing this with:
+	# "Button". pathForResource:/URLForResource: return nil just as quietly.
+	# Verify after changing this with:
 	#   find "$APP/Contents/Resources" -name 'TabOverflowThinTemplate*'
 	#
-	# Two things this glob got wrong until 2026-08-15, both silent, and together
-	# they cost another 40 images on top of the 40 the .18 fix recovered:
+	# This glob has been wrong three times, always by hardcoding a list that
+	# didn't cover everything actually present -- see CLAUDE.md's Liquid Glass
+	# section for the first two:
 	#
-	#   * It only looked in directories named `gfx`. Four frameworks keep their
-	#     artwork elsewhere -- FileBrowser, DocumentWindow and OakTextView under
-	#     `resources/`, Preferences under `icons/`.
-	#   * It only matched `*.png`. The entire gutter icon set is PDF: the folding
-	#     arrows, bookmarks, and the diff/error/warning/note marks.
+	#   * v3.0.0-revived.18 matched only gfx/*.png and missed 40 files -- PDF,
+	#     and artwork outside gfx/ (FileBrowser, DocumentWindow and OakTextView
+	#     keep theirs under resources/, Preferences under icons/).
+	#   * 2026-08-15 widened the three directory names but still matched only
+	#     *.png/*.pdf/*.tiff, silently dropping Charsets.plist, svn_status.xslt,
+	#     bindings.plist, TMFileReference's 36 .icns, and the two HTMLOutput
+	#     WKWebView files -- confirmed still referenced by live code.
 	#
-	# So the file browser's search, favorites and SCM buttons drew nothing, the
-	# Preferences toolbar had no icons, and the gutter had no folding arrows --
-	# from the Xcode migration until this was fixed.
+	# Third time: stop hardcoding extensions. Copy whatever exists.
+	#
+	# TMFileReference is the one framework whose resources do NOT flatten to
+	# Resources/ directly. Its deleted default.rave (git show d07cc0c8^:Frameworks/TMFileReference/default.rave)
+	# named an explicit "Resources/DocumentTypes" destination, matched by its
+	# own code (TMFileReference.mm: URLForResource:...subdirectory:@"DocumentTypes",
+	# pathForResource:@"DocumentTypes/bindings"). Checked all 60 deleted
+	# default.rave files: every other framework used a plain "Resources"
+	# destination, so this is the only per-framework override needed.
 	#
 	# `-type f -o -type l` rather than plain `-type f`: BundleEditor ships
 	# Proxy.png as a symlink to Settings.png, and -type f silently excludes
 	# symlinks, so the plain form copied 39 of the 40 images. cp follows the
 	# link and writes a real file, which is what the bundle wants.
 	#
-	# Flattening is safe: every image basename under Frameworks/ is unique, so
-	# nothing overwrites anything. If that ever stops being true this loop will
-	# silently pick a winner, so check with:
-	#   find Frameworks -name '*.png' -o -name '*.pdf' | xargs -n1 basename | sort | uniq -d
-	while IFS= read -r -d '' gfx; do
-		cp -p "$gfx" "$contents/Resources/$(basename "$gfx")"
+	# Flattening (outside DocumentTypes) is safe: every basename in this set is
+	# unique across Frameworks/. If that ever stops being true this loop will
+	# silently pick a winner -- bin/verify_resources.sh's set-difference check
+	# does not by itself catch a collision (both names are still "shipped"),
+	# so check uniqueness explicitly:
+	#   find Frameworks -type d \( -name gfx -o -name resources -o -name icons \) \
+	#     -exec find {} \( -type f -o -type l \) -not -name '*.xib' -not -path '*/TMFileReference/resources/*' -print0 \; \
+	#     | xargs -0 -n1 basename | sort | uniq -d
+	mkdir -p "$contents/Resources/DocumentTypes"
+	while IFS= read -r -d '' res; do
+		if [[ "$res" == */TMFileReference/resources/* ]]; then
+			cp -p "$res" "$contents/Resources/DocumentTypes/$(basename "$res")"
+		else
+			cp -p "$res" "$contents/Resources/$(basename "$res")"
+		fi
 	done < <(find "$SRCROOT/Frameworks" -type d \( -name gfx -o -name resources -o -name icons \) \
-		-exec find {} \( -type f -o -type l \) \( -name '*.png' -o -name '*.pdf' -o -name '*.tiff' \) -print0 \;)
+		-exec find {} \( -type f -o -type l \) -not -name '*.xib' -print0 \;)
 
 	# about/* + ../../CHANGELOG.md -- files -> Resources/About.
 	mkdir -p "$contents/Resources/About/css"
