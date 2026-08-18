@@ -224,8 +224,19 @@ does nothing. The Terminal preferences pane looked like a click that failed to r
 actually an empty view being pinned to `fittingSize` of 0x0 by `OakTransitionViewController`, with
 the previous pane still visible underneath.
 
-Flattening relies on every image basename under `Frameworks/` being unique. Check that with
-`find Frameworks -name '*.png' -o -name '*.pdf' | xargs -n1 basename | sort | uniq -d`.
+Flattening relies on every resource basename under `Frameworks/` being unique. **`bin/verify_resources.sh`
+now checks the whole set difference at build time** and fails when anything does not ship, so this
+class of bug cannot recur silently.
+
+For a collision check by hand, use NUL delimiters — the obvious form is wrong:
+
+```sh
+# WRONG: splits on spaces, so "Bookmark Hover Add Template.pdf" yields false positives
+find Frameworks -name '*.png' -o -name '*.pdf' | xargs -n1 basename | sort | uniq -d
+
+# RIGHT
+find Frameworks -type f -print0 | xargs -0 -n1 basename | sort | uniq -d
+```
 
 **`assemble_resources.sh` copies but never deletes, so an incremental build keeps resources you
 removed from the source.** After the About window's Contributions page was deleted on 2026-08-16,
