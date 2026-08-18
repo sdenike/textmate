@@ -4,7 +4,46 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-18 — RESUME HERE: clean stop, PR #18 open, phase plan written down
+## 2026-08-18 — RESUME HERE: .25 published, and Swift proved to work in this tree
+
+**PR #18 merged** as `a8bc6398`, branch deleted locally and on origin. That fired `release.yml` and
+published **v3.0.0-revived.25**. Now on `phase-6/swiftui-onboarding`, tree clean, nothing in flight.
+
+### Phase 6's one open question is answered: Swift compiles here
+
+Settled by a throwaway spike on the `TextMate` app target — added a `.swift` file, called it from
+`main.mm`, built, reverted. `CLANG_ENABLE_MODULES = NO` was the suspected blocker and **is not one**:
+the Swift compiler's ClangImporter uses modules internally whatever that target-level Clang setting
+says. `SWIFT_VERSION = 6.0` was already in `Base.xcconfig`, no other setting needed adding, and no
+Swift runtime is embedded because it is ABI-stable in macOS 26.
+
+The full contract now lives in `CLAUDE.md`. The two findings that would each have cost an afternoon:
+
+- **`internal @objc` is invisible to ObjC++.** It compiles, reaches the `.swiftmodule`, and is simply
+  absent from the generated `TextMate-Swift.h` — a 383-line header with zero `@interface` in it. The
+  error surfaces as `use of undeclared identifier` at the *call site*, pointing at the wrong file
+  entirely. Declarations must be `public`, not merely `@objc`.
+- **A bridging header cannot see ObjC++, and cannot see this tree's ObjC either.** It is parsed as
+  C/ObjC, so C++ is a syntax error rather than an unsupported feature; and it is compiled without
+  `GCC_PREFIX_HEADER = prelude.mm`, so framework headers relying on the prelude for their AppKit
+  imports fail on `NSImage`, `NSButton`, `BOOL`. The bridge has to be a narrow, self-contained,
+  pure-ObjC shim. Verified working alongside `import SwiftUI`.
+
+`Ruling: spiked the toolchain question before designing the onboarding island rather than after.
+Cost was two incremental builds and a revert. The other order would have surfaced the
+bridging-header constraint midway through an island already written against the app's real headers
+— a rewrite rather than a fix.`
+
+### If interrupted here
+
+The onboarding island itself is next and **has not been designed yet** — brainstorm before writing
+it. The proven-safe shape: ObjC++ owns the window and drives Swift through `TextMate-Swift.h`, while
+Swift calls back out through a pure-ObjC protocol in a self-contained bridging header. Also confirm
+the .25 release finished: `gh run view 32181270935 --repo sdenike/textmate`.
+
+---
+
+## 2026-08-18 — clean stop, PR #18 open, phase plan written down
 
 **Nothing is in flight.** Working tree clean, `phase-6/quicklook-extension` pushed at `a9196f06`,
 [PR #18](https://github.com/sdenike/textmate/pull/18) open against `master` with 8 commits.

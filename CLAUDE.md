@@ -107,11 +107,39 @@ Self-hosted building (pressing ⌘B inside a running TextMate.app to rebuild Tex
 the optional Ninja bundle and `.tm_properties`' old `TM_NINJA_TARGET` mapping) no longer works —
 neither ninja nor that mapping exist anymore. Build from Xcode or the command line instead.
 
-**No target in this tree has ever contained a Swift file, and `CLANG_ENABLE_MODULES = NO` is set in
-`Xcode/Base.xcconfig`.** Phase 6's remaining work is SwiftUI islands, so that interaction has to be
-proven before anything large depends on it — modules-off is exactly the setting Swift interop tends
-to need. Find out on the smallest island (onboarding, which has no existing AppKit implementation),
-not on Preferences.
+**Swift compiles in this tree, and the bridge works in only one direction without care.** Measured
+2026-08-18 by a throwaway spike on the `TextMate` app target, run before any island was designed.
+`CLANG_ENABLE_MODULES = NO` does **not** block Swift — the Swift compiler's ClangImporter uses
+modules internally regardless of that target-level Clang setting. `SWIFT_VERSION = 6.0` was already
+set in `Xcode/Base.xcconfig` and needed no change, no other build setting had to be added, and no
+Swift runtime is embedded: `Contents/Frameworks` stays absent because the runtime is ABI-stable in
+macOS 26. Adding a `.swift` path to a target's `sources` in `project.yml` plus `xcodegen generate`
+is the whole mechanism.
+
+Four facts, each of which fails silently or misleadingly when you get it wrong:
+
+- **Swift declarations must be `public`, not merely `@objc`.** An `internal @objc` class compiles,
+  lands in the `.swiftmodule`, and is simply *absent* from the generated `TextMate-Swift.h`. The
+  symptom is not "file not found" — the header exists and parses fine, all 383 lines of it, just
+  with zero `@interface` in it. ObjC++ then fails with `use of undeclared identifier`, which reads
+  like a typo rather than an access-level problem.
+- **ObjC++ → Swift works.** `#import "TextMate-Swift.h"` from a `.mm` compiles and links; the
+  mangled symbol and its ObjC thunk (`…greetingSSyFZTo`) both appear in the built binary.
+- **Swift → ObjC++ does not, and cannot.** A bridging header is parsed as **C/ObjC, never ObjC++**,
+  so C++ in it is a syntax error rather than an unsupported feature. Pointing one at
+  `OakUIConstructionFunctions.h` yields `function definition declared 'typedef'` and `parameter
+  'NSUInteger' was not declared, defaults to 'int'; ISO C99 and later do not support implicit int`.
+- **This tree's ObjC headers do not stand alone either.** They take their AppKit and Foundation
+  imports from `GCC_PREFIX_HEADER = prelude.mm`, and that prefix header is *not* applied when
+  ClangImporter compiles the bridging header. `OakRolloverButton.h` alone produces `unknown type
+  name 'NSNotificationName'`, `cannot find interface declaration for 'NSButton'` and `unknown type
+  name 'BOOL'`.
+
+So a bridging header here must be a **narrow, self-contained, pure-ObjC shim** — one that
+`#import <Cocoa/Cocoa.h>` itself and declares only plain ObjC types, typically a protocol the Swift
+island calls back out through. It is not a window onto the app's real headers. That shape was
+verified to build alongside `import SwiftUI` in the same spike. Never point a bridging header at
+`Xcode/include/<framework>/`.
 
 ## Architecture
 
