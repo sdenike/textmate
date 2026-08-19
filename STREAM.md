@@ -4,6 +4,31 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-18 — Task 6, fix round 2/5: the currently-active theme is exempt from the hidden skip
+
+**What:** Implemented the fix round 1 proposed rather than shipped. `-availableThemes`
+(`SetupAssistantWindowController.mm`) now reads `universalThemeUUID` and `darkModeThemeUUID` once
+before its enumeration loop and only applies the `hidden_from_user()` skip when an item's identifier
+matches neither -- mirroring `validateThemeMenuItem:`'s own unfiltered resolution of the current
+theme (`AppController Menus.mm:135-136`) rather than inventing a new mechanism. A theme that is
+hidden from `View -> Theme` but currently configured in either slot now stays selectable and shows
+as selected; every other hidden theme is still excluded exactly as round 1 left it.
+
+**Confirmed, not assumed:** the exemption reads both defaults keys unconditionally in the single
+pass that builds the whole list (no "which side" parameter exists on `-availableThemes` at all), so
+it can't be lost by switching the Light/Dark segmented control -- that only filters an
+already-complete, already-exempted list downstream in Swift. And `&&` short-circuits on
+`hidden_from_user()` first, so a non-hidden item never even reaches the UUID comparisons -- the
+common case (no hidden theme active) produces byte-identical output to round 1, unchanged.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **`. `bin/build TextMate/test` → `** BUILD SUCCEEDED **`;
+`TextMate_test -v` run directly → `TextMate_test: 14 tests passed`.
+
+### If interrupted here
+
+Fix rounds 1/5 and 2/5 for Task 6 are both committed. Up to 3 more review rounds may follow before
+Task 7 starts.
+
 ## 2026-08-18 — Task 6, fix round 1/5: hidden themes were leaking into the assistant's picker
 
 **What:** Review caught that `-availableThemes` (`SetupAssistantWindowController.mm`) had no

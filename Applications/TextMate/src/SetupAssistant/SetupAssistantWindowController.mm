@@ -101,15 +101,25 @@ static NSDictionary<NSString*, NSColor*>* colors_for_theme (theme_ptr const& the
 
 - (NSArray<TMThemeChoice*>*)availableThemes
 {
+	// Resolved unfiltered, same as validateThemeMenuItem: does for the current
+	// theme's menu-item label (AppController Menus.mm:135-136) -- whichever
+	// theme is active in either slot must stay offered (and selectable) even
+	// if hidden_from_user(), or a theme that later gains hideFromUser drops
+	// the user's real setting out of the list with no selection shown.
+	NSString* activeLightUUID = [NSUserDefaults.standardUserDefaults stringForKey:@"universalThemeUUID"];
+	NSString* activeDarkUUID  = [NSUserDefaults.standardUserDefaults stringForKey:@"darkModeThemeUUID"];
+
 	NSMutableArray<TMThemeChoice*>* res = [NSMutableArray array];
 	for(auto const& item : bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeTheme))
 	{
+		NSString* identifier = to_ns(to_s(item->uuid()));
+
 		// Same skip the themes menu applies (AppController Menus.mm:154) before
 		// it ever builds a menu item, so a theme hidden from View -> Theme
 		// (e.g. Themes.tmbundle's "macOS System Theme", hideFromUser) does not
-		// appear as a choice here either -- the two routes must offer the same
-		// list, not just write the same keys.
-		if(item->hidden_from_user())
+		// appear as a choice here either -- unless it's the theme actually
+		// active above.
+		if(item->hidden_from_user() && ![identifier isEqualToString:activeLightUUID] && ![identifier isEqualToString:activeDarkUUID])
 			continue;
 
 		theme_ptr theme = parse_theme(item);
@@ -120,7 +130,7 @@ static NSDictionary<NSString*, NSColor*>* colors_for_theme (theme_ptr const& the
 		// Menus.mm:152-156), so the assistant and View -> Theme agree on
 		// which themes are light and which are dark.
 		NSString* appearance = TMThemeAppearanceForSemanticClass(to_ns(item->value_for_field(bundles::kFieldSemanticClass)));
-		[res addObject:[TMThemeChoice choiceWithName:to_ns(item->name()) identifier:to_ns(to_s(item->uuid())) appearance:appearance colors:colors_for_theme(theme)]];
+		[res addObject:[TMThemeChoice choiceWithName:to_ns(item->name()) identifier:identifier appearance:appearance colors:colors_for_theme(theme)]];
 	}
 	[res sortUsingComparator:^NSComparisonResult(TMThemeChoice* a, TMThemeChoice* b){
 		return [a.name localizedCaseInsensitiveCompare:b.name];
