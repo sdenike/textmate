@@ -4,6 +4,40 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-18 — Task 3 landed: the gating predicate
+
+**What:** Executed Task 3 of `.superpowers/sdd/2026-08-18-setup-assistant/task-3-brief.md`. Appended
+four tests to `Applications/TextMate/tests/t_setup_assistant.mm` (`test_assistant_runs_when_key_absent`,
+`test_assistant_does_not_run_once_marked`, `test_marking_is_idempotent`,
+`test_legacy_bundle_prompt_key_does_not_suppress_the_assistant`) plus the
+`SetupAssistantGating.h` import, and confirmed the build fails as expected: `fatal error:
+'.../SetupAssistant/SetupAssistantGating.h' file not found`. Then created
+`Applications/TextMate/src/SetupAssistant/SetupAssistantGating.h` and `.mm` (free functions
+`TMSetupAssistantShouldRunAtLaunch`/`TMSetupAssistantMarkAsRun` plus
+`kUserDefaultsDidRunSetupAssistantKey`), added the `.mm` to `SetupAssistantCore`'s `sources:` in
+`project.yml`, regenerated `TextMate.xcodeproj`, and got `** BUILD SUCCEEDED **` with
+`TextMate_test -v` reporting `14 tests passed` (9 in this file: the prior 5 + these 4, plus 5
+existing preferences-migration tests). `bin/build` (the full app) also succeeds.
+
+**Why:** The predicate gates the assistant on its own new `didRunSetupAssistant` key rather than
+the legacy `didPromptForDefaultBundles` key, deliberately: every existing user already has the old
+key set, so reusing it would hide the assistant from exactly the audience its appearance step is
+for. Free functions, not a class, because a test file is wrapped in a namespace by `bin/gen_test`
+and Objective-C forbids declaring a class inside one — the same shape `PreferencesMigration`
+already uses.
+
+Confirms no surprises this task: no `OAK_ASSERT` top-level-comma trap this time (none of the four
+new assertions contain a bare `@[...]`/`@{...}` literal), and `bin/build TextMate/test`'s silent
+exit-0-on-success (it execs the runner without `-v`, so success prints nothing) is documented
+behavior, not a regression — verified by running the built binary directly with `-v`.
+
+### If interrupted here
+
+Task 3 is fully done, verified, and committed. Task 4 is next — see
+`.superpowers/sdd/2026-08-18-setup-assistant/` for its brief once written.
+
+---
+
 ## 2026-08-18 — Task 2 landed: SetupAssistantCore library, and the first test that runs
 
 **What:** Executed Task 2 of `docs/superpowers/plans/2026-08-18-setup-assistant.md`. Wrote

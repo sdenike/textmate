@@ -677,6 +677,7 @@
 		958D55AAAFAB883215E2FD62 /* libOakFoundation.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76BB05C4AB9D1AFB87185FE2 /* libOakFoundation.a */; };
 		95A11759BE03D235BFFB973C /* commit.mm in Sources */ = {isa = PBXBuildFile; fileRef = 9BB1BEDA806C41954CC11CDF /* commit.mm */; };
 		9654432BF3FA531970AFDEE7 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D45846DC7EE7EAB43FC926D8 /* ApplicationServices.framework */; };
+		96DCDE5DA8B19DADC60F3FEF /* SetupAssistantGating.mm in Sources */ = {isa = PBXBuildFile; fileRef = D831CCB80EF83DC3B571D5A0 /* SetupAssistantGating.mm */; };
 		96FA24276D61F74F160C6E27 /* libcrash.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A364573F8340083ACF50E59E /* libcrash.a */; };
 		96FB0421C75ECC3A515F201F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CBB3D486D049207D0E5C13A0 /* Foundation.framework */; };
 		97007068FD3F426A52FCB224 /* libcf.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FC84BF1D53A4AFB200D408AF /* libcf.a */; };
@@ -5447,6 +5448,7 @@
 		D53819E65850B8696D367E81 /* BundleRegistry.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = BundleRegistry.mm; sourceTree = "<group>"; };
 		D5D16B84D29BCEAA53B20FF6 /* OakCommandRefresh.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OakCommandRefresh.mm; sourceTree = "<group>"; };
 		D71E8048081D61005E632FF5 /* tooltip.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = tooltip.mm; sourceTree = "<group>"; };
+		D831CCB80EF83DC3B571D5A0 /* SetupAssistantGating.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SetupAssistantGating.mm; sourceTree = "<group>"; };
 		D97015FBF4F242F937C36437 /* OakOpenWithMenu.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OakOpenWithMenu.mm; sourceTree = "<group>"; };
 		D972C67B062C115BB659946E /* libSoftwareUpdate.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libSoftwareUpdate.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB52A686F77C9ED08F8C9A0A /* command_test */ = {isa = PBXFileReference; includeInIndex = 0; path = command_test; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -6666,6 +6668,7 @@
 		0C4DE2F0286DB623966A44E9 /* SetupAssistant */ = {
 			isa = PBXGroup;
 			children = (
+				D831CCB80EF83DC3B571D5A0 /* SetupAssistantGating.mm */,
 				B924106BC49F02D90F26A96B /* SetupAssistantTypes.mm */,
 				103A4FCC12A7948336C42F1B /* SetupAssistantView.swift */,
 			);
@@ -11772,6 +11775,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				96DCDE5DA8B19DADC60F3FEF /* SetupAssistantGating.mm in Sources */,
 				F73C4427424B887767030C28 /* SetupAssistantTypes.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
