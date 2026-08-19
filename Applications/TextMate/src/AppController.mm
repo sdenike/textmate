@@ -2,9 +2,10 @@
 #import "OakMainMenu.h"
 #import "Favorites.h"
 #import "AboutWindowController.h"
-#import "FirstLaunchBundleInstaller.h"
 #import "TMPlugInController.h"
 #import "RMateServer.h"
+#import "SetupAssistant/SetupAssistantWindowController.h"
+#import "SetupAssistant/SetupAssistantGating.h"
 #import <BundleEditor/BundleEditor.h>
 #import <BundlesManager/BundlesManager.h>
 #import <DocumentWindow/DocumentWindowController.h>
@@ -408,6 +409,8 @@ BOOL HasDocumentWindow (NSArray* windows)
 		{ @"Help",
 			.systemMenu = MBMenuTypeHelp, .submenu = {
 				{ @"TextMate Help", @selector(showHelp:), @"?" },
+				{ /* -------- */ },
+				{ @"Setup Assistant…", @selector(showSetupAssistant:) },
 			}
 		},
 	};
@@ -589,7 +592,8 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 	self.didFinishLaunching = YES;
 
-	[FirstLaunchBundleInstaller promptIfNeeded];
+	if(TMSetupAssistantShouldRunAtLaunch(NSUserDefaults.standardUserDefaults))
+		[SetupAssistantWindowController.sharedInstance runModal];
 }
 
 - (void)applicationWillResignActive:(NSNotification*)aNotification
@@ -656,6 +660,11 @@ BOOL HasDocumentWindow (NSArray* windows)
 - (IBAction)orderFrontAboutPanel:(id)sender
 {
 	[AboutWindowController.sharedInstance showAboutWindow:self];
+}
+
+- (IBAction)showSetupAssistant:(id)sender
+{
+	[SetupAssistantWindowController.sharedInstance runModal];
 }
 
 - (IBAction)orderFrontFindPanel:(id)sender

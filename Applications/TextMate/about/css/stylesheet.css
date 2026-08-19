@@ -22,12 +22,13 @@ body {
   background-attachment: fixed;
   color: var(--textColor); }
 
-/* The About window previously used a full-bleed background image inherited from
-   the textmatelives fork (tml_image.png). Removed 2026-08-14 along with that
-   fork's other branding -- it is not this project's artwork to ship. The window
-   renders on the themed background colours above; add a background-image here
-   if this fork ever has art of its own. */
+/* Full-bleed background image, inherited from the textmatelives fork
+   (tml_image.png). Removed 2026-08-14 along with that fork's other branding
+   (ac04adfa) on the grounds that it was not this project's artwork to ship;
+   restored 2026-08-19 at the maintainer's explicit request, made with that
+   provenance known. */
 body {
+  background-image: url("tml_image.png");
   background-size: cover; }
 body > h1, body > h2, body > p {
   text-shadow: 0 0 1px var(--backgroundColor), 0 1px 0 var(--shadowColor); }

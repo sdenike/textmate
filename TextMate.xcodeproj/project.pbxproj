@@ -551,6 +551,7 @@
 		78CD1082CD2B7290CD476BC8 /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E66CC54D77D20A7F989E8DE /* CoreFoundation.framework */; };
 		791D84C583335DB887252115 /* libTMFileReference.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F81B4B589B102F75B74D1BE2 /* libTMFileReference.a */; };
 		7921025ED1CFBB36A76FE46A /* libOakFoundation.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76BB05C4AB9D1AFB87185FE2 /* libOakFoundation.a */; };
+		7939C2A75C726ABBEBBF95E8 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D2E4C49D2FB024B08E5EF960 /* AppKit.framework */; };
 		79F1F5C6E53441BD6B105CFC /* FirstLaunchBundleInstaller.mm in Sources */ = {isa = PBXBuildFile; fileRef = B4E5C464CE98BE26933CAEB0 /* FirstLaunchBundleInstaller.mm */; };
 		79F37A1D35EDE3524FCB9BAF /* libSoftwareUpdate.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D972C67B062C115BB659946E /* libSoftwareUpdate.a */; };
 		79FB827DC7498C87E47E40E5 /* libBundleMenu.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 0CF7DF262878D07A9AE7C7A2 /* libBundleMenu.a */; };
@@ -606,6 +607,7 @@
 		8786041C61C883E650D2B3A5 /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E66CC54D77D20A7F989E8DE /* CoreFoundation.framework */; };
 		87952FF5B9AEC49EADB84B73 /* OakFileURLSchemeHandler.mm in Sources */ = {isa = PBXBuildFile; fileRef = 3F8239BB46223984E4E925BC /* OakFileURLSchemeHandler.mm */; };
 		8798CD7603277AB23C5DBD8A /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E19F8AC3F6DFA3EF9E573C7B /* Security.framework */; };
+		87CB8EEC370BFD34D70945A8 /* SetupAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103A4FCC12A7948336C42F1B /* SetupAssistantView.swift */; };
 		88060C8845BA18D69B191054 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E19F8AC3F6DFA3EF9E573C7B /* Security.framework */; };
 		885EC988C561322BCB9C3228 /* libcf.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FC84BF1D53A4AFB200D408AF /* libcf.a */; };
 		887DDF56CF36E60E1855DCA9 /* libselection.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 12E2FD75966246A93CC5CC36 /* libselection.a */; };
@@ -638,6 +640,7 @@
 		8E8D6480A5F95F0188E2BC44 /* libTMFileReference.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F81B4B589B102F75B74D1BE2 /* libTMFileReference.a */; };
 		8EC40641BBAD1A5B6AAC0FFB /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C05530F9E0175FD5842AE9E4 /* Carbon.framework */; };
 		8EE9A0874ADAED2E1778F8C9 /* load.cc in Sources */ = {isa = PBXBuildFile; fileRef = 602F37416AC93957C4E3838A /* load.cc */; };
+		8F5E3FCE816F2A1C44DF2859 /* SetupAssistantWindowController.mm in Sources */ = {isa = PBXBuildFile; fileRef = EF71DC13B18BAA073BE2377E /* SetupAssistantWindowController.mm */; };
 		8F620B2D976D7C50D629D299 /* Quartz.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E67BF38E3A6D8305D51F3E9B /* Quartz.framework */; };
 		8F86A2024D5BEE81552DCAFF /* libio.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 10B874173E1C9917097A3BF4 /* libio.a */; };
 		8FF00324F5C97BB547CF30AF /* libplist.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A9ED9849685A43ABB394279 /* libplist.a */; };
@@ -675,6 +678,7 @@
 		958D55AAAFAB883215E2FD62 /* libOakFoundation.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76BB05C4AB9D1AFB87185FE2 /* libOakFoundation.a */; };
 		95A11759BE03D235BFFB973C /* commit.mm in Sources */ = {isa = PBXBuildFile; fileRef = 9BB1BEDA806C41954CC11CDF /* commit.mm */; };
 		9654432BF3FA531970AFDEE7 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D45846DC7EE7EAB43FC926D8 /* ApplicationServices.framework */; };
+		96DCDE5DA8B19DADC60F3FEF /* SetupAssistantGating.mm in Sources */ = {isa = PBXBuildFile; fileRef = D831CCB80EF83DC3B571D5A0 /* SetupAssistantGating.mm */; };
 		96FA24276D61F74F160C6E27 /* libcrash.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A364573F8340083ACF50E59E /* libcrash.a */; };
 		96FB0421C75ECC3A515F201F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CBB3D486D049207D0E5C13A0 /* Foundation.framework */; };
 		97007068FD3F426A52FCB224 /* libcf.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FC84BF1D53A4AFB200D408AF /* libcf.a */; };
@@ -791,6 +795,7 @@
 		AFE7859EB88AA6646D9A6CB5 /* libsettings.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 04F2F95CF0A919C15EA07420 /* libsettings.a */; };
 		B0547154293829FEC137885A /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E19F8AC3F6DFA3EF9E573C7B /* Security.framework */; };
 		B0BDB057926161A267436F10 /* FFStatusBarViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = F6981BA23216633FD3BDA6C6 /* FFStatusBarViewController.mm */; };
+		B0C09DBE8E06DB379432DB6F /* libSetupAssistantCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C6114BB569DD53897276B29F /* libSetupAssistantCore.a */; };
 		B0ECE1B3FEC4EE975E29EDD7 /* libsettings.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 04F2F95CF0A919C15EA07420 /* libsettings.a */; };
 		B16BFD7285E5644BE13AD03C /* CWTableCellView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 6012A4F3F87586F53983635D /* CWTableCellView.mm */; };
 		B20652555E6DAD9FF7D5EF5D /* libio.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 10B874173E1C9917097A3BF4 /* libio.a */; };
@@ -944,6 +949,7 @@
 		D0E4C65878718885947B38B5 /* libparse.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A901109A4DB20B8B8CF44457 /* libparse.a */; };
 		D127A57A67FDF7F8B756D513 /* libparse.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A901109A4DB20B8B8CF44457 /* libparse.a */; };
 		D1433FAB4506337112E31063 /* OakDocumentController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 7C3DB6A57A4F84D9141C2E1A /* OakDocumentController.mm */; settings = {COMPILER_FLAGS = "-include $(SRCROOT)/Shared/PCH/prelude.mm"; }; };
+		D152BAE76AFDBF4781164E2D /* libSetupAssistantCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C6114BB569DD53897276B29F /* libSetupAssistantCore.a */; };
 		D15C632C3A71E72723ECC997 /* ctype.cc in Sources */ = {isa = PBXBuildFile; fileRef = AD9A059A8DD4770868833F02 /* ctype.cc */; };
 		D1714438DD60BB87688C5ADB /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3624DA120E80CCCD37A5B1A2 /* Cocoa.framework */; };
 		D17C62293CC729EAF2C54009 /* cf.cc in Sources */ = {isa = PBXBuildFile; fileRef = D4A4407DDA738AF956135304 /* cf.cc */; };
@@ -1121,6 +1127,7 @@
 		F651F15B945D2F4ACDE7146C /* libfile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D44D45A1C6800D1312349991 /* libfile.a */; };
 		F72291B80923F8BB271AAAED /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E66CC54D77D20A7F989E8DE /* CoreFoundation.framework */; };
 		F728E861F1E6C7AAF41670A8 /* _THTMLOutput.cc in Sources */ = {isa = PBXBuildFile; fileRef = BFF13CB87D326B536F4ACE3E /* _THTMLOutput.cc */; };
+		F73C4427424B887767030C28 /* SetupAssistantTypes.mm in Sources */ = {isa = PBXBuildFile; fileRef = B924106BC49F02D90F26A96B /* SetupAssistantTypes.mm */; };
 		F758E7BC0EE042695405FDDC /* trim.cc in Sources */ = {isa = PBXBuildFile; fileRef = 8A3B1010D9A22FB6596F5F11 /* trim.cc */; };
 		F76A91D945468853FD5ADC80 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = CEF9E270EE75FB5BD15F377B /* libsqlite3.tbd */; };
 		F77F44617CCB6E7A76423B79 /* libBundleEditor.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5195E2F5FAB6505596CE693B /* libBundleEditor.a */; };
@@ -1581,6 +1588,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 67E368138C90640C3BA6A3AF;
 			remoteInfo = scope;
+		};
+		1E84087516028FFEC2C07AF1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 961AB9759251A2D39675C7E1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E48E93C7E5AC23F77778F127;
+			remoteInfo = SetupAssistantCore;
 		};
 		1FA0AFDCA8A145AEC99AA4E1 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -2750,6 +2764,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 896321299C683B8EB2306D7D;
 			remoteInfo = plist;
+		};
+		689ED26F552DFBF5B44ECD85 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 961AB9759251A2D39675C7E1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E48E93C7E5AC23F77778F127;
+			remoteInfo = SetupAssistantCore;
 		};
 		68BA27F8883F1DD93590AF6A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -5008,9 +5029,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 7;
+			dstSubfolderSpec = 6;
 			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
+				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
+				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5019,11 +5042,9 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 6;
+			dstSubfolderSpec = 7;
 			files = (
-				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
-				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
-				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5070,6 +5091,7 @@
 		0E64CD87E06A78B547480572 /* libcommand.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libcommand.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		0F5DDEB0903A4D32EBC7D700 /* tm_dialog2.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = tm_dialog2.mm; sourceTree = "<group>"; };
 		101A476285F4784F7A676991 /* format.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = format.cc; sourceTree = "<group>"; };
+		103A4FCC12A7948336C42F1B /* SetupAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupAssistantView.swift; sourceTree = "<group>"; };
 		10B874173E1C9917097A3BF4 /* libio.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libio.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		10D44E59CB9EA2F8BBF1829B /* NSAlert Additions.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "NSAlert Additions.mm"; sourceTree = "<group>"; };
 		1101EC0D49B73EEC4099E790 /* FileItem.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = FileItem.mm; sourceTree = "<group>"; };
@@ -5366,6 +5388,7 @@
 		B884339D6C0CF57F84E3FE84 /* hg.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = hg.cc; sourceTree = "<group>"; };
 		B88D8856A948E4F4608ABCAE /* regerror.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = regerror.c; sourceTree = "<group>"; };
 		B8D2BE95880A9A80FEBA4CAF /* filter.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = filter.cc; sourceTree = "<group>"; };
+		B924106BC49F02D90F26A96B /* SetupAssistantTypes.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SetupAssistantTypes.mm; sourceTree = "<group>"; };
 		B984703E29E5B014056E312C /* cf_test */ = {isa = PBXFileReference; includeInIndex = 0; path = cf_test; sourceTree = BUILT_PRODUCTS_DIR; };
 		BA7A8BF2335BE20A4C1AA24C /* AddressBook.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AddressBook.framework; path = System/Library/Frameworks/AddressBook.framework; sourceTree = SDKROOT; };
 		BAA05C669F0AF4461420604A /* merge.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = merge.cc; sourceTree = "<group>"; };
@@ -5387,6 +5410,7 @@
 		C471B5AD93E7C5234A4F5A43 /* libOakSystem.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libOakSystem.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		C4DAABA4C0B176DA766E3C7D /* libFileBrowser.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libFileBrowser.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		C56389568D8ECB1CBF6E8470 /* Keys.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = Keys.mm; sourceTree = "<group>"; };
+		C6114BB569DD53897276B29F /* libSetupAssistantCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libSetupAssistantCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		C63B8BAA1E819FA1CDCA6717 /* unicode.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = unicode.c; sourceTree = "<group>"; };
 		C659BBB983415D5057674A18 /* transform.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = transform.cc; sourceTree = "<group>"; };
 		C6F3E319310D88CBC42F2DF4 /* date.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = date.cc; sourceTree = "<group>"; };
@@ -5425,6 +5449,7 @@
 		D53819E65850B8696D367E81 /* BundleRegistry.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = BundleRegistry.mm; sourceTree = "<group>"; };
 		D5D16B84D29BCEAA53B20FF6 /* OakCommandRefresh.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OakCommandRefresh.mm; sourceTree = "<group>"; };
 		D71E8048081D61005E632FF5 /* tooltip.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = tooltip.mm; sourceTree = "<group>"; };
+		D831CCB80EF83DC3B571D5A0 /* SetupAssistantGating.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SetupAssistantGating.mm; sourceTree = "<group>"; };
 		D97015FBF4F242F937C36437 /* OakOpenWithMenu.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OakOpenWithMenu.mm; sourceTree = "<group>"; };
 		D972C67B062C115BB659946E /* libSoftwareUpdate.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libSoftwareUpdate.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB52A686F77C9ED08F8C9A0A /* command_test */ = {isa = PBXFileReference; includeInIndex = 0; path = command_test; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -5469,6 +5494,7 @@
 		ED242C5E3319DA0194C64914 /* libOakTextView.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libOakTextView.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		EEC055AD2A7C242CC1B702EE /* parser.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = parser.cc; sourceTree = "<group>"; };
 		EED8AE8E45753AB29C2AF2FC /* OakDebugLog.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = OakDebugLog.cc; sourceTree = "<group>"; };
+		EF71DC13B18BAA073BE2377E /* SetupAssistantWindowController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SetupAssistantWindowController.mm; sourceTree = "<group>"; };
 		EFAE8F629E437B87EBBC11B0 /* OakAssert.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OakAssert.mm; sourceTree = "<group>"; };
 		F00B8C329A723C2AAA9D0506 /* io_test */ = {isa = PBXFileReference; includeInIndex = 0; path = io_test; sourceTree = BUILT_PRODUCTS_DIR; };
 		F01927BFE24997B5F5A4E5C0 /* BundlesManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = BundlesManager.mm; sourceTree = "<group>"; };
@@ -5988,7 +6014,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				CE792F977118DDAF9F416387 /* libPreferencesMigration.a in Frameworks */,
+				B0C09DBE8E06DB379432DB6F /* libSetupAssistantCore.a in Frameworks */,
 				FA11076A91B570781CC6279F /* Foundation.framework in Frameworks */,
+				7939C2A75C726ABBEBBF95E8 /* AppKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -6364,6 +6392,7 @@
 				23F8A7A03600B30F07F59A66 /* libOakTabBarView.a in Frameworks */,
 				EB2E6A7B9F6C316E10F21049 /* libkvdb.a in Frameworks */,
 				8A5DD10FCCBB1823B4D0EFAA /* libPreferencesMigration.a in Frameworks */,
+				D152BAE76AFDBF4781164E2D /* libSetupAssistantCore.a in Frameworks */,
 				616CA9513126BA3EC006D1F6 /* Cocoa.framework in Frameworks */,
 				89153A1EB0F2BDC53E88FF29 /* AddressBook.framework in Frameworks */,
 				1823DC9B19694F41F4A703E9 /* Foundation.framework in Frameworks */,
@@ -6638,6 +6667,17 @@
 			path = OakAppKit;
 			sourceTree = "<group>";
 		};
+		0C4DE2F0286DB623966A44E9 /* SetupAssistant */ = {
+			isa = PBXGroup;
+			children = (
+				D831CCB80EF83DC3B571D5A0 /* SetupAssistantGating.mm */,
+				B924106BC49F02D90F26A96B /* SetupAssistantTypes.mm */,
+				103A4FCC12A7948336C42F1B /* SetupAssistantView.swift */,
+				EF71DC13B18BAA073BE2377E /* SetupAssistantWindowController.mm */,
+			);
+			path = SetupAssistant;
+			sourceTree = "<group>";
+		};
 		0E1655A3CCEC48DF500A3CB0 /* src */ = {
 			isa = PBXGroup;
 			children = (
@@ -6768,6 +6808,7 @@
 				062463E29DC3EAE8A239C4EB /* libscope.a */,
 				12E2FD75966246A93CC5CC36 /* libselection.a */,
 				04F2F95CF0A919C15EA07420 /* libsettings.a */,
+				C6114BB569DD53897276B29F /* libSetupAssistantCore.a */,
 				D972C67B062C115BB659946E /* libSoftwareUpdate.a */,
 				A7346ADC7019D50D93E42B15 /* libtext.a */,
 				A35A0AE8E29F3CD0D086DA0E /* libtheme.a */,
@@ -7681,6 +7722,7 @@
 				E0112A5D550105A6703C8DD1 /* PreferencesMigration.mm */,
 				20E57C8797FE0749CAF2D105 /* RMateServer.mm */,
 				0DE2D2D453B7152E1FC340C2 /* TMPlugInController.mm */,
+				0C4DE2F0286DB623966A44E9 /* SetupAssistant */,
 			);
 			path = src;
 			sourceTree = "<group>";
@@ -8481,6 +8523,7 @@
 				4F5B317F5DA7AED7E50F3420 /* PBXTargetDependency */,
 				B54859D84913982046C02DF8 /* PBXTargetDependency */,
 				88C4BC65D7A75F1509634806 /* PBXTargetDependency */,
+				9AC0FF0C2E6E57D5CD3955DD /* PBXTargetDependency */,
 				D263ECFC4755B97C23774F1D /* PBXTargetDependency */,
 				77B3066F64086ECF480ECA2A /* PBXTargetDependency */,
 				5DD99B1521039E25618DF052 /* PBXTargetDependency */,
@@ -9800,6 +9843,23 @@
 			productReference = 04F2F95CF0A919C15EA07420 /* libsettings.a */;
 			productType = "com.apple.product-type.library.static";
 		};
+		E48E93C7E5AC23F77778F127 /* SetupAssistantCore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 11A593A6D9401A0727A3CAF1 /* Build configuration list for PBXNativeTarget "SetupAssistantCore" */;
+			buildPhases = (
+				8F19FEDEB124034F875E150E /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SetupAssistantCore;
+			packageProductDependencies = (
+			);
+			productName = SetupAssistantCore;
+			productReference = C6114BB569DD53897276B29F /* libSetupAssistantCore.a */;
+			productType = "com.apple.product-type.library.static";
+		};
 		E6BD609400C92DB15787E223 /* OakFoundation */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 8F9D33C197191D3582FA44A3 /* Build configuration list for PBXNativeTarget "OakFoundation" */;
@@ -9957,6 +10017,7 @@
 			);
 			dependencies = (
 				8AE82A853BB4E76088208312 /* PBXTargetDependency */,
+				5F40298B6EC6E291CDE50177 /* PBXTargetDependency */,
 			);
 			name = TextMate_test;
 			packageProductDependencies = (
@@ -10359,6 +10420,9 @@
 					E2B26C2210DD05E88BCF677B = {
 						ProvisioningStyle = Manual;
 					};
+					E48E93C7E5AC23F77778F127 = {
+						ProvisioningStyle = Manual;
+					};
 					E6BD609400C92DB15787E223 = {
 						ProvisioningStyle = Manual;
 					};
@@ -10493,6 +10557,7 @@
 				AFB00373AC90573D79C7BFC8 /* OakDebug */,
 				48739092F0726807CC176FCF /* TextMate */,
 				73373738A0062ADDA6B649F8 /* PreferencesMigration */,
+				E48E93C7E5AC23F77778F127 /* SetupAssistantCore */,
 				EDA37861223484BA65E1CFE7 /* TextMate_test */,
 				FD39028F13F21F6CA7272DC6 /* PrivilegedTool */,
 				A15440732AFC0C87ED58A04C /* mate */,
@@ -11547,6 +11612,8 @@
 				596448034796D241C9BCBB53 /* ODBEditorSuite.mm in Sources */,
 				09BDFDF1862DE376EBC0C233 /* OakMainMenu.mm in Sources */,
 				569F2000FD6B26BE1DB79290 /* RMateServer.mm in Sources */,
+				87CB8EEC370BFD34D70945A8 /* SetupAssistantView.swift in Sources */,
+				8F5E3FCE816F2A1C44DF2859 /* SetupAssistantWindowController.mm in Sources */,
 				4C62445B551B80D9D8BCE1BA /* TMPlugInController.mm in Sources */,
 				E3466E2679D726349FFC53FC /* main.mm in Sources */,
 			);
@@ -11705,6 +11772,15 @@
 				C768F23347CE3483B407BD30 /* ranker.cc in Sources */,
 				F758E7BC0EE042695405FDDC /* trim.cc in Sources */,
 				FA837E235D1BE3D9D61746C5 /* types.cc in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8F19FEDEB124034F875E150E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				96DCDE5DA8B19DADC60F3FEF /* SetupAssistantGating.mm in Sources */,
+				F73C4427424B887767030C28 /* SetupAssistantTypes.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -13099,6 +13175,11 @@
 			target = A4AA3B0BD027D148AE735641 /* FileBrowser */;
 			targetProxy = CA9A2D14508FD74016A8A768 /* PBXContainerItemProxy */;
 		};
+		5F40298B6EC6E291CDE50177 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E48E93C7E5AC23F77778F127 /* SetupAssistantCore */;
+			targetProxy = 1E84087516028FFEC2C07AF1 /* PBXContainerItemProxy */;
+		};
 		606A3638DB221492F199A32B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A4AA3B0BD027D148AE735641 /* FileBrowser */;
@@ -13758,6 +13839,11 @@
 			isa = PBXTargetDependency;
 			target = 8F2AA49860482F503F832C34 /* scm */;
 			targetProxy = 3641D8D4E318BAC0581A6AAF /* PBXContainerItemProxy */;
+		};
+		9AC0FF0C2E6E57D5CD3955DD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E48E93C7E5AC23F77778F127 /* SetupAssistantCore */;
+			targetProxy = 689ED26F552DFBF5B44ECD85 /* PBXContainerItemProxy */;
 		};
 		9B1311895B2A7908C5E27EEF /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -15040,6 +15126,7 @@
 					"-ObjC",
 				);
 				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "Applications/TextMate/src/TextMate-Bridging-Header.h";
 			};
 			name = Release;
 		};
@@ -16988,6 +17075,20 @@
 			};
 			name = Release;
 		};
+		C1519864DB82365ABBF9A845 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_PREFIX_HEADER = "$(SRCROOT)/Shared/PCH/prelude.mm";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 		C43944FCF41459E70FF212AF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -17034,6 +17135,7 @@
 					"-ObjC",
 				);
 				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "Applications/TextMate/src/TextMate-Bridging-Header.h";
 			};
 			name = Debug;
 		};
@@ -17245,6 +17347,20 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				GCC_PREFIX_HEADER = "$(SRCROOT)/Shared/PCH/prelude.mm";
 				HEADER_SEARCH_PATHS = "$(inherited) $(SRCROOT)/Xcode/include/OakAppKit $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/bundles $(SRCROOT)/Xcode/include/OakSystem $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope $(SRCROOT)/Xcode/include/file $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/command $(SRCROOT)/Xcode/include/buffer $(SRCROOT)/Xcode/include/parse $(SRCROOT)/Xcode/include/selection $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/encoding $(SRCROOT)/Xcode/include/scm $(SRCROOT)/Xcode/include/xdiff $(SRCROOT)/Xcode/include/theme $(SRCROOT)/Xcode/include/TMFileReference $(SRCROOT)/Xcode/include/document $(SRCROOT)/Xcode/include/BundlesManager $(SRCROOT)/Xcode/include/SoftwareUpdate $(SRCROOT)/Xcode/include/FileBrowser $(SRCROOT)/Xcode/include/MenuBuilder $(SRCROOT)/Xcode/include/OakCommand $(SRCROOT)/Xcode/include/BundleEditor $(SRCROOT)/Xcode/include/OakTextView $(SRCROOT)/Xcode/include/BundleMenu $(SRCROOT)/Xcode/include/Find $(SRCROOT)/Xcode/include/Preferences $(SRCROOT)/Xcode/include/OakTabBarView $(SRCROOT)/Xcode/include/HTMLOutput $(SRCROOT)/Xcode/include/editor $(SRCROOT)/Xcode/include/layout $(SRCROOT)/Xcode/include/HTMLOutputWindow $(SRCROOT)/Xcode/include/undo";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		DBC04F5DCB597135BC11A685 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_PREFIX_HEADER = "$(SRCROOT)/Shared/PCH/prelude.mm";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -17744,6 +17860,15 @@
 			buildConfigurations = (
 				31853C1F232365D8735E4386 /* Debug */,
 				8C6BD3709A31D61BD87F770F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		11A593A6D9401A0727A3CAF1 /* Build configuration list for PBXNativeTarget "SetupAssistantCore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DBC04F5DCB597135BC11A685 /* Debug */,
+				C1519864DB82365ABBF9A845 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

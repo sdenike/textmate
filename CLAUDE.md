@@ -107,11 +107,39 @@ Self-hosted building (pressing ⌘B inside a running TextMate.app to rebuild Tex
 the optional Ninja bundle and `.tm_properties`' old `TM_NINJA_TARGET` mapping) no longer works —
 neither ninja nor that mapping exist anymore. Build from Xcode or the command line instead.
 
-**No target in this tree has ever contained a Swift file, and `CLANG_ENABLE_MODULES = NO` is set in
-`Xcode/Base.xcconfig`.** Phase 6's remaining work is SwiftUI islands, so that interaction has to be
-proven before anything large depends on it — modules-off is exactly the setting Swift interop tends
-to need. Find out on the smallest island (onboarding, which has no existing AppKit implementation),
-not on Preferences.
+**Swift compiles in this tree, and the bridge works in only one direction without care.** Measured
+2026-08-18 by a throwaway spike on the `TextMate` app target, run before any island was designed.
+`CLANG_ENABLE_MODULES = NO` does **not** block Swift — the Swift compiler's ClangImporter uses
+modules internally regardless of that target-level Clang setting. `SWIFT_VERSION = 6.0` was already
+set in `Xcode/Base.xcconfig` and needed no change, no other build setting had to be added, and no
+Swift runtime is embedded: `Contents/Frameworks` stays absent because the runtime is ABI-stable in
+macOS 26. Adding a `.swift` path to a target's `sources` in `project.yml` plus `xcodegen generate`
+is the whole mechanism.
+
+Four facts, each of which fails silently or misleadingly when you get it wrong:
+
+- **Swift declarations must be `public`, not merely `@objc`.** An `internal @objc` class compiles,
+  lands in the `.swiftmodule`, and is simply *absent* from the generated `TextMate-Swift.h`. The
+  symptom is not "file not found" — the header exists and parses fine, all 383 lines of it, just
+  with zero `@interface` in it. ObjC++ then fails with `use of undeclared identifier`, which reads
+  like a typo rather than an access-level problem.
+- **ObjC++ → Swift works.** `#import "TextMate-Swift.h"` from a `.mm` compiles and links; the
+  mangled symbol and its ObjC thunk (`…greetingSSyFZTo`) both appear in the built binary.
+- **Swift → ObjC++ does not, and cannot.** A bridging header is parsed as **C/ObjC, never ObjC++**,
+  so C++ in it is a syntax error rather than an unsupported feature. Pointing one at
+  `OakUIConstructionFunctions.h` yields `function definition declared 'typedef'` and `parameter
+  'NSUInteger' was not declared, defaults to 'int'; ISO C99 and later do not support implicit int`.
+- **This tree's ObjC headers do not stand alone either.** They take their AppKit and Foundation
+  imports from `GCC_PREFIX_HEADER = prelude.mm`, and that prefix header is *not* applied when
+  ClangImporter compiles the bridging header. `OakRolloverButton.h` alone produces `unknown type
+  name 'NSNotificationName'`, `cannot find interface declaration for 'NSButton'` and `unknown type
+  name 'BOOL'`.
+
+So a bridging header here must be a **narrow, self-contained, pure-ObjC shim** — one that
+`#import <Cocoa/Cocoa.h>` itself and declares only plain ObjC types, typically a protocol the Swift
+island calls back out through. It is not a window onto the app's real headers. That shape was
+verified to build alongside `import SwiftUI` in the same spike. Never point a bridging header at
+`Xcode/include/<framework>/`.
 
 ## Architecture
 
@@ -297,6 +325,34 @@ The deployment target is macOS 26.0, so never write `@available(macOS 26, *)` gu
 
 `OakTextView`'s own drawing is deliberately out of scope: text needs an opaque backdrop.
 
+### Setup Assistant (Phase 6)
+
+`Applications/TextMate/src/SetupAssistant/` is the onboarding island: a three-step SwiftUI wizard
+(welcome, appearance, bundles) that replaces `FirstLaunchBundleInstaller`'s modal window at first
+launch and is re-runnable from `Help → Setup Assistant…`. Gated by a new `didRunSetupAssistant`
+default (`SetupAssistantGating.h`) rather than a reuse of the legacy
+`kUserDefaultsDidPromptForDefaultBundlesKey` — every existing user already has the old key set, and
+reusing it would hide the assistant from exactly the people the appearance step exists for. The Help
+entry point never consults that gate; it always shows.
+
+**`TextMate-Bridging-Header.h` reaches only `SetupAssistantTypes.h`, and that header must stay a
+narrow, self-contained, pure-ObjC shim** — the constraint the Swift section above establishes in
+general (ClangImporter compiles a bridging header as C/ObjC only, with no prefix header, so
+anything it imports must stand alone). `SetupAssistantTypes.h`'s own file comment states the rule
+it follows: no C++, nothing under `Xcode/include/`, `#import <Cocoa/Cocoa.h>` for its own needs
+rather than relying on a prefix header supplying it. `TMThemeChoice` and `TMBundleChoice` are plain
+Objective-C mirrors of `theme_ptr` and `BundleSpec` for the same reason — neither real type can
+cross this header, one being C++ and the other living behind `Xcode/include/`.
+
+**`SetupAssistantCore` exists as its own `library.static`** (`SetupAssistantTypes.mm`,
+`SetupAssistantGating.mm`) because `TextMate_test` compiles only `bin/gen_test`'s generated runner
+(see Tests below) — anything the runner's tests exercise has to come from a library both `TextMate`
+and `TextMate_test` link, the same shape `PreferencesMigration` already used. `t_setup_assistant.mm`
+reaches the gating predicate and the never-suggest merge through it. `SetupAssistantWindowController.mm`
+and the SwiftUI view itself stay out of that library and in the `TextMate` app target's own
+sources instead — they need AppKit/SwiftUI, which a lightweight test tool has no reason to carry —
+so the window controller's C++ theme extraction is verified by hand rather than by this suite.
+
 ## Tests
 
 CxxTest-style, but home-grown: `bin/gen_test` reads each `tests/t_*.{cc,mm}` file, finds top-level `void test_*()` functions, and emits a single runner with `main()`. Assertions are `OAK_ASSERT`, `OAK_ASSERT_EQ`, `OAK_ASSERT_NE`. Filesystem fixtures use `test::jail_t` from `Frameworks/test`.
@@ -472,6 +528,19 @@ silence as "the extension never ran" sent two rounds of investigation the wrong 
 live process (`sample <pid>`) is what actually located the hang.
 
 ## Bundle delivery
+
+**`BundleSpec.origin` is derived at load and never persisted**, so every spec read back from
+`Bundles.plist` arrives as `TMBundleOriginUser` regardless of what it was. Each seed in
+`BundleRegistry.reload` must therefore re-assert its own origin on the *existing-spec* path, not
+only when it creates a spec — `seedMandatory` always did; `seedShippedDefaults` did not, so on any
+profile that had launched the app once, **0 of the 41 `DefaultBundles.plist` bundles were Shipped**.
+Fixed 2026-08-19. The failure is silent and reads as a data problem: the Setup Assistant's bundles
+step renders empty and Preferences → Bundles' "Revert to Default" greys out, because both resolve
+through `origin == TMBundleOriginShipped`. Do not "fix" this by persisting `origin` — it is derived
+from three catalogues that change between releases, and a persisted copy goes stale the moment a
+bundle moves between them. (`Bundle.recommended`, set from the same check at
+`BundlesManager.mm:1012`, currently has **no reader anywhere** — there is no recommended badge in
+the prefs pane, so nothing was mis-rendering there.)
 
 Only **three** bundles are actually forked. `Frameworks/BundlesManager/src/MandatoryBundles.h` pins
 `textmatelives/{bundle-support,text,source}.tmbundle`, each ported to Ruby 2.6.10 — plus

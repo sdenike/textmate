@@ -20,10 +20,10 @@ maintainer and enforced throughout:
 
 | | |
 |---|---|
-| Released | **v3.0.0-revived.24** |
-| Unreleased | **v3.0.0-revived.25** — pushed, **PR #18 open, not merged** |
+| Released | **v3.0.0-revived.26** — Setup Assistant, PR #19 |
+| Unreleased | none |
 | Phases complete | 0-5, 7 |
-| Phase 6 | remainder in progress — QuickLook done, SwiftUI islands not started |
+| Phase 6 | remainder in progress — QuickLook done, onboarding island done, Preferences/About/update-sheet islands not written |
 | Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |
 | Build | `TextMate.xcodeproj`, generated from `project.yml` by XcodeGen |
 | Bundle | 26,012 KB — **1,916 KB smaller than the `undead` baseline** |
@@ -42,7 +42,7 @@ were never started:
 | Scope bar | **already done — since 2014** | none |
 | Back/forward navigation | **already done — since 2018** | none |
 | **QuickLook extension** | **done and verified** — previews render syntax highlighted | — |
-| SwiftUI islands: onboarding | not done — no existing implementation | small-medium |
+| SwiftUI islands: onboarding | **done** — Setup Assistant, first launch and `Help → Setup Assistant…` | — |
 | SwiftUI islands: Preferences, About, update sheet | not done | large |
 | `NSSplitViewController` sidebar | not started | large — defer |
 | `NSRulerView` gutter | not done | large — **do not do** |
@@ -172,12 +172,9 @@ been made against `/Applications/TextMate.app`, an older installed release, not 
 
 ## Next
 
-Nothing is in flight. The tree is clean, `phase-6/quicklook-extension` is pushed, and
-[PR #18](https://github.com/sdenike/textmate/pull/18) is open against `master`.
-
-**Merging that PR publishes v3.0.0-revived.25** — `release.yml` fires on a `CHANGELOG.md` push to
-`master`, and the `.25` entry is already in the diff. It is the maintainer's call and has not been
-given. Do not merge it without being asked.
+Nothing is in flight. The tree is clean and the working branch is
+`phase-6/swiftui-onboarding`. [PR #18](https://github.com/sdenike/textmate/pull/18) was merged as
+`a8bc6398` and **v3.0.0-revived.25 is published**.
 
 ### Phase 6 remainder — SwiftUI islands
 
@@ -187,11 +184,41 @@ The only spec item still genuinely open. The spec's own words
 > SwiftUI islands for Preferences, About, onboarding, update sheet, using #1467's `OakSwiftUI`
 > bridge. *Gate:* visual parity pass, no regressions in the responder chain or key equivalents.
 
-**Start with onboarding.** It is the only one of the four with no existing implementation, so there
-is nothing to reach parity with — everything built is new, and the interesting question gets answered
-cheaply: **does Swift compile in this project at all?** `Xcode/Base.xcconfig` sets
-`CLANG_ENABLE_MODULES = NO`, and no target in the tree has ever contained a Swift file. That
-interaction is untested. Prove it on the smallest island before committing to a large one.
+**Swift is proven to work here** — spiked 2026-08-18, full contract in `CLAUDE.md`.
+`CLANG_ENABLE_MODULES = NO` is not a blocker, `import SwiftUI` compiles, and the app target takes a
+`.swift` file with no build-setting changes at all. Two constraints came out of that spike and they
+shape every island: Swift declarations must be `public` to be visible to ObjC++ at all, and the
+bridging header must be a narrow, self-contained, pure-ObjC shim rather than a pointer at the app's
+real ObjC++ headers.
+
+**Onboarding is done** — spec at
+`docs/superpowers/specs/2026-08-18-setup-assistant-design.md`, implemented 2026-08-18 across eight
+tasks on `phase-6/swiftui-onboarding`. It ships as a three-step **Setup Assistant** (welcome,
+appearance, bundles) that replaces `FirstLaunchBundleInstaller`'s modal, runs once at first launch
+(gated on a new `didRunSetupAssistant` default so existing users see it too — the Help entry point
+does not consult that gate and always shows), and is re-runnable from `Help → Setup Assistant…` with
+current state reflected rather than a blank wizard. The `mate` CLI step was considered and cut.
+`bin/build` and `bin/build TextMate/test` (14 tests) pass. Two things remain before this branch
+merges, both human-only and out of the agent sandbox: the maintainer's manual walk of the five
+first-launch scenarios the spec names, and a green CI run on the pushed branch.
+
+**The maintainer's manual walk already found one bug, now fixed, and it uncovered a second, deeper
+one that isn't.** The bundles step sourced from `FirstLaunchBundleInstaller.candidateSpecs`, which
+excludes installed bundles — empty step for anyone who already has the default tier. Fixed
+2026-08-19: it now lists every shipped-tier bundle, installed ones checked and disabled (see
+STREAM.md for the full diff). But that fix depends on `BundleSpec.origin` correctly marking
+default-tier bundles as `TMBundleOriginShipped`, and `BundleRegistry.seedShippedDefaults`
+(`Frameworks/BundlesManager/src/BundleRegistry.mm`) only sets that for a UUID it has never tracked
+before — unlike `seedMandatory`, it does not re-assert origin for one already in the persisted state
+file. Simulated against this machine's real `Bundles.plist`: **0** of 41 default-tier bundles come
+back `Shipped` once a profile has been through a second reload, which is any profile that's been
+launched more than once. Likely also silently affects the *Preferences → Bundles* "recommended"
+badge (`BundlesManager.mm:1012`, same check). Not fixed here — out of the file list this task
+scoped, and needs its own look at whether unconditional re-tagging is safe for every case
+`seedShippedDefaults` handles.
+
+It was the right island to start with because it is the only one of the four with no existing
+implementation — nothing to reach parity with, so a mistake costs only itself.
 
 Preferences, About and the update sheet are each large: together roughly 1,945 lines of working
 AppKit whose behaviour a SwiftUI rewrite has to match exactly, including key equivalents and the

@@ -4,7 +4,1023 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-18 — RESUME HERE: clean stop, PR #18 open, phase plan written down
+## 2026-08-19 — v3.0.0-revived.26 cut; the maintainer confirmed the two modal paths
+
+CHANGELOG's `## Unreleased` heading became `## 2026-08-19 (v3.0.0-revived.26)`. **Merging PR #19
+now publishes a real release** — that is the whole point of this commit, and it was the maintainer's
+explicit instruction rather than a side effect.
+
+### The last two unverifiable checks passed
+
+Closing the assistant with the red title-bar button ends the modal session and leaves the app
+responsive, and ⌘Q quits while the assistant is open. Both were confirmed by the maintainer at a
+keyboard, because neither is reachable from this environment.
+
+They matter because they are separate code paths from the ones normal use exercises: Done and Skip
+leave through `finishWithSkip:`, while the red button leaves through `windowWillClose:` — which only
+fires because the controller declares `<NSWindowDelegate>` and assigns itself as the window's
+delegate. Three distinct defects in this branch could each have left a modal session running with no
+window on screen, unresponsive and force-quit only. All three are now confirmed dead against a
+running app rather than reasoned about.
+
+### The release also carries a fix nobody was looking for
+
+`seedShippedDefaults` never restored `origin` for a bundle already in the persisted state, and
+`BundleSpec` never serialised it — so on any used profile, 0 of 41 default-tier bundles resolved as
+shipped. The visible symptom was "Revert to Default" being greyed out for every bundle TextMate
+ships, which is how it is described in the release notes. Found only because the maintainer reported
+an empty bundles step and asked why.
+
+### If interrupted here
+
+PR #19 is open against `master` with the version cut. Merging fires `release.yml` for real:
+build, test, sign, notarize, staple, tag `v3.0.0-revived.26`, publish, and update the Homebrew cask.
+Wait for CI green on the PR before merging.
+
+---
+
+## 2026-08-19 — Welcome step's photo moved from the step's own view to the content region
+
+**What:** The bottom-anchored crop below was correct but fixed the wrong layer: `WelcomeStepView`
+sat inside the content `VStack` alongside a `Spacer()`, so the two competed for the remaining
+height, and that `VStack`'s own `.padding(24)` inset the result again — an image living inside
+`WelcomeStepView` could never reach the bottom or side edges of the content region no matter how
+it was cropped. Moved the image load and crop into a new `WelcomeBackground: View` and attached it
+as `SetupAssistantView`'s content-region `.background { }`, applied *after* `.padding(24)` so it
+covers the padded frame rather than sitting inset within it, and shown only when
+`model.step == .welcome`. `WelcomeStepView` now holds only the copy text with its `.thinMaterial`
+scrim — no image, no background of its own. `bin/build` succeeded; `TextMate_test` 14/14.
+
+**Why:** The target is the About window's full-bleed photo — edge to edge above the button row,
+stem running off the bottom. That requires the image to be a sibling of the Spacer, not a child
+competing with it, and to sit outside the padding, not inside it.
+
+**If interrupted here:** nothing left to do; the diff is confined to
+`SetupAssistantView.swift` (the `.background` on the content `VStack`, the new `WelcomeBackground`
+struct, and the slimmed `WelcomeStepView`). Rendering itself is still unverified — this only
+confirms the structure now permits full bleed, not that a screenshot shows it.
+
+---
+
+## 2026-08-19 — Welcome step's background crop now anchors to the stem, not the centre
+
+**What:** `WelcomeStepView`'s `.background` was cropping `tml_image.png` centre-anchored (the
+default for `.aspectRatio(contentMode: .fill)`), which shows the flower head and cuts the stem off
+mid-way, leaving empty space above the Skip/Continue divider. Wrapped the image in a
+`GeometryReader` and added `.frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)`
+before `.clipped()`, so the scaled-up image is positioned with its bottom edge at the step's bottom
+edge and the excess is cropped off the top instead — the stem now runs to the bottom of the step,
+matching how it exits the bottom edge on the About window. Confirmed against the installed SDK's
+`SwiftUICore.swiftinterface` (`frame(width:height:alignment:)`, `_FrameLayout`) that alignment
+positions the (here, oversized) content within the explicit frame rather than the reverse, so
+`.bottom` keeps the content's bottom edge and crops from the top. `bin/build` succeeded;
+`TextMate_test` 14/14. Nothing else in the file changed.
+
+**Why:** The maintainer asked for the stem to reach the bottom of the step, matching the About
+window's crop, instead of the centre-anchored default leaving it stranded mid-image.
+
+**If interrupted here:** nothing left to do; the diff is self-contained to `WelcomeStepView`'s
+`.background`. Rendering itself is unverified (headless/visual check was out of scope here) — if a
+follow-up screenshot shows the crop still wrong, re-check `Image(nsImage:)`'s intrinsic size versus
+`geo.size` at the actual window width before assuming the alignment direction is the problem.
+
+---
+
+## 2026-08-19 — The textmatelives background image is back, at the maintainer's request, in the About window and behind Setup Assistant's Welcome step
+
+**What:** Recovered `Applications/TextMate/about/css/tml_image.png` (579,466 bytes) from git blob
+`bb196fc9`, the exact bytes `ac04adfa` deleted on 2026-08-14, via `git cat-file -p`. Restored the
+`background-image: url("tml_image.png")` rule in `about/css/stylesheet.css` that commit removed,
+and rewrote the comment above it — it used to explain the removal; now it records the removal *and*
+the restoration, with both commit references, rather than leaving a stale note beside the image it
+described as gone. `Xcode/scripts/assemble_resources.sh` already ships it: its About-section copy is
+`cp -p "$app/about/css/"*`, an unfiltered glob, not an extension allowlist, so no script change was
+needed — confirmed by inspection and then by listing the built bundle's `About/css/`. Added a
+background to `WelcomeStepView` in `SetupAssistantView.swift` (Setup Assistant's first step only,
+not `AppearanceStepView`, `BundlesStepView`, or the shared window chrome around all three): a bundle
+URL lookup (`Bundle.main.url(forResource:withExtension:subdirectory:)`, subdirectory `About/css`,
+verified against the installed `NSBundle.h`) rather than an asset-catalog copy, `.thinMaterial`
+behind the copy text as a scrim, and a nil-image fallback that renders the step exactly as before —
+Swift here can't reach `NSImage(named:)`'s app-bundle resolution the ObjC side gets for free. `bin/build`
+succeeded; `TextMate_test` 14/14. Built bundle confirmed to contain both `stylesheet.css` and
+`tml_image.png` under `Contents/Resources/About/css/`.
+
+**Why:** The maintainer knows the provenance — textmatelives' artwork, not this fork's — and asked
+for it back anyway; `ac04adfa`'s own removal rationale doesn't apply once that's an informed choice
+rather than an inherited default. Same image, two spots: the About window already had the CSS
+machinery for it, and the Setup Assistant's Welcome step is the other "first impression" surface in
+the app, so reusing the recovered file there costs nothing further to ship (579 KB once, not twice)
+and gives the wizard's opening screen the same visual identity as the About window.
+
+**If interrupted here:** nothing left to do for this change; it's a complete, self-contained diff.
+If picking this up cold, `git log -1` on this entry's commit shows the whole thing — CSS rule,
+comment rewrite, and the new `WelcomeStepView` body — in one place.
+
+---
+
+## 2026-08-19 — Shipped-tier origin is now restored on reload, not only on first sight
+
+**What:** One-line-plus-comment fix in `+[BundleRegistry seedShippedDefaults]`
+(`Frameworks/BundlesManager/src/BundleRegistry.mm`): the existing-spec branch now sets
+`existing.origin = TMBundleOriginShipped` inside the branch it already guards with
+`if(existing.origin != TMBundleOriginMandatory)`, mirroring the self-heal `seedMandatory` has always
+done for its own origin. Nothing else changed. `bin/build` succeeds; `BundlesManager_test` 10/10,
+`TextMate_test` 14/14 (both `--no-parallel`).
+
+**Why:** `origin` is derived, never persisted — `BundleSpec`'s `plistRepresentation` and
+`initWithPlistRepresentation:` don't mention it, so every reloaded spec arrives as
+`TMBundleOriginUser`. `seedShippedDefaults` only tagged brand-new UUIDs, so on any profile that had
+run the app once, **0 of the 41 default-tier bundles were Shipped**. That emptied the Setup
+Assistant's bundles step and disabled Preferences → Bundles' "Revert to Default" menu item, which
+gates on `bundleIsEditedShippedDefault:` → `origin == TMBundleOriginShipped`.
+
+**Why not persist `origin` instead** (the deeper-looking fix): it is derived from three catalogues —
+`MandatoryBundles.h`, `DefaultBundles.plist`, `AvailableBundles.plist` — that change between
+releases, and all three seeds already re-derive it on every reload. Persisting adds a second source
+of truth that goes stale the moment a bundle is promoted out of or dropped from a catalogue, and it
+buys nothing on migration: existing state has no `origin` key, so the first launch would still have
+to compute the value from the seeds and write it back. The header's `// set at load, not persisted`
+is the intended design; the bug was one seed forgetting to honour it.
+
+**Re-tagging is safe, and unconditional-within-the-guard is correct.** At the point
+`seedShippedDefaults` runs, an existing spec can only hold `Mandatory` (just set by `seedMandatory`,
+and load-bearing — `removeSpecForUUID:`/`updateSpec:` refuse to touch those) or `User` (the
+post-load default for everything else). `Available` is impossible, that seed runs after. `User` here
+carries no information worth preserving: being listed in `DefaultBundles.plist` *is* what makes a
+bundle shipped-tier, and a user who repointed a shipped default is modelled as url/ref divergence by
+`bundleIsEditedShippedDefault:`, not as a different origin.
+
+**Evidence, against this machine's real state:** compiled `BundleRegistry.mm` + `BundleSpec.mm` twice
+into a throwaway CLI — once from `HEAD`, once patched — with `-Dsave=harnessSaveDisabled` so `-save`
+is renamed out of existence and nothing can write to `Bundles.plist`. Both ran `-init` → `-reload`
+against the real `~/Library/Application Support/TextMate/Bundles.plist` (153 specs) and the real
+`DefaultBundles.plist` (41 entries, all 41 already in the state file, none overlapping the 4
+mandatory UUIDs or the 108 available ones). Before: `Shipped=0 User=41`. After: `Shipped=41 User=0`.
+`Bundles.plist` byte-identical afterwards.
+
+**If interrupted here:** done and committed. The Setup Assistant bundles step should now populate on
+this profile; worth confirming in the running app.
+
+---
+
+## 2026-08-19 — Bundles step now lists installed bundles too; found a second bug blocking it in practice
+
+**What:** Closed the divergence between the design spec and `BundlesStepView`: the step sourced from
+`FirstLaunchBundleInstaller.candidateSpecs`, which excludes installed bundles, so an established
+profile saw nothing. Added `+[FirstLaunchBundleInstaller allShippedSpecs]` — every `origin ==
+TMBundleOriginShipped` spec, sorted by category then name — and rewrote `candidateSpecs` as a filter
+over it (sort comparator now lives in exactly one place). `SetupAssistantWindowController.mm`'s
+`-availableBundles` now sources from `allShippedSpecs`; `recommended` comes from membership in
+`candidateSpecs` (which is precisely "not installed, not previously declined"), so installed bundles
+show checked+disabled and previously-declined ones show unchecked but still selectable.
+`-installBundleIdentifiers:neverSuggest:` now resolves against `allShippedSpecs` too, not
+`candidateSpecs`, so a reconsidered, previously-declined bundle still resolves to a spec to install —
+with an explicit `installedSHA` skip inline as a second, redundant guard alongside `finish()`'s own
+`!$0.installed` filter on the Swift side, which is the one that actually keeps installed bundles out
+of both the install and never-suggest lists. Updated `SetupAssistantView.swift`'s stale comment above
+that filter, the empty-state copy (now only reachable if zero shipped-tier specs exist at all), and
+the disclosure line (now mentions installed bundles explicitly). `bin/build` succeeds;
+`bin/build TextMate/test` → 14/14 (`TextMate_test -v`: `14 tests passed`).
+
+**Why:** the maintainer ran the assistant and saw an empty Bundles step; the spec always said
+installed entries should show, checked and disabled, not disappear.
+
+**Found during verification, escalated rather than patched — outside this task's file list:**
+`BundleRegistry.seedShippedDefaults` (`Frameworks/BundlesManager/src/BundleRegistry.mm:144-179`) only
+sets `origin = TMBundleOriginShipped` for a UUID it has never seen before in `_specs`. For a UUID
+already present in the loaded state file — true of every default-tier bundle after its first install
+— origin is left at whatever it was on load, and `BundleSpec.mm`'s `plistRepresentation` /
+`initWithPlistRepresentation:` never mention `origin` at all, so a freshly-loaded spec always starts
+at the default, `TMBundleOriginUser`, and nothing re-promotes it. `seedMandatory` doesn't have this
+problem — it unconditionally re-asserts `existing.origin = TMBundleOriginMandatory` on every reload —
+but `seedShippedDefaults` has no equivalent self-heal. Read `BundleRegistry.mm` in full, then
+confirmed this is live on this exact machine two ways: (1) spot-checked 5 of the 41
+`DefaultBundles.plist` UUIDs directly against `~/Library/Application Support/TextMate/Bundles.plist`
+— all 5 present, all 5 already carry a real `installedSHA`; (2) replayed `-reload`'s exact sequence
+(load state file → `seedMandatory` → `seedShippedDefaults` → `seedAvailableBundles`) in a throwaway
+Python script against this machine's real `Bundles.plist` + `DefaultBundles.plist` +
+`AvailableBundles.plist` — result: **0** of 153 specs end up `origin == Shipped` (the 41 default-tier
+ones sit at `User`; they don't overlap `AvailableBundles.plist`'s UUIDs, so they're not even
+reclassified to `Available` — just stuck). This task's fix is still correct and necessary — a truly
+fresh profile's first-ever launch hits no existing entries, so `seedShippedDefaults` tags all 41
+correctly and `allShippedSpecs` returns them immediately, no further change needed here — but on this
+machine, and on any already-used profile, the Bundles step will keep showing its (new) empty-state
+message until `seedShippedDefaults` also self-heals `origin`, the way `seedMandatory` already does.
+That fix belongs in `BundleRegistry.mm`, not touched here. `BundlesManager.mm:1012` computes the
+*Preferences → Bundles* "recommended" badge off the same `origin == Shipped` check, so that pane is
+very likely silently affected by the same bug, independent of the Setup Assistant.
+
+**If interrupted here:** the 3-file fix (`FirstLaunchBundleInstaller.{h,mm}`,
+`SetupAssistantWindowController.mm`, `SetupAssistantView.swift`) is complete, built, tested, and
+committed. The real blocker to the maintainer actually seeing bundles listed is
+`BundleRegistry.seedShippedDefaults` not re-asserting `origin` for already-tracked specs. That needs
+its own task: whether *every* previously-tracked default-tier bundle deserves unconditional
+re-tagging the way mandatory bundles get it, or whether that would clobber some legitimate
+reclassification path, hasn't been traced.
+
+---
+
+## 2026-08-19 — Setup Assistant complete; the final review caught what eight task reviews could not
+
+All eight tasks of `docs/superpowers/plans/2026-08-18-setup-assistant.md` are implemented and
+reviewed, plus a final whole-branch pass and its fix wave (`2d03ce34`). Build succeeds, 14 tests
+pass, working tree clean on `phase-6/swiftui-onboarding`.
+
+### The two defects worth remembering
+
+Every task passed its own review, several after fix rounds. The feature still shipped two defects
+into the final review, and both lived in the *seam* between tasks that were each individually
+correct:
+
+**Picking "Dark" wrote a light theme into `darkModeThemeUUID`.** `selectedThemeIdentifier` was
+computed once in `init` and never recomputed when the appearance picker changed, so `finish()` wrote
+a stale identifier into the slot the *new* appearance named. On a fresh profile that put Mac Classic
+in the dark slot: ask for dark, get black-on-white. The picker was set up in one task and consumed
+in another, and neither review could see both ends.
+
+**Every run after the first showed first-run state.** The window controller is a process-lifetime
+singleton that built its `contentView` — and therefore its SwiftUI model — once in `-init`.
+Reopening from Help landed on the Bundles step with a Done button and no Welcome, re-offered
+installed bundles, and silently reverted a theme set from `View → Theme` in between. Each task only
+ever considered the first run.
+
+`Ruling: this is the argument for a whole-branch review that per-task review cannot make. Both
+defects were invisible by construction to a reviewer holding one diff. Neither the compiler nor the
+test suite could see either.`
+
+### A false premise in the design, corrected rather than built around
+
+The spec justified running the assistant from `applicationDidFinishLaunching:` on the grounds that
+it precedes session restore, so bundles install before documents open. **That is untrue.**
+`+[DocumentWindowController restoreSession]` runs synchronously in
+`applicationWillFinishLaunching:`, which fires first. Existing users see documents before the
+assistant.
+
+`Ruling: correct the documentation, not the launch ordering. The behaviour is identical to what
+promptIfNeeded did for years, so nothing regressed; moving earlier means a modal inside
+applicationWillFinishLaunching: or reordering session restore, both far riskier than this plan
+designed or reviewed. The spec's manual-check item asserting the old ordering would otherwise have
+been marked failed against correct behaviour.`
+
+### If interrupted here
+
+The branch is complete and unmerged. It needs the maintainer's manual QA — nothing in it has been
+exercised by a human. The highest-value checks: close the assistant and confirm the app still
+responds; open it twice and confirm it re-focuses; pick Dark, click Done, and confirm
+`defaults read com.shelbydenike.TextMate darkModeThemeUUID` is not the Mac Classic light theme.
+Merging will NOT publish a release — verified by reading `release.yml`: its version regex resolves
+past `## Unreleased` to the already-tagged `3.0.0-revived.25` and the tag-exists check gates every
+publish step off.
+
+---
+
+## 2026-08-19 — Final review fix wave on the Setup Assistant branch
+
+**What:** Seven findings from the whole-branch review, one commit, two files.
+
+The two critical ones. `SetupAssistantModel` held a single `selectedThemeIdentifier`, read once in
+`init` for whichever slot the *starting* appearance named, and `finish()` then wrote it into the slot
+the *ending* appearance named — so a fresh profile (automatic, editing light, Mac Classic selected)
+that picked Dark wrote Mac Classic into `darkModeThemeUUID`, and dark mode resolved to a light theme.
+It is now `selectedThemeIdentifiers: [String: String]`, one entry per slot, both seeded from the host
+in `init`, with a computed `selectedThemeBinding` that addresses `editingAppearance`. The list, the
+preview and the write therefore always name the same slot. That binding ignores a nil write: a `List`
+whose contents change under it can report the vanished selection as no selection, which would clear
+the slot's real theme.
+
+Second: `SetupAssistantWindowController` is a `sharedInstance`, and it built `contentView` — and with
+it the model, its `step`, and the `lazy allThemes`/`allBundles` caches — once in `-init`. Every run
+after the first therefore opened on the Bundles step with a Done button and no Welcome (losing Skip's
+discoverability), re-offered bundles installed during run one, and reverted a theme picked from
+`View → Theme` in between. `-runModal` now rebuilds the view *after* the `isVisible` reentrancy guard,
+so the re-focus path stays a pure no-op and only a genuine session gets fresh state. The discarded
+model is unreferenced, which also leaves its strong reference back to the controller holding nothing
+up.
+
+**Automatic mode could not set the dark theme** — `editingAppearance` collapsed `"auto"` to `"light"`,
+while the spec says both keys are editable in automatic because both are used. Fixed with the smallest
+honest UI: a second segmented picker (Light Theme / Dark Theme) that appears *only* when appearance is
+automatic and chooses which slot the existing single list edits, plus `finish()` writing both slots in
+that mode and one otherwise. Rejected as larger: two side-by-side theme lists, or a per-slot sub-step.
+Nothing changes for light or dark users, where the mode already names one slot.
+
+Four smaller ones. The window never cleared `preventsApplicationTerminationWhenModal` (defaults YES),
+so ⌘Q was inert during an app-modal wizard shown over already-restored documents; the retired
+`FirstLaunchBundleInstaller` window cleared it explicitly and now this one does too. Skip Setup gained
+`.keyboardShortcut(.cancelAction)`, because the spec and the assistant's own copy both promise ESC
+dismisses it and nothing wired ESC to anything. The bundles step gained an empty state — essentially
+every existing profile has all shipped-tier bundles installed, so the list is empty, and it sat under
+"Recommended ones are already selected". And its caption now discloses that unchecking is permanent:
+`installBundleIdentifiers:neverSuggest:` writes to the never-suggest list, which also silences
+`DocumentWindowController`'s on-demand per-extension prompt.
+
+**Why:** last pass before the branch is done; these were the findings that a user would actually hit,
+in severity order.
+
+**If interrupted here:** nothing outstanding on the code. `bin/build` succeeds and
+`bin/build TextMate/test` passes 14/14. Rendering was not verified — the appearance step's new
+automatic-mode picker and the bundles empty state have never been looked at in a running app.
+
+---
+
+## 2026-08-19 — Task 8 landed: the Setup Assistant now runs at first launch
+
+**What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-8-brief.md`, the last task.
+`AppController.mm`'s `applicationDidFinishLaunching:` no longer calls `[FirstLaunchBundleInstaller
+promptIfNeeded]`; it now calls `[SetupAssistantWindowController.sharedInstance runModal]`, guarded
+by `TMSetupAssistantShouldRunAtLaunch(NSUserDefaults.standardUserDefaults)`. Added the
+`SetupAssistant/SetupAssistantGating.h` import beside the window-controller one and dropped the now-
+unused `FirstLaunchBundleInstaller.h` import — nothing else in the file referenced that class.
+`FirstLaunchBundleInstaller.mm`/`.h` lost `+promptIfNeeded`, `sActiveInstaller`,
+`-initWithCandidates:`, `-buildContentView`, `-show`, `-dismiss`, the `FLBITableView` subclass, the
+table view data source/delegate methods, and `-skip:`/`-installSelected:`/
+`-observeValueForKeyPath:...` — the entire window/NIB-free-construction layer. `+candidateSpecs`
+survives untouched, along with the three imports it needs (`BundlesManager.h`, `BundleRegistry.h`,
+`BundleSpec.h`); `SetupAssistantWindowController.mm`'s `-availableBundles` and
+`-installBundleIdentifiers:neverSuggest:` both still call it and needed no change. Verified before
+deleting anything: `grep -rn promptIfNeeded --include=*.mm --include=*.h .` had exactly three hits
+(the header declaration, the `.mm` definition, the one `AppController.mm` call site) — no other
+caller existed to update. Confirmed after: every symbol `candidateSpecs`'s body touches
+(`TMBundleOriginShipped`, `installedSHA`, `uuid`, `name`, `category`,
+`kUserDefaultsBundlesToNeverSuggestKey`, `BundleRegistry.sharedInstance.allSpecs`) still resolves
+through the kept imports. Rewrote the header's stale class comment, which had described the deleted
+modal ("Enter activates Install Selected; ESC activates Skip...") — left as-is it would have
+actively misdescribed the class.
+
+**One change outside the brief, called for explicitly:** `SetupAssistantView.swift`'s `finish()`
+switched both `.map { $0.identifier! }` calls to `.compactMap { $0.identifier }`. Same result under
+today's invariant (`BundleSpec.mm:21` refuses to construct a spec with a nil `uuid`, and
+`NSUUID.UUIDString` is non-nullable) — but `compactMap` drops a future nil instead of crashing on
+it, and a first-launch wizard is the worst place to force-unwrap something a later change to
+`TMBundleChoice`'s producers could break. Updated the comment above it, which had explained the old
+force-unwrap and would otherwise now describe code that no longer exists.
+
+**CHANGELOG.md gets `## Unreleased`, not a dated version heading.** Read
+`.github/workflows/release.yml` first: it fires on any push to `master` that touches
+`CHANGELOG.md`, extracts the version from the *first* `^## .* (v.*)$` line, and releases it if the
+version contains `-revived` and no matching tag exists yet. Inventing the next version number now
+would auto-publish the moment this branch merges — before the maintainer's own manual QA pass. Dug
+into `git log -S'## Unreleased' -- CHANGELOG.md` and found the repo already has exactly this
+pattern: commit `761a219a` added a bare `## Unreleased` heading for a feature landing, and a later,
+separate `release:` commit (`c0631a40`) renamed it to a dated `(v3.0.0-revived.23)` heading plus a
+one-line summary. Followed that convention exactly rather than inventing a new one. Confirmed safe
+by running the workflow's own extraction regex against the edited file: it still resolves to
+`3.0.0-revived.25`, the already-tagged top entry, because `## Unreleased` has no `(v...)` suffix to
+match.
+
+**HANDOFF.md:** Phase 6 items table's onboarding row is now `**done**`; the "Onboarding is designed
+and approved... Nothing is implemented yet" paragraph is rewritten to "Onboarding is done" naming
+what shipped and the two things that are genuinely still outstanding (both human-only, both outside
+this environment): the maintainer's manual walk of the five first-launch scenarios the spec names,
+and a green CI run on the pushed branch. Current-state table's `Phase 6` and `Unreleased` rows
+updated to match.
+
+**CLAUDE.md** gains a `### Setup Assistant (Phase 6)` subsection under Architecture: the gating-key
+rename rationale (a new `didRunSetupAssistant` default rather than reusing the legacy prompt key, so
+existing users see the assistant once too), that `TextMate-Bridging-Header.h` reaches only
+`SetupAssistantTypes.h` and why that header has to stay pure-ObjC, and why `SetupAssistantCore` is
+split into its own `library.static` — `TextMate_test` compiles only `bin/gen_test`'s generated
+runner, so anything its tests exercise has to come from a library both `TextMate` and
+`TextMate_test` link, the same shape `PreferencesMigration` already used.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **`. `bin/build TextMate/test` → `** BUILD SUCCEEDED
+**`; `TextMate_test -v` run directly → `TextMate_test: 14 tests passed`, unchanged count — the brief
+specified no new tests for this task.
+
+### If interrupted here
+
+All eight tasks of `docs/superpowers/specs/2026-08-18-setup-assistant-design.md` are implemented and
+committed on `phase-6/swiftui-onboarding`. `FirstLaunchBundleInstaller` no longer has a window at
+all; the Setup Assistant is the only path to installing default bundles now, both at first launch
+and from `Help → Setup Assistant…`. What's left is explicitly human-only and could not be done from
+here: the maintainer's manual walk of the brief's Step 4 checklist (fresh-profile launch order, ESC-
+skip persistence, Help reopening with live state rather than a blank wizard, a chosen theme actually
+applying, checked/unchecked bundles persisting correctly), and pushing the branch to confirm CI is
+green (Step 7) before treating the phase item as done. Until both happen, do not turn `##
+Unreleased` into a dated version heading — that is the deliberate act that ships this.
+
+## 2026-08-18 — Task 7 landed: the bundles step, and the brief's own snippet failed to compile
+
+**What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-7-brief.md`.
+`FirstLaunchBundleInstaller.h` now declares `+ (NSArray<BundleSpec*>*)candidateSpecs` (forward
+`@class BundleSpec`); the `.mm` was already implementing it with no prior declaration, so the
+implementation itself is untouched. `SetupAssistantWindowController.mm` gives real bodies to
+`-availableBundles` (maps `candidateSpecs` into `TMBundleChoice`) and
+`-installBundleIdentifiers:neverSuggest:` (merges into the never-suggest default via
+`TMMergeNeverSuggestIdentifiers`, then calls `BundlesManager.sharedInstance
+installSpecs:completionHandler:` for the checked set). `SetupAssistantView.swift`'s bundles case is
+now `BundlesStepView` — a list of toggles, recommended entries pre-checked — replacing
+`Text("Bundles")`. `project.yml` needed no change: the `TextMate` target already links
+`BundlesManager` and already lists `Xcode/include/BundlesManager` in its header search path
+(confirmed by reading `project.yml:1860,1876-1877`, not assumed).
+
+**The brief's own `finish()` snippet does not compile, for a reason specific to this bridging
+setup.** `TMBundleChoice.identifier` has unspecified nullability in `SetupAssistantTypes.h`, so
+Swift imports it as `String!`. `.map { $0.identifier }`, exactly as the brief wrote it, doesn't
+preserve that IUO — SE-0054 decays a closure's inferred return type to plain `String?`, so both
+`install` and `never` came out as `[String?]`, and `host.installBundleIdentifiers(_:neverSuggest:)`
+wants `[String]`. Fixed with a force-unwrap (`$0.identifier!`) and a comment explaining why it's
+safe: every `TMBundleChoice` here comes from `-availableBundles`, which always passes a real,
+non-nil `spec.uuid.UUIDString` into the factory method. Considered annotating
+`SetupAssistantTypes.h` with `NS_ASSUME_NONNULL_BEGIN/END` instead, which would fix the root cause
+for every consumer including `TMThemeChoice` — rejected for this task because that file isn't in
+the brief's Files list and a nullability-wide change risks a ripple beyond what Task 7 asked for;
+the Swift-side fix stays confined to the one file the brief already named.
+
+**Two questions the brief asked me to answer rather than guess at:**
+
+1. **Async install continuing after the assistant's window closes is not a problem.** `finish()`
+   calls `installBundleIdentifiers(...)` and then `host.finish(withSkip: false)` in the same turn,
+   so the window orders out before `installSpecs:completionHandler:`'s background work can possibly
+   finish. But `BundlesManager.sharedInstance` is a process-lifetime singleton
+   (`BundlesManager.mm:58-61`), not owned by the assistant's window or its modal session — install
+   and its completion handler keep running on their own queue exactly as they would for any other
+   caller. The real cost, and it's out of scope per the brief ("do NOT add a progress UI"): the user
+   gets no visual cue anything is still happening, where the old `FirstLaunchBundleInstaller` window
+   stayed on screen with a progress bar until the install finished. A user who quits immediately
+   after clicking Done could interrupt a bundle mid-install — a class of risk the old flow avoided
+   by blocking on that progress bar, not something this task's scope covers.
+2. **Installed bundles cannot reach the list at all, so "greyed out" is defensive code, not a live
+   path today.** `candidateSpecs` filters `spec.installedSHA == nil` before anything reaches
+   `-availableBundles`, so every `TMBundleChoice` built from it has `installed == NO` by
+   construction. `BundlesStepView`'s `.disabled(bundle.installed)` and the pre-check logic's
+   `!$0.installed` guards are therefore currently unreachable in the true branch — kept anyway
+   because `TMBundleChoice` is a general-purpose view-model type and the brief's own Step 2/Step 3
+   code computes and consumes `installed` explicitly; diverging (e.g. a second query that also
+   surfaces installed bundles) would be exactly the "second version of that query" the top-level
+   task said not to write. Verified empirically, not assumed: parsed the real `~/Library/Application
+   Support/TextMate/Bundles.plist` on this machine against the shipped-tier catalogue `Bundle
+   Support.tmbundle/Support/DefaultBundles.plist` (41 entries). On this dev machine all 41 are
+   already installed, so `candidateSpecs` currently enumerates **0** here; for a fresh user (empty
+   `Bundles.plist`, no never-suggest entries) the same cross-reference gives **41** candidates
+   (Languages 28, Other 5, SCM 5, Build 3), none overlapping the 4 mandatory-tier bundles.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **` (after the force-unwrap fix; zero warnings on any
+SetupAssistant or FirstLaunchBundleInstaller file — the one Swift deprecation warning in the log is
+pre-existing, in `ThemePreview`'s untouched `+`-based `Text` concatenation from Task 6, just shifted
+line number by this task's insertions). `bin/build TextMate/test` → `** BUILD SUCCEEDED **`;
+`TextMate_test -v` run directly → `TextMate_test: 14 tests passed`, unchanged count —
+`TextMate_test` doesn't link `BundlesManager` at all (`project.yml:2062-2066`, and the existing
+`t_setup_assistant.mm` comment says so directly), so this task's bundle-selection logic has no
+reachable unit-test surface there; the brief specified no new tests.
+
+### If interrupted here
+
+Task 7 is committed. `FirstLaunchBundleInstaller`'s window itself is still alive and still callable
+(`+promptIfNeeded`) — Task 8 is what retires it. All three SwiftUI steps (welcome, appearance,
+bundles) now have real content; nobody has put the assistant on screen in this environment, so a
+human still needs to run the brief's Step 5 checklist: the list matches the old modal's offering,
+recommended entries are pre-checked, Finish installs the checked set, unchecked bundles land in the
+never-suggest default and don't re-prompt on a matching file open, and Skip installs nothing and
+marks nothing as never-suggest.
+
+## 2026-08-18 — Task 6, fix round 2/5: the currently-active theme is exempt from the hidden skip
+
+**What:** Implemented the fix round 1 proposed rather than shipped. `-availableThemes`
+(`SetupAssistantWindowController.mm`) now reads `universalThemeUUID` and `darkModeThemeUUID` once
+before its enumeration loop and only applies the `hidden_from_user()` skip when an item's identifier
+matches neither -- mirroring `validateThemeMenuItem:`'s own unfiltered resolution of the current
+theme (`AppController Menus.mm:135-136`) rather than inventing a new mechanism. A theme that is
+hidden from `View -> Theme` but currently configured in either slot now stays selectable and shows
+as selected; every other hidden theme is still excluded exactly as round 1 left it.
+
+**Confirmed, not assumed:** the exemption reads both defaults keys unconditionally in the single
+pass that builds the whole list (no "which side" parameter exists on `-availableThemes` at all), so
+it can't be lost by switching the Light/Dark segmented control -- that only filters an
+already-complete, already-exempted list downstream in Swift. And `&&` short-circuits on
+`hidden_from_user()` first, so a non-hidden item never even reaches the UUID comparisons -- the
+common case (no hidden theme active) produces byte-identical output to round 1, unchanged.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **`. `bin/build TextMate/test` → `** BUILD SUCCEEDED **`;
+`TextMate_test -v` run directly → `TextMate_test: 14 tests passed`.
+
+### If interrupted here
+
+Fix rounds 1/5 and 2/5 for Task 6 are both committed. Up to 3 more review rounds may follow before
+Task 7 starts.
+
+## 2026-08-18 — Task 6, fix round 1/5: hidden themes were leaking into the assistant's picker
+
+**What:** Review caught that `-availableThemes` (`SetupAssistantWindowController.mm`) had no
+`hidden_from_user()` check, while `View -> Theme`'s own enumeration
+(`AppController Menus.mm:153-155`) skips hidden items before ever building a menu entry. Concrete
+instance: `Themes.tmbundle/Themes/macOS System Theme.tmTheme` sets `hideFromUser`, so it's absent
+from the menu but was appearing in the assistant. Added the same skip, with a comment pointing at
+`AppController Menus.mm:154` as the source of the rule, so the two stay in sync if the menu's rule
+ever changes.
+
+**Traced, not fixed: what happens if the user's actual configured theme is a hidden one.**
+`-currentThemeIdentifierForAppearance:` reads `NSUserDefaults` directly, unfiltered, so it still
+returns the hidden theme's real UUID. But `allThemes` (`host.availableThemes()`) no longer contains
+it post-fix, so `selectedTheme` resolves to `nil` (generic black preview, not the real theme's
+colours) and the SwiftUI `List`'s selection binding matches no row (blank selection) — no crash, no
+data loss on an untouched Done click (the same identifier writes back unchanged), but a user could
+mistake the blank selection for a lost setting and pick a visible theme to "fix" it, silently
+overwriting a working hidden-theme configuration. Proposed but did not implement the smallest fix:
+exempt whichever theme is currently active in either slot from the hidden check, mirroring
+`validateThemeMenuItem:` (`AppController Menus.mm:117-128`), which already looks up the active
+theme's name via `bundles::lookup` unfiltered by `hidden_from_user()` for its menu-item label.
+Left for the coordinator to schedule.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **`. `bin/build TextMate/test` → `** BUILD SUCCEEDED **`;
+`TextMate_test -v` run directly (same harness quirk as Task 6's own entry below) →
+`TextMate_test: 14 tests passed`.
+
+### If interrupted here
+
+Fix round 1/5 for Task 6 is committed. 4 more review rounds may follow before Task 7 starts. The
+hidden-current-theme exemption above is proposed, not implemented — needs a coordinator decision,
+not just a green build, before touching it.
+
+## 2026-08-18 — Task 6 landed: the appearance step, and two more brief gaps caught by reading real headers
+
+**What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-6-brief.md`. Step 2 of
+`SetupAssistantView.swift` is now `AppearanceStepView` — a segmented Light/Dark/Automatic picker
+plus a theme list plus a mockup preview drawn from real theme colours — replacing the
+`Text("Appearance")` placeholder. `SetupAssistantWindowController.mm` gives real bodies to
+`-availableThemes`, `-currentAppearance`, `-currentThemeIdentifierForAppearance:` and
+`-applyThemeIdentifier:appearance:`; `-availableBundles` and `-installBundleIdentifiers:neverSuggest:`
+stay stubs, Task 7's job. `project.yml` needed no change — the TextMate target's
+`HEADER_SEARCH_PATHS` already lists `theme`, `bundles`, `scope` and `ns` (confirmed by reading it,
+per the brief's own instruction to verify rather than assume).
+
+**The task instructions were right that the brief's colour-extraction snippet was unverified, and
+right to say so up front — but the specific mismatch they named wasn't the real one.** They warned
+`scope::wildcard` might be a `context_t` where `styles_for_scope` wants a `scope_t`. Reading
+`scope.h` directly: `wildcard` is declared `extern scope_t wildcard`, so `theme->styles_for_scope
+(scope::wildcard)` typechecks fine — no error there. The real wrinkle is semantic, found by reading
+`theme.cc`'s matcher: a wildcard-context match short-circuits `does_match` to true for *every*
+scope-selector rule in the theme simultaneously (scope.cc:274), not just the unscoped root entry, so
+merging in rank order can blend in whatever per-scope override a theme happens to define for caret
+or selection. `theme_t` has no root-level accessor for those two — only `foreground()`/`background()`
+(theme.h:77-78) — so there's no way to get them without going through `styles_for_scope` at all.
+Used `theme->foreground()`/`theme->background()` directly for the background/foreground swatch
+colours (matching the task instructions' explicit steer, verified against `theme.cc:350-360`, where
+`background(fileType)` is itself implemented as `styles_for_scope(fileType).background()` — sugar,
+not a different code path), and kept `styles_for_scope(scope::wildcard)` only for caret/selection,
+where there is no alternative. In practice this rarely matters: real themes almost never override
+caret/selection per scope, so wildcard and the true root value coincide for every theme on this
+machine. Neither value is actually drawn by the mockup anyway — `ThemePreview`'s body never
+references `TMThemeColorCaret` or `TMThemeColorSelection` — so this was verified by reading, not by
+a visible consequence.
+
+**The brief's own `finish()` never sent the picker's tri-state choice anywhere, which would have
+made "Automatic" a dead option.** Step 2 asked for an `-applyAppearance:` method "called from
+`-finishWithSkip:` when not skipped" — but `-finishWithSkip:` only ever receives a `BOOL`, and the
+Swift model's `appearance` (light/dark/auto) never crosses to the ObjC side in the brief's Step 4
+`finish()`, which calls `applyThemeIdentifier(_:appearance:)` with `editingAppearance` — a value
+that's *always* "light" or "dark", collapsing "auto" the same way "light" does, by design (it picks
+which slot's theme list to edit, not the overall mode). Confirmed by reading `OakTextView.mm:826`
+and `QuickLookPreviewProvider.mm:175` that `themeAppearance` is a real, load-bearing default (absent
+= follow system dark/light; present = force it), so silently never writing it would make "Automatic"
+indistinguishable from "Light" forever. Fixed by adding `-applyAppearance:` to the
+`TMSetupAssistantHost` protocol itself (`SetupAssistantTypes.h` — the one file the brief's own Files
+list omitted, because the brief didn't anticipate needing it) and calling it from Swift's `finish()`
+directly, translating `"auto"` to `nil`. That header is already the Swift/ObjC boundary — the
+bridging header imports it verbatim — so this is the same mechanism every other host method already
+uses, not a new one. `-finishWithSkip:` itself is untouched.
+
+**Theme count on this machine, by static inspection (not live enumeration — the task rules out
+launching the app here):** 22 `.tmTheme` files, same 22 names, in both the embedded
+`themes.tmbundle` under `Applications/TextMate/support/Bundles` and the separately-installed copy
+under `~/Library/Application Support/TextMate/Managed/Bundles/`. Whether `bundles::query` dedupes
+across those two locations at runtime is exactly the kind of thing a human needs to check by
+actually opening the assistant.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **`, zero warnings on any SetupAssistant file (checked
+by grep against the full log, not just the tail). `bin/build TextMate/test` built clean but its
+`exec`-replaced binary's output didn't reach the captured log in this harness — ran
+`~/build/textmate-revived/xcode/Release/TextMate_test -v` directly instead (sanctioned by CLAUDE.md
+as the alternative to the name-filterless runner): `TextMate_test: 14 tests passed`, unchanged count,
+no new tests — the brief specified none for this task.
+
+**Not yet done, deliberately:** bundles step is still `Text("Bundles")` (Task 7). Nobody has put the
+window on screen — same constraint as Task 5, this environment cannot launch the app or synthesise
+clicks. A human still needs to confirm the five behaviours the brief's Step 6 lists: the theme list
+matches `View → Theme`'s offerings, selecting a theme redraws the preview with no delay, the preview
+colours are actually right for the theme, finishing preselects that theme on reopen, and switching to
+Dark and picking a theme writes only the dark slot. Check `defaults read
+com.apple.universalaccess reduceTransparency` before drawing any conclusion from a screenshot.
+
+### If interrupted here
+
+Tasks 1-6 are complete. Task 7 (bundles step: wire `availableBundles` and
+`installBundleIdentifiers:neverSuggest:`) is the only remaining SwiftUI step; Task 8 (wiring the
+assistant into launch) comes after. The assistant is still reachable only from the Help menu, so
+none of this affects normal startup yet.
+
+## 2026-08-18 — Task 5 landed: the SwiftUI shell, and a brief that was wrong on the load-bearing line
+
+**What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-5-brief.md`. `SetupAssistantView.swift`
+now holds the three-step shell: `SetupAssistantModel` (`@MainActor`, owns only which step is
+showing), `SetupAssistantView`, `WelcomeStepView`, and the Objective-C++ entry point
+`SetupAssistantHostingController.view(for:)`, exposed to ObjC as `+viewFor:`.
+`SetupAssistantWindowController.mm` installs the resulting `NSHostingView` as the window's
+`contentView` and implements `TMSetupAssistantHost` with the six data stubs the brief specifies
+(empty arrays / nil) plus `-finishWithSkip:`, which calls `[NSApp stopModal]`.
+
+**The brief's Step 2 code sample was wrong, and the task instructions that assigned this work said
+so up front.** It showed replacing the class extension with `<TMSetupAssistantHost>` alone, which
+would have dropped `<NSWindowDelegate>`. That conformance is what lets `-init` assign
+`window.delegate = self` and what makes `-windowWillClose:` — which calls `[NSApp stopModal]` — ever
+get invoked. Losing it is the same failure the previous entry's "Route one" describes, reopened: an
+app-modal session with no window on screen and no way out but a force-quit. It would not have shown
+up as a build error either — `window.delegate = self` still compiles against a narrower protocol
+list as long as nothing else in the file demanded `NSWindowDelegate`, so the break is silent until
+someone closes the window at runtime. Committed extension is
+`@interface SetupAssistantWindowController () <NSWindowDelegate, TMSetupAssistantHost>` — both
+protocols, confirmed present before building and again before committing.
+
+**Two further gaps, neither named in the brief, both compiler-caught rather than silent.**
+`SetupAssistantWindowController.mm` had never imported `SetupAssistantTypes.h` — Task 4 needed
+none of `TMThemeChoice`/`TMBundleChoice`/`TMSetupAssistantHost`, and the generated
+`TextMate-Swift.h` only forward-declares them (`@protocol TMSetupAssistantHost;`, no definition),
+which is enough for a bare pointer but not for declaring conformance or a method returning
+`NSArray<TMThemeChoice*>*`. Fixed with a direct import, ordered before `TextMate-Swift.h`.
+Separately, Swift 6 strict concurrency rejected the hosting bridge outright:
+`view(for:)` called `SetupAssistantModel.init(host:)`, which is `@MainActor`, from a nonisolated
+static context — `error: call to main actor-isolated initializer 'init(host:)' in a synchronous
+nonisolated context`. Marked `view(for:)` itself `@MainActor`; every real caller (window
+construction, from the Help menu action) is already on the main thread, so the isolation the
+function declares matches the isolation its caller is already running under. Nothing about who
+owns the model or the step state changed.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **`, clean of SetupAssistant-related warnings.
+`bin/build TextMate/test` → `TextMate_test: 14 tests passed`, unchanged from Task 4 — this task
+added no new tests, per the brief.
+
+**Not yet done, deliberately:** all six data-returning/data-applying `TMSetupAssistantHost` methods
+are stubs; the appearance and bundles steps are placeholder `Text` views (Tasks 6 and 7). Nobody has
+put the window on screen — the task that assigned this work ruled that out for this environment, so
+verification here is build and test only. A human still needs to `bin/deploy-local` and click
+through: Back/Continue/Skip navigate three steps, Back is absent on step one, the last step's button
+reads "Done", Return activates the default button, and closing with the title-bar button leaves the
+app responsive.
+
+### If interrupted here
+
+Tasks 1-5 are complete. Task 6 (appearance step: wire `availableThemes`, `currentAppearance`,
+`applyThemeIdentifier:appearance:`) and Task 7 (bundles step) remain, plus the manual click-through
+above. Nothing is wired into launch yet — the assistant is reachable only from the Help menu until
+Task 8, so none of this can affect normal startup in the meantime.
+
+---
+
+## 2026-08-18 — two independent routes to a hung app, both closed before anyone clicked
+
+Task 4 of the Setup Assistant plan landed the window and the `Help → Setup Assistant…` item
+(`a0d16a0c`), then a reentrancy guard (`399cd307`). Both changes exist because of the same failure:
+an app-modal session with no window on screen, unresponsive, recoverable only by force-quit.
+
+**Route one — no window delegate.** The plan's code relied on `-windowWillClose:` calling
+`[NSApp stopModal]`, but nothing made the controller the window's delegate, so it would never fire.
+Caught in the pre-flight scan before implementation. Fixing it required
+`@interface SetupAssistantWindowController () <NSWindowDelegate>` as well, since assigning `self` to
+`window.delegate` does not compile without it.
+
+**Route two — no reentrancy guard.** `AppController.mm:770`'s `validateMenuItem:` does not disable
+`showSetupAssistant:` during a modal session, so choosing the menu item again while the assistant is
+open starts a *nested* `runModalForWindow:` on the same singleton window. The single
+`windowWillClose:` unwinds only the innermost session; the outer one blocks forever. Found by task
+review, not by the compiler and not by the test suite — neither can see it.
+
+`Ruling: fixed rather than parked, because the maintainer was about to be handed a build and asked
+to exercise that exact menu item. Reopening a new window is the first thing anyone does while poking
+at one. Cost if wrong: a few inert lines in the single-open case.`
+
+### Still open at time of writing
+
+The guard tests `self.window.isVisible`, which is only correct if `-runModalForWindow:` itself makes
+the window visible. **That is unverified.** The macOS 26 SDK's `NSApplication.h` carries no doc
+comment for the method, and the in-repo comment at `SoftwareUpdate.mm:606` does *not* support it —
+it concerns the window's level after the session ends, not ordering front. A guard resting on an
+unproven assumption is close to no guard, so a scoped re-review is establishing the answer with a
+standalone test program. If `isVisible` proves unreliable the guard becomes an explicit `BOOL` set
+around the session, which depends on nothing.
+
+### If interrupted here
+
+Tasks 1-3 are complete and reviewed. Task 4 is in fix round 1 of 5 awaiting that re-review. Task 5
+(the SwiftUI shell) is briefed and unstarted. Nothing is wired into launch yet — the assistant is
+reachable only from the Help menu until Task 8, so a hang cannot affect normal startup.
+
+---
+
+## 2026-08-18 — Task 4 landed: an empty assistant window, reachable from Help
+
+**What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-4-brief.md`. Added
+`SetupAssistantWindowController.{h,mm}` (an `NSWindowController` subclass with an empty content
+view — SwiftUI content is Task 5), a `Help → Setup Assistant…` menu item with a separator before it
+(`AppController.mm:408-414`, using the project's real separator literal `{ /* -------- */ }`,
+confirmed against existing uses in the Bundles and Window menus before writing it), and
+`-[AppController showSetupAssistant:]` beside `orderFrontAboutPanel:`. `project.yml` gained the one
+new source path; `xcodegen generate` picked it up along with the known harmless swap of the two
+"Embed Dependencies" phase orderings.
+
+**Deviation from the brief, required by the task instructions:** the brief's `-init` never sets
+`window.delegate`, so its own `-windowWillClose:` would never fire and `-stopModal` would never run
+— a modal session with no window and an unresponsive app, recoverable only by force-quit. Added
+`window.delegate = self;` after the `contentView` assignment. That assignment does not type-check
+against a bare `NSWindowController` subclass (`assigning to 'id<NSWindowDelegate>' from incompatible
+type`), so the class extension also gained `<NSWindowDelegate>` conformance — required for the fix
+to compile, not scope creep. The `TMSetupAssistantHost` class extension stays empty as briefed;
+that conformance is Task 5's.
+
+Build: `bin/build` → `** BUILD SUCCEEDED **`. `bin/build TextMate/test` → exit 0, 14/14 tests still
+passing (confirmed verbosely via the binary directly: `TextMate_test -v` → `14 tests passed`; no
+tests were added this task). Verification stops there — opening the window, confirming it's modal,
+and confirming the close button restores responsiveness all need a human at a keyboard, per the
+brief's own Step 6.
+
+### If interrupted here
+
+Task 4 is committed and built clean. Task 5 (the actual SwiftUI content view, replacing the empty
+`NSView`) is next and is the point where the modules-off Swift interop this repo has never exercised
+actually gets proven under a real window rather than in isolation. Read the "No target in this tree
+has ever contained a Swift file" note in `CLAUDE.md` before starting it.
+
+---
+
+## 2026-08-18 — a test that could not fail, and the plan line that caused it
+
+`b22a2479` corrects `test_legacy_bundle_prompt_key_does_not_suppress_the_assistant`. It wrote
+`@"didPromptForDefaultBundles"`; the real constant is
+`kUserDefaultsDidPromptForDefaultBundlesKey = @"DidPromptForDefaultBundles"` — capital D —
+at `Frameworks/BundlesManager/src/BundlesManager.mm:28`. `NSUserDefaults` keys are case-sensitive,
+so the test had been setting a key that does not exist.
+
+**The failure mode is what makes this worth writing down: the test passed either way.** It would
+have gone on passing if someone later made `TMSetupAssistantShouldRunAtLaunch` consult the real
+legacy key — which is the single regression it exists to prevent, and one that would hide the Setup
+Assistant from every existing user, because they all have that key set. Shipped behaviour was never
+wrong; the guard was.
+
+The wrong literal came from the implementation plan itself (line 473), so it was transcribed
+faithfully. The plan is corrected in the same commit so it cannot be re-transcribed by anyone
+re-running it. The test now carries a comment naming the real constant's home and noting that the
+casing is load-bearing.
+
+`Ruling: the literal stays a literal rather than importing BundlesManager.h for the symbol.
+TextMate_test does not link that framework, and pulling a large dependency into the test target to
+avoid one string is the worse trade. The comment is what keeps it honest.`
+
+### If interrupted here
+
+Task 3 of `docs/superpowers/plans/2026-08-18-setup-assistant.md` is in fix round 1 of 5, awaiting a
+scoped re-review of `b22a2479`. Tasks 1-2 are complete and reviewed clean. Task 4 (the window and
+the Help menu item) is briefed and unstarted — it is the first task whose verification needs a human
+at a keyboard, because GUI gestures cannot be synthesised in the agent sandbox.
+
+---
+
+## 2026-08-18 — Task 3 landed: the gating predicate
+
+**What:** Executed Task 3 of `.superpowers/sdd/2026-08-18-setup-assistant/task-3-brief.md`. Appended
+four tests to `Applications/TextMate/tests/t_setup_assistant.mm` (`test_assistant_runs_when_key_absent`,
+`test_assistant_does_not_run_once_marked`, `test_marking_is_idempotent`,
+`test_legacy_bundle_prompt_key_does_not_suppress_the_assistant`) plus the
+`SetupAssistantGating.h` import, and confirmed the build fails as expected: `fatal error:
+'.../SetupAssistant/SetupAssistantGating.h' file not found`. Then created
+`Applications/TextMate/src/SetupAssistant/SetupAssistantGating.h` and `.mm` (free functions
+`TMSetupAssistantShouldRunAtLaunch`/`TMSetupAssistantMarkAsRun` plus
+`kUserDefaultsDidRunSetupAssistantKey`), added the `.mm` to `SetupAssistantCore`'s `sources:` in
+`project.yml`, regenerated `TextMate.xcodeproj`, and got `** BUILD SUCCEEDED **` with
+`TextMate_test -v` reporting `14 tests passed` (9 in this file: the prior 5 + these 4, plus 5
+existing preferences-migration tests). `bin/build` (the full app) also succeeds.
+
+**Why:** The predicate gates the assistant on its own new `didRunSetupAssistant` key rather than
+the legacy `didPromptForDefaultBundles` key, deliberately: every existing user already has the old
+key set, so reusing it would hide the assistant from exactly the audience its appearance step is
+for. Free functions, not a class, because a test file is wrapped in a namespace by `bin/gen_test`
+and Objective-C forbids declaring a class inside one — the same shape `PreferencesMigration`
+already uses.
+
+Confirms no surprises this task: no `OAK_ASSERT` top-level-comma trap this time (none of the four
+new assertions contain a bare `@[...]`/`@{...}` literal), and `bin/build TextMate/test`'s silent
+exit-0-on-success (it execs the runner without `-v`, so success prints nothing) is documented
+behavior, not a regression — verified by running the built binary directly with `-v`.
+
+### If interrupted here
+
+Task 3 is fully done, verified, and committed. Task 4 is next — see
+`.superpowers/sdd/2026-08-18-setup-assistant/` for its brief once written.
+
+---
+
+## 2026-08-18 — Task 2 landed: SetupAssistantCore library, and the first test that runs
+
+**What:** Executed Task 2 of `docs/superpowers/plans/2026-08-18-setup-assistant.md`. Wrote
+`Applications/TextMate/tests/t_setup_assistant.mm` first (two tests exercising `TMThemeChoice` /
+`TMBundleChoice`) and confirmed it fails at link with `Undefined symbols … _OBJC_CLASS_$_TMThemeChoice`
+(plus `NSColor`, `TMBundleChoice`, and the two color-constant symbols, since `TextMate_test` did not
+yet link AppKit or anything implementing the header). Then created
+`Applications/TextMate/src/SetupAssistant/SetupAssistantTypes.mm` implementing the two classes and
+the two pure rule functions (`TMThemeAppearanceForSemanticClass`, `TMMergeNeverSuggestIdentifiers`),
+appended the three pure-rule tests, added the `SetupAssistantCore` `library.static` target to
+`project.yml` (linked by both `TextMate` and `TextMate_test`, plus `AppKit.framework` on the test
+target for `NSColor`), regenerated `TextMate.xcodeproj`, and got `** BUILD SUCCEEDED **` with all
+10 tests passing (`TextMate_test -v` → `10 tests passed`: 5 new + the 5 existing
+preferences-migration ones).
+
+**Why:** `TextMate_test` compiles only the generated runner, so anything it exercises has to come
+from a library both binaries link — the shape `PreferencesMigration` already established.
+`SetupAssistantCore` is that library for the Setup Assistant's boundary types.
+
+One thing worth recording for later tasks transcribing brief code verbatim: the brief's
+`test_never_suggest_merges_rather_than_replaces` body, as written, does not compile.
+`OAK_ASSERT` is a plain preprocessor macro (`bin/gen_test:110`), and the preprocessor's macro
+argument splitting only tracks `()`, not `[]` — so the un-parenthesized top-level commas inside
+`@[ @"A", @"B", @"C" ]` inside the assertion read as extra macro arguments
+(`error: too many arguments provided to function-like macro invocation`). Fixed by wrapping the
+whole assertion expression in one extra parenthesis pair (`OAK_ASSERT((...))`); no semantic change.
+Full detail in `.superpowers/sdd/2026-08-18-setup-assistant/task-2-report.md`.
+
+### If interrupted here
+
+Task 2 is fully done, verified, and about to be committed. Task 3 is next: append
+`SetupAssistantGating.mm` to `SetupAssistantCore`'s sources and more tests to `t_setup_assistant.mm`
+(append-only, per the pre-flight scan in `.superpowers/sdd/2026-08-18-setup-assistant/progress.md`).
+Read that file's Task 3 self-consistency note first, and re-check any brief code block containing
+an `@[ ... ]` literal inside an `OAK_ASSERT(...)` for the same unparenthesized-macro-argument trap
+before assuming it compiles as transcribed.
+
+---
+
+## 2026-08-18 — Task 1 landed: the first committed Swift file
+
+**What:** Executed Task 1 of `docs/superpowers/plans/2026-08-18-setup-assistant.md`. Created
+`Applications/TextMate/src/SetupAssistant/SetupAssistantTypes.h` (pure-ObjC boundary types --
+`TMThemeChoice`, `TMBundleChoice`, the `TMSetupAssistantHost` protocol, and the two pure C
+functions later tasks unit-test), `Applications/TextMate/src/TextMate-Bridging-Header.h` (two
+imports, nothing else), and `Applications/TextMate/src/SetupAssistant/SetupAssistantView.swift`
+(`TMSetupAssistantStep`, a plain `public` step enum) -- all transcribed verbatim from
+`.superpowers/sdd/2026-08-18-setup-assistant/task-1-brief.md` and diffed byte-for-byte against its
+code blocks before saving. Registered the Swift source and `SWIFT_OBJC_BRIDGING_HEADER` on the
+`TextMate` target in `project.yml`, regenerated `TextMate.xcodeproj`, built clean with `bin/build`
+(`** BUILD SUCCEEDED **`, zero `error:` lines), and confirmed
+`~/build/textmate-revived/xcode/Release/TextMate.swiftmodule/arm64-apple-macos.swiftmodule` exists
+-- the only real proof the file compiled rather than being silently absent from `sources`.
+
+**Why:** This is the toolchain question settled *in a committed state*. The prior spike (see the
+".25 published, and Swift proved to work in this tree" entry below) proved the same shape then
+reverted it; Task 1 is that proof for real, on the branch, so nothing after it depends on a spike
+that no longer exists.
+
+One thing worth recording: the generated `TextMate-Swift.h` is 376 lines with zero `@interface` /
+`@protocol` in it -- `TMSetupAssistantStep` does not appear there. That is expected, not a defect:
+the spike already found `internal @objc` invisible to ObjC++, and a plain (non-`@objc`) enum is
+invisible the same way, by design, since nothing in Task 1 needs it seen from Objective-C++. It is
+consumed from Swift directly, starting at Task 5.
+
+### If interrupted here
+
+Task 1 is fully done, verified, and about to be committed. Task 2 is next: add the
+`SetupAssistantCore` `library.static` target to `project.yml`, linked by both `TextMate` and
+`TextMate_test`, holding the `.mm` that implements the types this task only declared plus
+`t_setup_assistant.mm`, the first test file. Read `docs/superpowers/plans/2026-08-18-setup-assistant.md`'s
+Task 2 section and `.superpowers/sdd/2026-08-18-setup-assistant/progress.md` first -- the latter
+records two rulings from plan self-review that still apply.
+
+---
+
+## 2026-08-18 — RESUME HERE: Setup Assistant plan written, ready to execute
+
+Plan at `docs/superpowers/plans/2026-08-18-setup-assistant.md` — eight tasks. Branch
+`phase-6/swiftui-onboarding`, tree clean, **still no implementation**. Next action is executing
+Task 1, not writing more documents.
+
+### Ordering is by risk, not by feature
+
+Task 1 lands the first `.swift` file in the repository and does nothing else. Task 4 proves the
+window and modal session with an *empty* content view before SwiftUI is involved. Both exist because
+this app has never done either thing, and a modal session whose window closes without calling
+`stopModal` leaves the entire app unresponsive — far easier to diagnose alone than tangled into a
+first SwiftUI integration.
+
+### Planning found a real gap in the spec
+
+`TextMate_test` compiles only the generated runner and links only what it declares, so the design's
+promised tests for gating and marshalling were unreachable from where the design had put that code.
+`PreferencesMigration` is the precedent: `library.static`, linked by both `TextMate` and
+`TextMate_test`. `SetupAssistantCore` now follows it and holds exactly what is testable without C++
+— boundary types, gating predicate, semantic-class mapping, never-suggest merge. The spec's Files
+table was corrected to match rather than left contradicting the plan.
+
+`Ruling: two errors were caught in plan self-review, both of which would have cost a build cycle
+each. The tests asserted with to_s(NSString*), which is declared in Frameworks/ns and is not linked
+by TextMate_test — the existing t_preferences_migration.mm uses isEqualToString: and that is now
+copied. And bundles::kFieldSemanticClass was verified at item.h:26 rather than left as an
+instruction to go look it up. Verifying two API names cost one command; discovering them at compile
+time costs a full build each.`
+
+### The one test worth naming
+
+`TMMergeNeverSuggestIdentifiers` is now a tested function rather than inline code. Replacing instead
+of merging that list resurrects every bundle suggestion the user has ever declined, and
+`DocumentWindowController.mm:1231,1273-1274` is what reads it. Silent, user-visible, and easy to
+write wrong.
+
+### If interrupted here
+
+Read the plan and start at Task 1. Do not re-plan. The two risks nothing has retired: this is the
+first target to carry both `.swift` and `.mm` through a clean CI build, and SwiftUI initialising
+inside a modal session before session restore is new ground for this app. Execution mode was not
+chosen yet — subagent-driven or inline.
+
+---
+
+## 2026-08-18 — Setup Assistant designed and approved
+
+Spec committed at `docs/superpowers/specs/2026-08-18-setup-assistant-design.md`. Branch
+`phase-6/swiftui-onboarding`, tree clean, **no implementation written yet**. Next step is the
+implementation plan, then TDD against it.
+
+### What the design decided, and the one thing that changed the premise
+
+Onboarding was described in HANDOFF as having "no existing implementation." That is true of
+onboarding as a concept and false in a way that matters: `FirstLaunchBundleInstaller` already runs a
+modal at `AppController.mm:592` offering default-tier bundles. So this is not new UI beside an empty
+space — it replaces a single-purpose modal and absorbs its job. The class stays as the engine; only
+its window is retired. `DocumentWindowController.mm:1231,1273-1274` reads
+`kUserDefaultsBundlesToNeverSuggestKey` for the on-demand per-extension prompt, so the bundles step
+has to keep writing it.
+
+Three steps: welcome, appearance, bundles. Appearance is the step that earns the feature — theme
+lives in `View → Theme` and nowhere else, which is exactly why an untouched `kMacClassicThemeUUID`
+default read as lost settings earlier this month.
+
+**The `mate` CLI step was cut by the maintainer.** It already installs from Settings → Terminal
+(`TerminalPreferences.mm:265-288`). Keeping it would have meant extracting `install_mate()` from
+file-static scope, duplicating an authentication flow, and proving a system auth dialog behaves over
+an app-modal window. Cutting it removed the riskiest part of the island and the only change to
+existing privileged code.
+
+`Ruling: the bridge shape is dictated by the spike's measurements, not by taste. A bridging header
+is parsed as C/ObjC and compiled without the prelude PCH, so neither C++ nor this tree's own
+framework headers can cross it. ObjC++ therefore owns the window and every side effect; Swift owns
+presentation and local view state only. Any design that put Swift in charge would have widened the
+boundary, not narrowed it.`
+
+### Two checks during spec self-review that were worth doing
+
+- Claimed "twenty-two themes on a stock profile" when what was measured was **this** machine, which
+  has 54 bundles installed. Corrected to state the measurement and its date rather than imply a
+  floor.
+- Verified rather than assumed that `gen_test.sh` globs `Applications/TextMate/tests/`. It does —
+  `:29-31` falls back `Frameworks/<name>` → `vendor/<name>` → `Applications/<name>`. Had it not, the
+  planned `t_setup_assistant.mm` would never have compiled and the suite would have reported green
+  without running it.
+
+### If interrupted here
+
+The spec is approved but **no plan document exists yet**. Read the spec, then invoke
+`superpowers:writing-plans`. Do not start writing Swift before the plan exists. The two risks the
+spec names and neither the spec nor anything else has retired: this is the first target to carry
+both `.swift` and `.mm` through a clean CI build, and SwiftUI initialising inside a modal session
+before session restore is something this app has never done.
+
+---
+
+## 2026-08-18 — .25 published, and Swift proved to work in this tree
+
+**PR #18 merged** as `a8bc6398`, branch deleted locally and on origin. That fired `release.yml` and
+published **v3.0.0-revived.25**. Now on `phase-6/swiftui-onboarding`, tree clean, nothing in flight.
+
+### Phase 6's one open question is answered: Swift compiles here
+
+Settled by a throwaway spike on the `TextMate` app target — added a `.swift` file, called it from
+`main.mm`, built, reverted. `CLANG_ENABLE_MODULES = NO` was the suspected blocker and **is not one**:
+the Swift compiler's ClangImporter uses modules internally whatever that target-level Clang setting
+says. `SWIFT_VERSION = 6.0` was already in `Base.xcconfig`, no other setting needed adding, and no
+Swift runtime is embedded because it is ABI-stable in macOS 26.
+
+The full contract now lives in `CLAUDE.md`. The two findings that would each have cost an afternoon:
+
+- **`internal @objc` is invisible to ObjC++.** It compiles, reaches the `.swiftmodule`, and is simply
+  absent from the generated `TextMate-Swift.h` — a 383-line header with zero `@interface` in it. The
+  error surfaces as `use of undeclared identifier` at the *call site*, pointing at the wrong file
+  entirely. Declarations must be `public`, not merely `@objc`.
+- **A bridging header cannot see ObjC++, and cannot see this tree's ObjC either.** It is parsed as
+  C/ObjC, so C++ is a syntax error rather than an unsupported feature; and it is compiled without
+  `GCC_PREFIX_HEADER = prelude.mm`, so framework headers relying on the prelude for their AppKit
+  imports fail on `NSImage`, `NSButton`, `BOOL`. The bridge has to be a narrow, self-contained,
+  pure-ObjC shim. Verified working alongside `import SwiftUI`.
+
+`Ruling: spiked the toolchain question before designing the onboarding island rather than after.
+Cost was two incremental builds and a revert. The other order would have surfaced the
+bridging-header constraint midway through an island already written against the app's real headers
+— a rewrite rather than a fix.`
+
+### If interrupted here
+
+The onboarding island itself is next and **has not been designed yet** — brainstorm before writing
+it. The proven-safe shape: ObjC++ owns the window and drives Swift through `TextMate-Swift.h`, while
+Swift calls back out through a pure-ObjC protocol in a self-contained bridging header. Also confirm
+the .25 release finished: `gh run view 32181270935 --repo sdenike/textmate`.
+
+---
+
+## 2026-08-18 — clean stop, PR #18 open, phase plan written down
 
 **Nothing is in flight.** Working tree clean, `phase-6/quicklook-extension` pushed at `a9196f06`,
 [PR #18](https://github.com/sdenike/textmate/pull/18) open against `master` with 8 commits.

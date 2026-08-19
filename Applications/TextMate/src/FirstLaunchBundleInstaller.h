@@ -1,13 +1,23 @@
 #import <Cocoa/Cocoa.h>
 
-// Modal window that lists every uninstalled default-tier bundle with a
-// pre-checked checkbox and lets the user install the selected set in one
-// shot. Fires once per user (gated by kUserDefaultsDidPromptForDefaultBundlesKey).
-//
-// Enter activates Install Selected; ESC activates Skip. Skip records the
-// unchecked bundles in kUserDefaultsBundlesToNeverSuggestKey so the on-demand
-// per-extension prompt also leaves them alone later.
+@class BundleSpec;
+
+// Formerly a modal window, shown once per user, that listed every
+// uninstalled default-tier bundle with a pre-checked checkbox and let the
+// user install the selected set in one shot. The window and its NIB-free
+// construction code are gone: SetupAssistantWindowController now covers that
+// flow, both at first launch and from Help > Setup Assistant..., and reuses
+// this class only for its selection logic below.
 
 @interface FirstLaunchBundleInstaller : NSWindowController
-+ (void)promptIfNeeded;
+
+// Every shipped-origin bundle, installed or not, sorted by category then
+// name. The single place that answers "which bundles are shipped tier" --
+// candidateSpecs below is a filter over this, not a second query.
++ (NSArray<BundleSpec*>*)allShippedSpecs;
+
+// Shipped-origin bundles that are neither installed nor marked never-suggest,
+// sorted by category then name. Exposed for the Setup Assistant, which
+// replaces this class's window while keeping its selection logic.
++ (NSArray<BundleSpec*>*)candidateSpecs;
 @end

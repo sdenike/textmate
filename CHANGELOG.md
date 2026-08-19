@@ -2,6 +2,30 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-19 (v3.0.0-revived.26)
+
+A Setup Assistant walks you through first launch.
+
+### Added
+
+* A Setup Assistant now walks you through initial setup the first time you
+  launch TextMate: choose a light, dark or automatic appearance with a live
+  theme preview, then pick which bundled language and tool bundles to
+  install. It replaces the old "Install Default Bundles" prompt, runs once,
+  and stays available afterwards from Help → Setup Assistant….
+
+  Appearance and theme could previously be changed only from the View menu,
+  which made an untouched default hard to tell apart from a setting that had
+  been lost.
+
+### Fixed
+
+* "Revert to Default" in Settings → Bundles was greyed out for every bundle
+  that ships with TextMate, so an edited copy of a standard bundle could not
+  be restored. TextMate was forgetting which bundles it ships each time it
+  reloaded its bundle list, and treating all of them as bundles you had
+  added yourself.
+
 ## 2026-08-17 (v3.0.0-revived.25)
 
 Quick Look previews work again.
