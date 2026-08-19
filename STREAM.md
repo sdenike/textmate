@@ -4,6 +4,60 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-19 — Setup Assistant complete; the final review caught what eight task reviews could not
+
+All eight tasks of `docs/superpowers/plans/2026-08-18-setup-assistant.md` are implemented and
+reviewed, plus a final whole-branch pass and its fix wave (`2d03ce34`). Build succeeds, 14 tests
+pass, working tree clean on `phase-6/swiftui-onboarding`.
+
+### The two defects worth remembering
+
+Every task passed its own review, several after fix rounds. The feature still shipped two defects
+into the final review, and both lived in the *seam* between tasks that were each individually
+correct:
+
+**Picking "Dark" wrote a light theme into `darkModeThemeUUID`.** `selectedThemeIdentifier` was
+computed once in `init` and never recomputed when the appearance picker changed, so `finish()` wrote
+a stale identifier into the slot the *new* appearance named. On a fresh profile that put Mac Classic
+in the dark slot: ask for dark, get black-on-white. The picker was set up in one task and consumed
+in another, and neither review could see both ends.
+
+**Every run after the first showed first-run state.** The window controller is a process-lifetime
+singleton that built its `contentView` — and therefore its SwiftUI model — once in `-init`.
+Reopening from Help landed on the Bundles step with a Done button and no Welcome, re-offered
+installed bundles, and silently reverted a theme set from `View → Theme` in between. Each task only
+ever considered the first run.
+
+`Ruling: this is the argument for a whole-branch review that per-task review cannot make. Both
+defects were invisible by construction to a reviewer holding one diff. Neither the compiler nor the
+test suite could see either.`
+
+### A false premise in the design, corrected rather than built around
+
+The spec justified running the assistant from `applicationDidFinishLaunching:` on the grounds that
+it precedes session restore, so bundles install before documents open. **That is untrue.**
+`+[DocumentWindowController restoreSession]` runs synchronously in
+`applicationWillFinishLaunching:`, which fires first. Existing users see documents before the
+assistant.
+
+`Ruling: correct the documentation, not the launch ordering. The behaviour is identical to what
+promptIfNeeded did for years, so nothing regressed; moving earlier means a modal inside
+applicationWillFinishLaunching: or reordering session restore, both far riskier than this plan
+designed or reviewed. The spec's manual-check item asserting the old ordering would otherwise have
+been marked failed against correct behaviour.`
+
+### If interrupted here
+
+The branch is complete and unmerged. It needs the maintainer's manual QA — nothing in it has been
+exercised by a human. The highest-value checks: close the assistant and confirm the app still
+responds; open it twice and confirm it re-focuses; pick Dark, click Done, and confirm
+`defaults read com.shelbydenike.TextMate darkModeThemeUUID` is not the Mac Classic light theme.
+Merging will NOT publish a release — verified by reading `release.yml`: its version regex resolves
+past `## Unreleased` to the already-tagged `3.0.0-revived.25` and the tag-exists check gates every
+publish step off.
+
+---
+
 ## 2026-08-19 — Final review fix wave on the Setup Assistant branch
 
 **What:** Seven findings from the whole-branch review, one commit, two files.

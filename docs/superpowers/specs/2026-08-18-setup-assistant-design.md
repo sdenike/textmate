@@ -212,9 +212,20 @@ is gone.
 One controller, two entry points, one code path.
 
 **First launch.** Called from `applicationDidFinishLaunching:` at `AppController.mm:592`, the site
-that calls `promptIfNeeded` today, and therefore before session restore. Running before restore is
-deliberate: bundles determine syntax highlighting, and installing them after documents are open
-forces a re-parse.
+that calls `promptIfNeeded` today.
+
+**Corrected 2026-08-19, after implementation.** This design originally justified that call site by
+claiming the assistant runs *before* session restore, so bundles install before any document opens
+and nothing re-parses. **That is false.** `+[DocumentWindowController restoreSession]`
+(`DocumentWindowController.mm:2735`) runs synchronously in `applicationWillFinishLaunching:`, which
+fires *before* `applicationDidFinishLaunching:` where both the old prompt and the assistant live. Any
+user with a saved session sees their documents first; only a genuinely fresh profile sees the
+assistant first.
+
+The call site is kept anyway, because it is exactly where `promptIfNeeded` has always run — the
+ordering is unchanged from what shipped for years, so nothing regressed. Moving earlier would mean
+running a modal inside `applicationWillFinishLaunching:` or reordering session restore, both
+materially riskier than anything this design covers.
 
 **`Help → Setup Assistant…`.** Added to the Help menu at `AppController.mm:408-412`, which is built
 in code through MenuBuilder rather than in a xib. The action follows the established pattern:
@@ -222,7 +233,7 @@ in code through MenuBuilder rather than in a xib. The action follows the establi
 ```objc
 - (IBAction)showSetupAssistant:(id)sender
 {
-    [SetupAssistantWindowController.sharedInstance showWindow:self];
+    [SetupAssistantWindowController.sharedInstance runModal];
 }
 ```
 
@@ -273,7 +284,8 @@ If these tests touch AppKit on a background thread, `TextMate_test` may need add
 
 GUI gestures cannot be synthesised in the agent sandbox; two previous agents lost time trying.
 
-- a fresh profile shows the assistant before any document window restores
+- a fresh profile shows the assistant on launch (note: with a saved session, documents restore
+  first — see the correction under Entry points)
 - ESC skips, and the assistant does not reappear on the next launch
 - `Help → Setup Assistant…` reopens it with current state reflected, not a blank wizard
 - a theme chosen in the assistant is actually applied to an open document
@@ -289,7 +301,7 @@ build is part of the definition of done, not an afterthought.
 logic stays. The risk is in the seam, not the logic, and the never-suggest list is the specific
 thing to watch: `DocumentWindowController` depends on it.
 
-**Modal before session restore.** Running a modal window this early in
+**Modal during launch.** Running a modal window this early in
 `applicationDidFinishLaunching:` is what the current bundle installer already does, so the pattern
 is proven — but the assistant is a larger window with SwiftUI content, and SwiftUI's first
 initialisation happening inside a modal session before restore is not something this app has done
