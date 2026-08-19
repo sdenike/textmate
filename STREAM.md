@@ -4,6 +4,30 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-19 — Welcome step's background crop now anchors to the stem, not the centre
+
+**What:** `WelcomeStepView`'s `.background` was cropping `tml_image.png` centre-anchored (the
+default for `.aspectRatio(contentMode: .fill)`), which shows the flower head and cuts the stem off
+mid-way, leaving empty space above the Skip/Continue divider. Wrapped the image in a
+`GeometryReader` and added `.frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)`
+before `.clipped()`, so the scaled-up image is positioned with its bottom edge at the step's bottom
+edge and the excess is cropped off the top instead — the stem now runs to the bottom of the step,
+matching how it exits the bottom edge on the About window. Confirmed against the installed SDK's
+`SwiftUICore.swiftinterface` (`frame(width:height:alignment:)`, `_FrameLayout`) that alignment
+positions the (here, oversized) content within the explicit frame rather than the reverse, so
+`.bottom` keeps the content's bottom edge and crops from the top. `bin/build` succeeded;
+`TextMate_test` 14/14. Nothing else in the file changed.
+
+**Why:** The maintainer asked for the stem to reach the bottom of the step, matching the About
+window's crop, instead of the centre-anchored default leaving it stranded mid-image.
+
+**If interrupted here:** nothing left to do; the diff is self-contained to `WelcomeStepView`'s
+`.background`. Rendering itself is unverified (headless/visual check was out of scope here) — if a
+follow-up screenshot shows the crop still wrong, re-check `Image(nsImage:)`'s intrinsic size versus
+`geo.size` at the actual window width before assuming the alignment direction is the problem.
+
+---
+
 ## 2026-08-19 — The textmatelives background image is back, at the maintainer's request, in the About window and behind Setup Assistant's Welcome step
 
 **What:** Recovered `Applications/TextMate/about/css/tml_image.png` (579,466 bytes) from git blob

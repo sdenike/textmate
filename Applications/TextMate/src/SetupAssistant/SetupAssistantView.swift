@@ -333,10 +333,18 @@ struct WelcomeStepView: View {
 				.background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
 				.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 				.background(
-					Image(nsImage: backgroundImage)
-						.resizable()
-						.aspectRatio(contentMode: .fill)
-						.clipped()
+					// .fill crops centre-anchored by default, which shows the flower
+					// head and cuts the stem off mid-way. Sizing the child to the
+					// container explicitly and aligning it to .bottom instead crops the
+					// excess off the top, so the stem runs to the bottom of the step --
+					// matching how it exits the bottom edge on the About window.
+					GeometryReader { geo in
+						Image(nsImage: backgroundImage)
+							.resizable()
+							.aspectRatio(contentMode: .fill)
+							.frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
+							.clipped()
+					}
 				)
 				.clipShape(RoundedRectangle(cornerRadius: 12))
 		}
