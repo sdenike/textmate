@@ -202,6 +202,21 @@ current state reflected rather than a blank wizard. The `mate` CLI step was cons
 merges, both human-only and out of the agent sandbox: the maintainer's manual walk of the five
 first-launch scenarios the spec names, and a green CI run on the pushed branch.
 
+**The maintainer's manual walk already found one bug, now fixed, and it uncovered a second, deeper
+one that isn't.** The bundles step sourced from `FirstLaunchBundleInstaller.candidateSpecs`, which
+excludes installed bundles — empty step for anyone who already has the default tier. Fixed
+2026-08-19: it now lists every shipped-tier bundle, installed ones checked and disabled (see
+STREAM.md for the full diff). But that fix depends on `BundleSpec.origin` correctly marking
+default-tier bundles as `TMBundleOriginShipped`, and `BundleRegistry.seedShippedDefaults`
+(`Frameworks/BundlesManager/src/BundleRegistry.mm`) only sets that for a UUID it has never tracked
+before — unlike `seedMandatory`, it does not re-assert origin for one already in the persisted state
+file. Simulated against this machine's real `Bundles.plist`: **0** of 41 default-tier bundles come
+back `Shipped` once a profile has been through a second reload, which is any profile that's been
+launched more than once. Likely also silently affects the *Preferences → Bundles* "recommended"
+badge (`BundlesManager.mm:1012`, same check). Not fixed here — out of the file list this task
+scoped, and needs its own look at whether unconditional re-tagging is safe for every case
+`seedShippedDefaults` handles.
+
 It was the right island to start with because it is the only one of the four with no existing
 implementation — nothing to reach parity with, so a mistake costs only itself.
 

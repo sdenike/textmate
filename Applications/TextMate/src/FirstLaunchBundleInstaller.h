@@ -11,6 +11,11 @@
 
 @interface FirstLaunchBundleInstaller : NSWindowController
 
+// Every shipped-origin bundle, installed or not, sorted by category then
+// name. The single place that answers "which bundles are shipped tier" --
+// candidateSpecs below is a filter over this, not a second query.
++ (NSArray<BundleSpec*>*)allShippedSpecs;
+
 // Shipped-origin bundles that are neither installed nor marked never-suggest,
 // sorted by category then name. Exposed for the Setup Assistant, which
 // replaces this class's window while keeping its selection logic.

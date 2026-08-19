@@ -4,6 +4,63 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-19 — Bundles step now lists installed bundles too; found a second bug blocking it in practice
+
+**What:** Closed the divergence between the design spec and `BundlesStepView`: the step sourced from
+`FirstLaunchBundleInstaller.candidateSpecs`, which excludes installed bundles, so an established
+profile saw nothing. Added `+[FirstLaunchBundleInstaller allShippedSpecs]` — every `origin ==
+TMBundleOriginShipped` spec, sorted by category then name — and rewrote `candidateSpecs` as a filter
+over it (sort comparator now lives in exactly one place). `SetupAssistantWindowController.mm`'s
+`-availableBundles` now sources from `allShippedSpecs`; `recommended` comes from membership in
+`candidateSpecs` (which is precisely "not installed, not previously declined"), so installed bundles
+show checked+disabled and previously-declined ones show unchecked but still selectable.
+`-installBundleIdentifiers:neverSuggest:` now resolves against `allShippedSpecs` too, not
+`candidateSpecs`, so a reconsidered, previously-declined bundle still resolves to a spec to install —
+with an explicit `installedSHA` skip inline as a second, redundant guard alongside `finish()`'s own
+`!$0.installed` filter on the Swift side, which is the one that actually keeps installed bundles out
+of both the install and never-suggest lists. Updated `SetupAssistantView.swift`'s stale comment above
+that filter, the empty-state copy (now only reachable if zero shipped-tier specs exist at all), and
+the disclosure line (now mentions installed bundles explicitly). `bin/build` succeeds;
+`bin/build TextMate/test` → 14/14 (`TextMate_test -v`: `14 tests passed`).
+
+**Why:** the maintainer ran the assistant and saw an empty Bundles step; the spec always said
+installed entries should show, checked and disabled, not disappear.
+
+**Found during verification, escalated rather than patched — outside this task's file list:**
+`BundleRegistry.seedShippedDefaults` (`Frameworks/BundlesManager/src/BundleRegistry.mm:144-179`) only
+sets `origin = TMBundleOriginShipped` for a UUID it has never seen before in `_specs`. For a UUID
+already present in the loaded state file — true of every default-tier bundle after its first install
+— origin is left at whatever it was on load, and `BundleSpec.mm`'s `plistRepresentation` /
+`initWithPlistRepresentation:` never mention `origin` at all, so a freshly-loaded spec always starts
+at the default, `TMBundleOriginUser`, and nothing re-promotes it. `seedMandatory` doesn't have this
+problem — it unconditionally re-asserts `existing.origin = TMBundleOriginMandatory` on every reload —
+but `seedShippedDefaults` has no equivalent self-heal. Read `BundleRegistry.mm` in full, then
+confirmed this is live on this exact machine two ways: (1) spot-checked 5 of the 41
+`DefaultBundles.plist` UUIDs directly against `~/Library/Application Support/TextMate/Bundles.plist`
+— all 5 present, all 5 already carry a real `installedSHA`; (2) replayed `-reload`'s exact sequence
+(load state file → `seedMandatory` → `seedShippedDefaults` → `seedAvailableBundles`) in a throwaway
+Python script against this machine's real `Bundles.plist` + `DefaultBundles.plist` +
+`AvailableBundles.plist` — result: **0** of 153 specs end up `origin == Shipped` (the 41 default-tier
+ones sit at `User`; they don't overlap `AvailableBundles.plist`'s UUIDs, so they're not even
+reclassified to `Available` — just stuck). This task's fix is still correct and necessary — a truly
+fresh profile's first-ever launch hits no existing entries, so `seedShippedDefaults` tags all 41
+correctly and `allShippedSpecs` returns them immediately, no further change needed here — but on this
+machine, and on any already-used profile, the Bundles step will keep showing its (new) empty-state
+message until `seedShippedDefaults` also self-heals `origin`, the way `seedMandatory` already does.
+That fix belongs in `BundleRegistry.mm`, not touched here. `BundlesManager.mm:1012` computes the
+*Preferences → Bundles* "recommended" badge off the same `origin == Shipped` check, so that pane is
+very likely silently affected by the same bug, independent of the Setup Assistant.
+
+**If interrupted here:** the 3-file fix (`FirstLaunchBundleInstaller.{h,mm}`,
+`SetupAssistantWindowController.mm`, `SetupAssistantView.swift`) is complete, built, tested, and
+committed. The real blocker to the maintainer actually seeing bundles listed is
+`BundleRegistry.seedShippedDefaults` not re-asserting `origin` for already-tracked specs. That needs
+its own task: whether *every* previously-tracked default-tier bundle deserves unconditional
+re-tagging the way mandatory bundles get it, or whether that would clobber some legitimate
+reclassification path, hasn't been traced.
+
+---
+
 ## 2026-08-19 — Setup Assistant complete; the final review caught what eight task reviews could not
 
 All eight tasks of `docs/superpowers/plans/2026-08-18-setup-assistant.md` are implemented and

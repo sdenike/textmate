@@ -158,15 +158,22 @@ static NSDictionary<NSString*, NSColor*>* colors_for_theme (theme_ptr const& the
 
 - (NSArray<TMBundleChoice*>*)availableBundles
 {
-	// FirstLaunchBundleInstaller.candidateSpecs already excludes installed
-	// bundles (it filters spec.installedSHA == nil), so every entry that
-	// reaches this list is, by construction, not installed -- installed
-	// carries YES/disabled semantics for TMBundleChoice, but candidateSpecs
-	// never hands back a spec that would need it.
-	NSMutableArray<TMBundleChoice*>* res = [NSMutableArray array];
+	// Every shipped-tier bundle is offered, installed or not, so an
+	// established profile with everything already installed still sees a
+	// full list instead of an empty step. candidateSpecs is exactly the
+	// subset that's neither installed nor previously declined -- which is
+	// also this list's definition of "recommended" (pre-checked) -- so
+	// reusing it here keeps the never-suggest default read in one place
+	// rather than re-reading it a second time.
+	NSMutableSet<NSString*>* recommendedUUIDs = [NSMutableSet set];
 	for(BundleSpec* spec in FirstLaunchBundleInstaller.candidateSpecs)
+		[recommendedUUIDs addObject:spec.uuid.UUIDString];
+
+	NSMutableArray<TMBundleChoice*>* res = [NSMutableArray array];
+	for(BundleSpec* spec in FirstLaunchBundleInstaller.allShippedSpecs)
 	{
-		[res addObject:[TMBundleChoice choiceWithName:spec.name identifier:spec.uuid.UUIDString category:(spec.category ?: @"Other") installed:(spec.installedSHA != nil) recommended:YES]];
+		BOOL recommended = [recommendedUUIDs containsObject:spec.uuid.UUIDString];
+		[res addObject:[TMBundleChoice choiceWithName:spec.name identifier:spec.uuid.UUIDString category:(spec.category ?: @"Other") installed:(spec.installedSHA != nil) recommended:recommended]];
 	}
 	return res;
 }
@@ -216,10 +223,21 @@ static NSDictionary<NSString*, NSColor*>* colors_for_theme (theme_ptr const& the
 	if(!install.count)
 		return;
 
+	// Resolved against allShippedSpecs, not candidateSpecs: candidateSpecs
+	// excludes bundles already on the never-suggest list, but the assistant
+	// lets the user reconsider one of those this run, so a checked,
+	// previously-declined identifier must still resolve to its spec here.
+	// The installedSHA skip stands in for candidateSpecs' own exclusion of
+	// installed bundles: SetupAssistantModel.finish() already filters its
+	// `install` array to !installed before calling this method, so this is
+	// a second, redundant guard against ever re-installing something already
+	// on disk, not the only one.
 	NSMutableArray<BundleSpec*>* specs = [NSMutableArray array];
 	NSSet* wanted = [NSSet setWithArray:install];
-	for(BundleSpec* spec in FirstLaunchBundleInstaller.candidateSpecs)
+	for(BundleSpec* spec in FirstLaunchBundleInstaller.allShippedSpecs)
 	{
+		if(spec.installedSHA)
+			continue;
 		if([wanted containsObject:spec.uuid.UUIDString])
 			[specs addObject:spec];
 	}

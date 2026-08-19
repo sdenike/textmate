@@ -115,11 +115,14 @@ final class SetupAssistantModel: ObservableObject {
 		// has a real effect instead of being indistinguishable from Light.
 		host.applyAppearance(appearance == "auto" ? nil : appearance)
 
-		// -availableBundles never actually hands back an installed one today
-		// (FirstLaunchBundleInstaller.candidateSpecs excludes them at the
-		// source), but filtering here too means this stays correct even if
-		// that changes, rather than silently re-installing or re-declining
-		// something already on disk.
+		// -availableBundles now hands back every shipped-tier bundle,
+		// installed ones included (checked and disabled, so the step is
+		// never empty on an established profile) -- this filter is what
+		// keeps an installed bundle out of both outgoing lists. Leaking into
+		// `install` would re-download something already present; leaking
+		// into `never` would suppress a bundle the user already has, which
+		// DocumentWindowController reads for its on-demand per-extension
+		// prompt.
 		//
 		// identifier has unspecified nullability in the header, so it imports
 		// as String!, and satisfying installBundleIdentifiers's [String]
@@ -230,19 +233,24 @@ struct BundlesStepView: View {
 			Text("Bundles add language support, commands and snippets.")
 				.foregroundStyle(.secondary)
 
-			// The common case on any established profile: everything offered
-			// here is installed, so the list is empty. Saying so beats an
-			// empty box under a caption about what is already selected.
+			// Every shipped-tier bundle is listed regardless of install
+			// state, so this is empty only when there are no shipped-tier
+			// bundles at all -- in practice unreachable. Kept rather than
+			// deleted: a step that silently renders nothing is worse than
+			// one with an explicit, if unlikely, empty message.
 			if model.bundles.isEmpty {
-				Text("Every bundle offered here is already installed — there is nothing to choose.")
+				Text("There are no bundles available to offer here.")
 					.foregroundStyle(.secondary)
 			}
 			else {
 				// Unchecking is not "not now": installBundleIdentifiers:neverSuggest:
 				// adds the bundle to the never-suggest list, which also silences
 				// the on-demand prompt when a matching file is opened. The window
-				// this replaced said as much in its subtitle.
-				Text("Recommended ones are already selected. Unchecked bundles will not be suggested again, not even when you open a file that needs one — you can still install them later from Preferences › Bundles.")
+				// this replaced said as much in its subtitle. Installed bundles
+				// show as already set up; they are checked but their toggle is
+				// disabled below, so they can never end up in the unchecked set
+				// this disclosure describes.
+				Text("Installed bundles are already set up. Recommended ones are pre-selected — unchecked bundles will not be suggested again, not even when you open a file that needs one — you can still install them later from Preferences › Bundles.")
 					.foregroundStyle(.secondary)
 
 				List(model.bundles, id: \.identifier) { bundle in
