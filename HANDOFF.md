@@ -172,64 +172,36 @@ been made against `/Applications/TextMate.app`, an older installed release, not 
 
 ## Next
 
-Nothing is in flight. The tree is clean and the working branch is
-`phase-6/swiftui-onboarding`. [PR #18](https://github.com/sdenike/textmate/pull/18) was merged as
-`a8bc6398` and **v3.0.0-revived.25 is published**.
+Nothing is in flight. `master` is at the v3.0.0-revived.26 merge and the tree is clean. One PR is
+open: [#20](https://github.com/sdenike/textmate/pull/20), rewording the software-update alert so it
+names the unsigned *running copy* rather than accusing the download. It carries no `CHANGELOG.md`
+change, so merging it publishes nothing.
 
-### Phase 6 remainder — SwiftUI islands
+### Phase 6 remainder — three SwiftUI islands
 
-The only spec item still genuinely open. The spec's own words
-(`docs/superpowers/specs/2026-08-12-textmate-revived-design.md:236`):
+The spec's own words (`docs/superpowers/specs/2026-08-12-textmate-revived-design.md:236`):
 
 > SwiftUI islands for Preferences, About, onboarding, update sheet, using #1467's `OakSwiftUI`
 > bridge. *Gate:* visual parity pass, no regressions in the responder chain or key equivalents.
 
-**Swift is proven to work here** — spiked 2026-08-18, full contract in `CLAUDE.md`.
-`CLANG_ENABLE_MODULES = NO` is not a blocker, `import SwiftUI` compiles, and the app target takes a
-`.swift` file with no build-setting changes at all. Two constraints came out of that spike and they
-shape every island: Swift declarations must be `public` to be visible to ObjC++ at all, and the
-bridging header must be a narrow, self-contained, pure-ObjC shim rather than a pointer at the app's
-real ObjC++ headers.
+**Onboarding shipped in v3.0.0-revived.26.** Design at
+`docs/superpowers/specs/2026-08-18-setup-assistant-design.md`, plan at
+`docs/superpowers/plans/2026-08-18-setup-assistant.md`, both complete. It is the working reference
+for every remaining island: `SetupAssistantCore` shows how app-level logic becomes reachable from
+`TextMate_test`, and `CLAUDE.md`'s Swift section records the interop contract that governs the rest.
 
-**Onboarding is done** — spec at
-`docs/superpowers/specs/2026-08-18-setup-assistant-design.md`, implemented 2026-08-18 across eight
-tasks on `phase-6/swiftui-onboarding`. It ships as a three-step **Setup Assistant** (welcome,
-appearance, bundles) that replaces `FirstLaunchBundleInstaller`'s modal, runs once at first launch
-(gated on a new `didRunSetupAssistant` default so existing users see it too — the Help entry point
-does not consult that gate and always shows), and is re-runnable from `Help → Setup Assistant…` with
-current state reflected rather than a blank wizard. The `mate` CLI step was considered and cut.
-`bin/build` and `bin/build TextMate/test` (14 tests) pass. Two things remain before this branch
-merges, both human-only and out of the agent sandbox: the maintainer's manual walk of the five
-first-launch scenarios the spec names, and a green CI run on the pushed branch.
+**Preferences, About and the update sheet remain**, and they are a different proposition from
+onboarding. Roughly 1,945 lines of working AppKit between them, each with behaviour a rewrite has to
+match exactly — including the key equivalents and responder chain the gate names. Onboarding was
+cheap to get wrong because it had no predecessor; these are not. Expect each to need its own spec and
+plan rather than one sweep across all three.
 
-**The maintainer's manual walk already found one bug, now fixed, and it uncovered a second, deeper
-one that isn't.** The bundles step sourced from `FirstLaunchBundleInstaller.candidateSpecs`, which
-excludes installed bundles — empty step for anyone who already has the default tier. Fixed
-2026-08-19: it now lists every shipped-tier bundle, installed ones checked and disabled (see
-STREAM.md for the full diff). But that fix depends on `BundleSpec.origin` correctly marking
-default-tier bundles as `TMBundleOriginShipped`, and `BundleRegistry.seedShippedDefaults`
-(`Frameworks/BundlesManager/src/BundleRegistry.mm`) only sets that for a UUID it has never tracked
-before — unlike `seedMandatory`, it does not re-assert origin for one already in the persisted state
-file. Simulated against this machine's real `Bundles.plist`: **0** of 41 default-tier bundles come
-back `Shipped` once a profile has been through a second reload, which is any profile that's been
-launched more than once. Likely also silently affects the *Preferences → Bundles* "recommended"
-badge (`BundlesManager.mm:1012`, same check). Not fixed here — out of the file list this task
-scoped, and needs its own look at whether unconditional re-tagging is safe for every case
-`seedShippedDefaults` handles.
+Settled, do not reopen:
 
-It was the right island to start with because it is the only one of the four with no existing
-implementation — nothing to reach parity with, so a mistake costs only itself.
-
-Preferences, About and the update sheet are each large: together roughly 1,945 lines of working
-AppKit whose behaviour a SwiftUI rewrite has to match exactly, including key equivalents and the
-responder chain the gate names.
-
-The rest of Phase 6 is settled and should not be reopened:
-
-- **Scope bar** and **back/forward navigation** — already present since 2014 and 2018.
-- **`NSRulerView` gutter** — recommended **against**. It would delete ~600 lines of better-fitted
-  code for a system class that does not model multi-column icons.
-- **`NSSplitViewController` sidebar** — large, with no forcing function. Defer.
+- **Scope bar** and **back/forward navigation** — present since 2014 and 2018.
+- **`NSRulerView` gutter** — recommended **against**: deletes ~600 lines of better-fitted code for a
+  system class that does not model multi-column icons.
+- **`NSSplitViewController` sidebar** — large, no forcing function. Defer.
 
 ### Phase 8 — extract shared modules
 
