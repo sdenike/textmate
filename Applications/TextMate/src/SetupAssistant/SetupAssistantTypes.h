@@ -55,6 +55,7 @@ extern NSArray<NSString*>* TMMergeNeverSuggestIdentifiers (NSArray<NSString*>* e
 - (NSString*)currentAppearance;                                  // @"light", @"dark", or nil for automatic
 - (NSString*)currentThemeIdentifierForAppearance:(NSString*)appearance;
 - (void)applyThemeIdentifier:(NSString*)identifier appearance:(NSString*)appearance;
+- (void)applyAppearance:(NSString*)appearance;                  // nil means automatic
 - (void)installBundleIdentifiers:(NSArray<NSString*>*)install neverSuggest:(NSArray<NSString*>*)neverSuggest;
 - (void)finishWithSkip:(BOOL)skipped;
 @end

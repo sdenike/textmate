@@ -3,9 +3,41 @@
 #import "SetupAssistantGating.h"
 #import "SetupAssistantTypes.h"
 #import "TextMate-Swift.h"
+#import <bundles/bundles.h>
+#import <theme/theme.h>
+#import <ns/ns.h>
 
 @interface SetupAssistantWindowController () <NSWindowDelegate, TMSetupAssistantHost>
 @end
+
+// Nine roles, matching the keys declared in SetupAssistantTypes.h. Background
+// and foreground come from theme_t's own accessors (theme.h:77-78) rather
+// than through styles_for_scope: those two are the theme's root colors with
+// no scope-selector merge involved, so they cannot pick up a stray per-scope
+// override the way a wildcard-scoped lookup could. Caret and selection have
+// no such root accessor -- styles_t is the only place they live -- so those
+// two go through styles_for_scope(scope::wildcard), same as the per-token
+// lookups below.
+static NSDictionary<NSString*, NSColor*>* colors_for_theme (theme_ptr const& theme)
+{
+	auto color = [&theme](char const* scopeString){
+		auto const& styles = theme->styles_for_scope(scope::scope_t(scopeString));
+		return [NSColor colorWithCGColor:styles.foreground()];
+	};
+
+	auto const& base = theme->styles_for_scope(scope::wildcard);
+	return @{
+		TMThemeColorBackground: [NSColor colorWithCGColor:theme->background()],
+		TMThemeColorForeground: [NSColor colorWithCGColor:theme->foreground()],
+		TMThemeColorSelection:  [NSColor colorWithCGColor:base.selection()],
+		TMThemeColorCaret:      [NSColor colorWithCGColor:base.caret()],
+		TMThemeColorComment:    color("comment"),
+		TMThemeColorString:     color("string.quoted.double"),
+		TMThemeColorKeyword:    color("keyword.control"),
+		TMThemeColorNumber:     color("constant.numeric"),
+		TMThemeColorFunction:   color("entity.name.function"),
+	};
+}
 
 @implementation SetupAssistantWindowController
 + (instancetype)sharedInstance
@@ -67,11 +99,59 @@
 	[NSApp stopModal];
 }
 
-- (NSArray<TMThemeChoice*>*)availableThemes                                   { return @[]; }
+- (NSArray<TMThemeChoice*>*)availableThemes
+{
+	NSMutableArray<TMThemeChoice*>* res = [NSMutableArray array];
+	for(auto const& item : bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeTheme))
+	{
+		theme_ptr theme = parse_theme(item);
+		if(!theme)
+			continue;
+
+		// The themes menu classifies by the same field (AppController
+		// Menus.mm:152-156), so the assistant and View -> Theme agree on
+		// which themes are light and which are dark.
+		NSString* appearance = TMThemeAppearanceForSemanticClass(to_ns(item->value_for_field(bundles::kFieldSemanticClass)));
+		[res addObject:[TMThemeChoice choiceWithName:to_ns(item->name()) identifier:to_ns(to_s(item->uuid())) appearance:appearance colors:colors_for_theme(theme)]];
+	}
+	[res sortUsingComparator:^NSComparisonResult(TMThemeChoice* a, TMThemeChoice* b){
+		return [a.name localizedCaseInsensitiveCompare:b.name];
+	}];
+	return res;
+}
+
 - (NSArray<TMBundleChoice*>*)availableBundles                                 { return @[]; }
-- (NSString*)currentAppearance                                                { return nil; }
-- (NSString*)currentThemeIdentifierForAppearance:(NSString*)appearance        { return nil; }
-- (void)applyThemeIdentifier:(NSString*)identifier appearance:(NSString*)appearance { }
+
+- (NSString*)currentAppearance
+{
+	return [NSUserDefaults.standardUserDefaults stringForKey:@"themeAppearance"];
+}
+
+- (NSString*)currentThemeIdentifierForAppearance:(NSString*)appearance
+{
+	NSString* key = [appearance isEqualToString:@"dark"] ? @"darkModeThemeUUID" : @"universalThemeUUID";
+	return [NSUserDefaults.standardUserDefaults stringForKey:key];
+}
+
+- (void)applyThemeIdentifier:(NSString*)identifier appearance:(NSString*)appearance
+{
+	// Same keys View -> Theme writes via takeUniversalThemeUUIDFrom: and
+	// takeDarkThemeUUIDFrom: (AppController Menus.mm:103-111), so the two
+	// routes cannot diverge.
+	NSString* key = [appearance isEqualToString:@"dark"] ? @"darkModeThemeUUID" : @"universalThemeUUID";
+	if(identifier)
+		[NSUserDefaults.standardUserDefaults setObject:identifier forKey:key];
+}
+
+- (void)applyAppearance:(NSString*)appearance
+{
+	// Same key View -> Theme writes via takeThemeAppearanceFrom:
+	// (AppController Menus.mm:98-101). Absent means automatic.
+	if(appearance)
+			[NSUserDefaults.standardUserDefaults setObject:appearance forKey:@"themeAppearance"];
+	else	[NSUserDefaults.standardUserDefaults removeObjectForKey:@"themeAppearance"];
+}
+
 - (void)installBundleIdentifiers:(NSArray<NSString*>*)install neverSuggest:(NSArray<NSString*>*)neverSuggest { }
 
 - (void)finishWithSkip:(BOOL)skipped

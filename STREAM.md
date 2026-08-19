@@ -4,6 +4,83 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-18 — Task 6 landed: the appearance step, and two more brief gaps caught by reading real headers
+
+**What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-6-brief.md`. Step 2 of
+`SetupAssistantView.swift` is now `AppearanceStepView` — a segmented Light/Dark/Automatic picker
+plus a theme list plus a mockup preview drawn from real theme colours — replacing the
+`Text("Appearance")` placeholder. `SetupAssistantWindowController.mm` gives real bodies to
+`-availableThemes`, `-currentAppearance`, `-currentThemeIdentifierForAppearance:` and
+`-applyThemeIdentifier:appearance:`; `-availableBundles` and `-installBundleIdentifiers:neverSuggest:`
+stay stubs, Task 7's job. `project.yml` needed no change — the TextMate target's
+`HEADER_SEARCH_PATHS` already lists `theme`, `bundles`, `scope` and `ns` (confirmed by reading it,
+per the brief's own instruction to verify rather than assume).
+
+**The task instructions were right that the brief's colour-extraction snippet was unverified, and
+right to say so up front — but the specific mismatch they named wasn't the real one.** They warned
+`scope::wildcard` might be a `context_t` where `styles_for_scope` wants a `scope_t`. Reading
+`scope.h` directly: `wildcard` is declared `extern scope_t wildcard`, so `theme->styles_for_scope
+(scope::wildcard)` typechecks fine — no error there. The real wrinkle is semantic, found by reading
+`theme.cc`'s matcher: a wildcard-context match short-circuits `does_match` to true for *every*
+scope-selector rule in the theme simultaneously (scope.cc:274), not just the unscoped root entry, so
+merging in rank order can blend in whatever per-scope override a theme happens to define for caret
+or selection. `theme_t` has no root-level accessor for those two — only `foreground()`/`background()`
+(theme.h:77-78) — so there's no way to get them without going through `styles_for_scope` at all.
+Used `theme->foreground()`/`theme->background()` directly for the background/foreground swatch
+colours (matching the task instructions' explicit steer, verified against `theme.cc:350-360`, where
+`background(fileType)` is itself implemented as `styles_for_scope(fileType).background()` — sugar,
+not a different code path), and kept `styles_for_scope(scope::wildcard)` only for caret/selection,
+where there is no alternative. In practice this rarely matters: real themes almost never override
+caret/selection per scope, so wildcard and the true root value coincide for every theme on this
+machine. Neither value is actually drawn by the mockup anyway — `ThemePreview`'s body never
+references `TMThemeColorCaret` or `TMThemeColorSelection` — so this was verified by reading, not by
+a visible consequence.
+
+**The brief's own `finish()` never sent the picker's tri-state choice anywhere, which would have
+made "Automatic" a dead option.** Step 2 asked for an `-applyAppearance:` method "called from
+`-finishWithSkip:` when not skipped" — but `-finishWithSkip:` only ever receives a `BOOL`, and the
+Swift model's `appearance` (light/dark/auto) never crosses to the ObjC side in the brief's Step 4
+`finish()`, which calls `applyThemeIdentifier(_:appearance:)` with `editingAppearance` — a value
+that's *always* "light" or "dark", collapsing "auto" the same way "light" does, by design (it picks
+which slot's theme list to edit, not the overall mode). Confirmed by reading `OakTextView.mm:826`
+and `QuickLookPreviewProvider.mm:175` that `themeAppearance` is a real, load-bearing default (absent
+= follow system dark/light; present = force it), so silently never writing it would make "Automatic"
+indistinguishable from "Light" forever. Fixed by adding `-applyAppearance:` to the
+`TMSetupAssistantHost` protocol itself (`SetupAssistantTypes.h` — the one file the brief's own Files
+list omitted, because the brief didn't anticipate needing it) and calling it from Swift's `finish()`
+directly, translating `"auto"` to `nil`. That header is already the Swift/ObjC boundary — the
+bridging header imports it verbatim — so this is the same mechanism every other host method already
+uses, not a new one. `-finishWithSkip:` itself is untouched.
+
+**Theme count on this machine, by static inspection (not live enumeration — the task rules out
+launching the app here):** 22 `.tmTheme` files, same 22 names, in both the embedded
+`themes.tmbundle` under `Applications/TextMate/support/Bundles` and the separately-installed copy
+under `~/Library/Application Support/TextMate/Managed/Bundles/`. Whether `bundles::query` dedupes
+across those two locations at runtime is exactly the kind of thing a human needs to check by
+actually opening the assistant.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **`, zero warnings on any SetupAssistant file (checked
+by grep against the full log, not just the tail). `bin/build TextMate/test` built clean but its
+`exec`-replaced binary's output didn't reach the captured log in this harness — ran
+`~/build/textmate-revived/xcode/Release/TextMate_test -v` directly instead (sanctioned by CLAUDE.md
+as the alternative to the name-filterless runner): `TextMate_test: 14 tests passed`, unchanged count,
+no new tests — the brief specified none for this task.
+
+**Not yet done, deliberately:** bundles step is still `Text("Bundles")` (Task 7). Nobody has put the
+window on screen — same constraint as Task 5, this environment cannot launch the app or synthesise
+clicks. A human still needs to confirm the five behaviours the brief's Step 6 lists: the theme list
+matches `View → Theme`'s offerings, selecting a theme redraws the preview with no delay, the preview
+colours are actually right for the theme, finishing preselects that theme on reopen, and switching to
+Dark and picking a theme writes only the dark slot. Check `defaults read
+com.apple.universalaccess reduceTransparency` before drawing any conclusion from a screenshot.
+
+### If interrupted here
+
+Tasks 1-6 are complete. Task 7 (bundles step: wire `availableBundles` and
+`installBundleIdentifiers:neverSuggest:`) is the only remaining SwiftUI step; Task 8 (wiring the
+assistant into launch) comes after. The assistant is still reachable only from the Help menu, so
+none of this affects normal startup yet.
+
 ## 2026-08-18 — Task 5 landed: the SwiftUI shell, and a brief that was wrong on the load-bearing line
 
 **What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-5-brief.md`. `SetupAssistantView.swift`
