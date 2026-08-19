@@ -105,13 +105,32 @@ Deleting working installation code to write new installation code is risk with n
 
 | File | Status | Role |
 |---|---|---|
-| `Applications/TextMate/src/SetupAssistant/SetupAssistantWindowController.{h,mm}` | new | ObjC++ host: window, modal session, `TMSetupAssistantHost` implementation |
+| `Applications/TextMate/src/SetupAssistant/SetupAssistantTypes.{h,mm}` | new | Pure ObjC boundary types and the pure rules that operate on them. Compiled into `SetupAssistantCore`. |
+| `Applications/TextMate/src/SetupAssistant/SetupAssistantGating.{h,mm}` | new | Free functions deciding whether the assistant runs. Compiled into `SetupAssistantCore`. |
+| `Applications/TextMate/src/SetupAssistant/SetupAssistantWindowController.{h,mm}` | new | ObjC++ host: window, modal session, `TMSetupAssistantHost` implementation, and all C++ extraction. App target only. |
 | `Applications/TextMate/src/SetupAssistant/SetupAssistantView.swift` | new | SwiftUI content, all types `public` |
 | `Applications/TextMate/src/TextMate-Bridging-Header.h` | new | Pure ObjC. `#import <Cocoa/Cocoa.h>`, the host protocol, the data classes. Nothing else, ever. |
 | `Applications/TextMate/src/AppController.mm` | edit | Help menu item at `:408`, `showSetupAssistant:` action, and the `:592` call site |
 | `Applications/TextMate/src/FirstLaunchBundleInstaller.{h,mm}` | edit | Window retired; list-building and installation exposed for the assistant |
 | `Applications/TextMate/tests/t_setup_assistant.mm` | new | Gating predicate and marshalling tests |
-| `project.yml` | edit | `.swift` source path, `SWIFT_OBJC_BRIDGING_HEADER` |
+| `project.yml` | edit | `.swift` source path, `SWIFT_OBJC_BRIDGING_HEADER`, and the new `SetupAssistantCore` target |
+
+### Why there is a separate library target
+
+`TextMate_test` compiles only the generated runner and links only the libraries it declares, so
+anything it exercises must live in a target both binaries link. `PreferencesMigration` is the
+existing precedent: `type: library.static`, one `.mm`, listed as a dependency of both `TextMate`
+and `TextMate_test`.
+
+`SetupAssistantCore` follows it, and holds exactly the code that is testable without C++: the
+boundary types, the gating predicate, the semantic-class-to-appearance mapping, and the
+never-suggest merge. Everything requiring the C++ `theme` and `bundles` frameworks stays in
+`SetupAssistantWindowController` in the app target and is verified by hand.
+
+This split is what makes this document's own testing section achievable rather than aspirational.
+It also forces the API shape predicted below — free functions and class methods taking their inputs
+explicitly — for a second, independent reason: `TMThemeChoice` carries `NSColor`, so `TextMate_test`
+gains `AppKit.framework` alongside the `Foundation.framework` it previously linked alone.
 
 ## The boundary contract
 

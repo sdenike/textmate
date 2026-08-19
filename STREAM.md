@@ -4,7 +4,53 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-18 — RESUME HERE: Setup Assistant designed and approved, not yet built
+## 2026-08-18 — RESUME HERE: Setup Assistant plan written, ready to execute
+
+Plan at `docs/superpowers/plans/2026-08-18-setup-assistant.md` — eight tasks. Branch
+`phase-6/swiftui-onboarding`, tree clean, **still no implementation**. Next action is executing
+Task 1, not writing more documents.
+
+### Ordering is by risk, not by feature
+
+Task 1 lands the first `.swift` file in the repository and does nothing else. Task 4 proves the
+window and modal session with an *empty* content view before SwiftUI is involved. Both exist because
+this app has never done either thing, and a modal session whose window closes without calling
+`stopModal` leaves the entire app unresponsive — far easier to diagnose alone than tangled into a
+first SwiftUI integration.
+
+### Planning found a real gap in the spec
+
+`TextMate_test` compiles only the generated runner and links only what it declares, so the design's
+promised tests for gating and marshalling were unreachable from where the design had put that code.
+`PreferencesMigration` is the precedent: `library.static`, linked by both `TextMate` and
+`TextMate_test`. `SetupAssistantCore` now follows it and holds exactly what is testable without C++
+— boundary types, gating predicate, semantic-class mapping, never-suggest merge. The spec's Files
+table was corrected to match rather than left contradicting the plan.
+
+`Ruling: two errors were caught in plan self-review, both of which would have cost a build cycle
+each. The tests asserted with to_s(NSString*), which is declared in Frameworks/ns and is not linked
+by TextMate_test — the existing t_preferences_migration.mm uses isEqualToString: and that is now
+copied. And bundles::kFieldSemanticClass was verified at item.h:26 rather than left as an
+instruction to go look it up. Verifying two API names cost one command; discovering them at compile
+time costs a full build each.`
+
+### The one test worth naming
+
+`TMMergeNeverSuggestIdentifiers` is now a tested function rather than inline code. Replacing instead
+of merging that list resurrects every bundle suggestion the user has ever declined, and
+`DocumentWindowController.mm:1231,1273-1274` is what reads it. Silent, user-visible, and easy to
+write wrong.
+
+### If interrupted here
+
+Read the plan and start at Task 1. Do not re-plan. The two risks nothing has retired: this is the
+first target to carry both `.swift` and `.mm` through a clean CI build, and SwiftUI initialising
+inside a modal session before session restore is new ground for this app. Execution mode was not
+chosen yet — subagent-driven or inline.
+
+---
+
+## 2026-08-18 — Setup Assistant designed and approved
 
 Spec committed at `docs/superpowers/specs/2026-08-18-setup-assistant-design.md`. Branch
 `phase-6/swiftui-onboarding`, tree clean, **no implementation written yet**. Next step is the
