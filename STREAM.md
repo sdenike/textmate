@@ -4,6 +4,81 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-18 — Task 7 landed: the bundles step, and the brief's own snippet failed to compile
+
+**What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-7-brief.md`.
+`FirstLaunchBundleInstaller.h` now declares `+ (NSArray<BundleSpec*>*)candidateSpecs` (forward
+`@class BundleSpec`); the `.mm` was already implementing it with no prior declaration, so the
+implementation itself is untouched. `SetupAssistantWindowController.mm` gives real bodies to
+`-availableBundles` (maps `candidateSpecs` into `TMBundleChoice`) and
+`-installBundleIdentifiers:neverSuggest:` (merges into the never-suggest default via
+`TMMergeNeverSuggestIdentifiers`, then calls `BundlesManager.sharedInstance
+installSpecs:completionHandler:` for the checked set). `SetupAssistantView.swift`'s bundles case is
+now `BundlesStepView` — a list of toggles, recommended entries pre-checked — replacing
+`Text("Bundles")`. `project.yml` needed no change: the `TextMate` target already links
+`BundlesManager` and already lists `Xcode/include/BundlesManager` in its header search path
+(confirmed by reading `project.yml:1860,1876-1877`, not assumed).
+
+**The brief's own `finish()` snippet does not compile, for a reason specific to this bridging
+setup.** `TMBundleChoice.identifier` has unspecified nullability in `SetupAssistantTypes.h`, so
+Swift imports it as `String!`. `.map { $0.identifier }`, exactly as the brief wrote it, doesn't
+preserve that IUO — SE-0054 decays a closure's inferred return type to plain `String?`, so both
+`install` and `never` came out as `[String?]`, and `host.installBundleIdentifiers(_:neverSuggest:)`
+wants `[String]`. Fixed with a force-unwrap (`$0.identifier!`) and a comment explaining why it's
+safe: every `TMBundleChoice` here comes from `-availableBundles`, which always passes a real,
+non-nil `spec.uuid.UUIDString` into the factory method. Considered annotating
+`SetupAssistantTypes.h` with `NS_ASSUME_NONNULL_BEGIN/END` instead, which would fix the root cause
+for every consumer including `TMThemeChoice` — rejected for this task because that file isn't in
+the brief's Files list and a nullability-wide change risks a ripple beyond what Task 7 asked for;
+the Swift-side fix stays confined to the one file the brief already named.
+
+**Two questions the brief asked me to answer rather than guess at:**
+
+1. **Async install continuing after the assistant's window closes is not a problem.** `finish()`
+   calls `installBundleIdentifiers(...)` and then `host.finish(withSkip: false)` in the same turn,
+   so the window orders out before `installSpecs:completionHandler:`'s background work can possibly
+   finish. But `BundlesManager.sharedInstance` is a process-lifetime singleton
+   (`BundlesManager.mm:58-61`), not owned by the assistant's window or its modal session — install
+   and its completion handler keep running on their own queue exactly as they would for any other
+   caller. The real cost, and it's out of scope per the brief ("do NOT add a progress UI"): the user
+   gets no visual cue anything is still happening, where the old `FirstLaunchBundleInstaller` window
+   stayed on screen with a progress bar until the install finished. A user who quits immediately
+   after clicking Done could interrupt a bundle mid-install — a class of risk the old flow avoided
+   by blocking on that progress bar, not something this task's scope covers.
+2. **Installed bundles cannot reach the list at all, so "greyed out" is defensive code, not a live
+   path today.** `candidateSpecs` filters `spec.installedSHA == nil` before anything reaches
+   `-availableBundles`, so every `TMBundleChoice` built from it has `installed == NO` by
+   construction. `BundlesStepView`'s `.disabled(bundle.installed)` and the pre-check logic's
+   `!$0.installed` guards are therefore currently unreachable in the true branch — kept anyway
+   because `TMBundleChoice` is a general-purpose view-model type and the brief's own Step 2/Step 3
+   code computes and consumes `installed` explicitly; diverging (e.g. a second query that also
+   surfaces installed bundles) would be exactly the "second version of that query" the top-level
+   task said not to write. Verified empirically, not assumed: parsed the real `~/Library/Application
+   Support/TextMate/Bundles.plist` on this machine against the shipped-tier catalogue `Bundle
+   Support.tmbundle/Support/DefaultBundles.plist` (41 entries). On this dev machine all 41 are
+   already installed, so `candidateSpecs` currently enumerates **0** here; for a fresh user (empty
+   `Bundles.plist`, no never-suggest entries) the same cross-reference gives **41** candidates
+   (Languages 28, Other 5, SCM 5, Build 3), none overlapping the 4 mandatory-tier bundles.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **` (after the force-unwrap fix; zero warnings on any
+SetupAssistant or FirstLaunchBundleInstaller file — the one Swift deprecation warning in the log is
+pre-existing, in `ThemePreview`'s untouched `+`-based `Text` concatenation from Task 6, just shifted
+line number by this task's insertions). `bin/build TextMate/test` → `** BUILD SUCCEEDED **`;
+`TextMate_test -v` run directly → `TextMate_test: 14 tests passed`, unchanged count —
+`TextMate_test` doesn't link `BundlesManager` at all (`project.yml:2062-2066`, and the existing
+`t_setup_assistant.mm` comment says so directly), so this task's bundle-selection logic has no
+reachable unit-test surface there; the brief specified no new tests.
+
+### If interrupted here
+
+Task 7 is committed. `FirstLaunchBundleInstaller`'s window itself is still alive and still callable
+(`+promptIfNeeded`) — Task 8 is what retires it. All three SwiftUI steps (welcome, appearance,
+bundles) now have real content; nobody has put the assistant on screen in this environment, so a
+human still needs to run the brief's Step 5 checklist: the list matches the old modal's offering,
+recommended entries are pre-checked, Finish installs the checked set, unchecked bundles land in the
+never-suggest default and don't re-prompt on a matching file open, and Skip installs nothing and
+marks nothing as never-suggest.
+
 ## 2026-08-18 — Task 6, fix round 2/5: the currently-active theme is exempt from the hidden skip
 
 **What:** Implemented the fix round 1 proposed rather than shipped. `-availableThemes`

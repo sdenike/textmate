@@ -20,15 +20,20 @@ final class SetupAssistantModel: ObservableObject {
 	@Published var step: TMSetupAssistantStep = .welcome
 	@Published var appearance: String = "auto"
 	@Published var selectedThemeIdentifier: String?
+	@Published var checkedBundleIdentifiers: Set<String> = []
 
 	let host: any TMSetupAssistantHost
 
 	private lazy var allThemes: [TMThemeChoice] = host.availableThemes()
 
+	private lazy var allBundles: [TMBundleChoice] = host.availableBundles()
+	var bundles: [TMBundleChoice] { allBundles }
+
 	init(host: any TMSetupAssistantHost) {
 		self.host = host
 		self.appearance = host.currentAppearance() ?? "auto"
 		self.selectedThemeIdentifier = host.currentThemeIdentifier(forAppearance: editingAppearance)
+		self.checkedBundleIdentifiers = Set(allBundles.filter { $0.recommended && !$0.installed }.map { $0.identifier })
 	}
 
 	var isFirstStep: Bool { step == .welcome }
@@ -44,6 +49,16 @@ final class SetupAssistantModel: ObservableObject {
 
 	var selectedTheme: TMThemeChoice? {
 		allThemes.first { $0.identifier == selectedThemeIdentifier }
+	}
+
+	func binding(for bundle: TMBundleChoice) -> Binding<Bool> {
+		Binding(
+			get: { bundle.installed || self.checkedBundleIdentifiers.contains(bundle.identifier) },
+			set: { isOn in
+				if isOn { self.checkedBundleIdentifiers.insert(bundle.identifier) }
+				else    { self.checkedBundleIdentifiers.remove(bundle.identifier) }
+			}
+		)
 	}
 
 	func back() {
@@ -67,6 +82,25 @@ final class SetupAssistantModel: ObservableObject {
 		// through to the "themeAppearance" default, so Automatic has a real
 		// effect instead of being indistinguishable from Light.
 		host.applyAppearance(appearance == "auto" ? nil : appearance)
+
+		// -availableBundles never actually hands back an installed one today
+		// (FirstLaunchBundleInstaller.candidateSpecs excludes them at the
+		// source), but filtering here too means this stays correct even if
+		// that changes, rather than silently re-installing or re-declining
+		// something already on disk.
+		//
+		// The trailing ! on each map: identifier has unspecified nullability in
+		// the header, so it imports as String!, and .map's inferred closure
+		// return type decays that to String? (SE-0054) -- which does not
+		// satisfy installBundleIdentifiers's [String] parameters. Force-unwrap
+		// is safe here: every TMBundleChoice comes from -availableBundles,
+		// which always passes a real identifier string (spec.uuid.UUIDString)
+		// into the factory method.
+		let offered = allBundles.filter { !$0.installed }
+		let install = offered.filter { checkedBundleIdentifiers.contains($0.identifier) }.map { $0.identifier! }
+		let never   = offered.filter { !checkedBundleIdentifiers.contains($0.identifier) }.map { $0.identifier! }
+		host.installBundleIdentifiers(install, neverSuggest: never)
+
 		host.finish(withSkip: false)
 	}
 
@@ -84,7 +118,7 @@ struct SetupAssistantView: View {
 				switch model.step {
 					case .welcome:    WelcomeStepView()
 					case .appearance: AppearanceStepView(model: model)
-					case .bundles:    Text("Bundles")        // Task 7
+					case .bundles:    BundlesStepView(model: model)
 				}
 
 				Spacer()
@@ -132,6 +166,27 @@ struct AppearanceStepView: View {
 
 				ThemePreview(theme: model.selectedTheme)
 					.frame(maxWidth: .infinity, minHeight: 200)
+			}
+		}
+	}
+}
+
+struct BundlesStepView: View {
+	@ObservedObject var model: SetupAssistantModel
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 12) {
+			Text("Bundles add language support, commands and snippets. Recommended ones are already selected.")
+				.foregroundStyle(.secondary)
+
+			List(model.bundles, id: \.identifier) { bundle in
+				Toggle(isOn: model.binding(for: bundle)) {
+					VStack(alignment: .leading, spacing: 2) {
+						Text(bundle.name)
+						Text(bundle.category).font(.caption).foregroundStyle(.secondary)
+					}
+				}
+				.disabled(bundle.installed)
 			}
 		}
 	}

@@ -3,6 +3,9 @@
 #import "SetupAssistantGating.h"
 #import "SetupAssistantTypes.h"
 #import "TextMate-Swift.h"
+#import "../FirstLaunchBundleInstaller.h"
+#import <BundlesManager/BundlesManager.h>
+#import <BundlesManager/BundleSpec.h>
 #import <bundles/bundles.h>
 #import <theme/theme.h>
 #import <ns/ns.h>
@@ -138,7 +141,20 @@ static NSDictionary<NSString*, NSColor*>* colors_for_theme (theme_ptr const& the
 	return res;
 }
 
-- (NSArray<TMBundleChoice*>*)availableBundles                                 { return @[]; }
+- (NSArray<TMBundleChoice*>*)availableBundles
+{
+	// FirstLaunchBundleInstaller.candidateSpecs already excludes installed
+	// bundles (it filters spec.installedSHA == nil), so every entry that
+	// reaches this list is, by construction, not installed -- installed
+	// carries YES/disabled semantics for TMBundleChoice, but candidateSpecs
+	// never hands back a spec that would need it.
+	NSMutableArray<TMBundleChoice*>* res = [NSMutableArray array];
+	for(BundleSpec* spec in FirstLaunchBundleInstaller.candidateSpecs)
+	{
+		[res addObject:[TMBundleChoice choiceWithName:spec.name identifier:spec.uuid.UUIDString category:(spec.category ?: @"Other") installed:(spec.installedSHA != nil) recommended:YES]];
+	}
+	return res;
+}
 
 - (NSString*)currentAppearance
 {
@@ -170,7 +186,39 @@ static NSDictionary<NSString*, NSColor*>* colors_for_theme (theme_ptr const& the
 	else	[NSUserDefaults.standardUserDefaults removeObjectForKey:@"themeAppearance"];
 }
 
-- (void)installBundleIdentifiers:(NSArray<NSString*>*)install neverSuggest:(NSArray<NSString*>*)neverSuggest { }
+- (void)installBundleIdentifiers:(NSArray<NSString*>*)install neverSuggest:(NSArray<NSString*>*)neverSuggest
+{
+	if(neverSuggest.count)
+	{
+		// Merge rather than replace: DocumentWindowController reads this list
+		// for its on-demand per-extension prompt, and clobbering it would
+		// resurrect suggestions the user already declined. The merge itself
+		// lives in SetupAssistantCore and is unit-tested for exactly that.
+		NSArray* existing = [NSUserDefaults.standardUserDefaults stringArrayForKey:kUserDefaultsBundlesToNeverSuggestKey];
+		[NSUserDefaults.standardUserDefaults setObject:TMMergeNeverSuggestIdentifiers(existing, neverSuggest) forKey:kUserDefaultsBundlesToNeverSuggestKey];
+	}
+
+	if(!install.count)
+		return;
+
+	NSMutableArray<BundleSpec*>* specs = [NSMutableArray array];
+	NSSet* wanted = [NSSet setWithArray:install];
+	for(BundleSpec* spec in FirstLaunchBundleInstaller.candidateSpecs)
+	{
+		if([wanted containsObject:spec.uuid.UUIDString])
+			[specs addObject:spec];
+	}
+
+	// installSpecs:completionHandler: is asynchronous; the assistant's modal
+	// session ends (window orders out) as soon as -finishWithSkip: runs,
+	// independently of whether this has completed. That is not a correctness
+	// problem: BundlesManager.sharedInstance is a process-lifetime singleton,
+	// not owned by this window or its modal session, so the install and its
+	// completion handler keep running on their own queue after the window is
+	// gone exactly as they would if this were any other caller. Nothing here
+	// touches window or view-controller state that closing invalidates.
+	[BundlesManager.sharedInstance installSpecs:specs completionHandler:^(NSArray<BundleSpec*>* installed){ }];
+}
 
 - (void)finishWithSkip:(BOOL)skipped
 {
