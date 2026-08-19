@@ -4,6 +4,51 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-19 — Shipped-tier origin is now restored on reload, not only on first sight
+
+**What:** One-line-plus-comment fix in `+[BundleRegistry seedShippedDefaults]`
+(`Frameworks/BundlesManager/src/BundleRegistry.mm`): the existing-spec branch now sets
+`existing.origin = TMBundleOriginShipped` inside the branch it already guards with
+`if(existing.origin != TMBundleOriginMandatory)`, mirroring the self-heal `seedMandatory` has always
+done for its own origin. Nothing else changed. `bin/build` succeeds; `BundlesManager_test` 10/10,
+`TextMate_test` 14/14 (both `--no-parallel`).
+
+**Why:** `origin` is derived, never persisted — `BundleSpec`'s `plistRepresentation` and
+`initWithPlistRepresentation:` don't mention it, so every reloaded spec arrives as
+`TMBundleOriginUser`. `seedShippedDefaults` only tagged brand-new UUIDs, so on any profile that had
+run the app once, **0 of the 41 default-tier bundles were Shipped**. That emptied the Setup
+Assistant's bundles step and disabled Preferences → Bundles' "Revert to Default" menu item, which
+gates on `bundleIsEditedShippedDefault:` → `origin == TMBundleOriginShipped`.
+
+**Why not persist `origin` instead** (the deeper-looking fix): it is derived from three catalogues —
+`MandatoryBundles.h`, `DefaultBundles.plist`, `AvailableBundles.plist` — that change between
+releases, and all three seeds already re-derive it on every reload. Persisting adds a second source
+of truth that goes stale the moment a bundle is promoted out of or dropped from a catalogue, and it
+buys nothing on migration: existing state has no `origin` key, so the first launch would still have
+to compute the value from the seeds and write it back. The header's `// set at load, not persisted`
+is the intended design; the bug was one seed forgetting to honour it.
+
+**Re-tagging is safe, and unconditional-within-the-guard is correct.** At the point
+`seedShippedDefaults` runs, an existing spec can only hold `Mandatory` (just set by `seedMandatory`,
+and load-bearing — `removeSpecForUUID:`/`updateSpec:` refuse to touch those) or `User` (the
+post-load default for everything else). `Available` is impossible, that seed runs after. `User` here
+carries no information worth preserving: being listed in `DefaultBundles.plist` *is* what makes a
+bundle shipped-tier, and a user who repointed a shipped default is modelled as url/ref divergence by
+`bundleIsEditedShippedDefault:`, not as a different origin.
+
+**Evidence, against this machine's real state:** compiled `BundleRegistry.mm` + `BundleSpec.mm` twice
+into a throwaway CLI — once from `HEAD`, once patched — with `-Dsave=harnessSaveDisabled` so `-save`
+is renamed out of existence and nothing can write to `Bundles.plist`. Both ran `-init` → `-reload`
+against the real `~/Library/Application Support/TextMate/Bundles.plist` (153 specs) and the real
+`DefaultBundles.plist` (41 entries, all 41 already in the state file, none overlapping the 4
+mandatory UUIDs or the 108 available ones). Before: `Shipped=0 User=41`. After: `Shipped=41 User=0`.
+`Bundles.plist` byte-identical afterwards.
+
+**If interrupted here:** done and committed. The Setup Assistant bundles step should now populate on
+this profile; worth confirming in the running app.
+
+---
+
 ## 2026-08-19 — Bundles step now lists installed bundles too; found a second bug blocking it in practice
 
 **What:** Closed the divergence between the design spec and `BundlesStepView`: the step sourced from

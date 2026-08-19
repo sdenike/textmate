@@ -529,6 +529,19 @@ live process (`sample <pid>`) is what actually located the hang.
 
 ## Bundle delivery
 
+**`BundleSpec.origin` is derived at load and never persisted**, so every spec read back from
+`Bundles.plist` arrives as `TMBundleOriginUser` regardless of what it was. Each seed in
+`BundleRegistry.reload` must therefore re-assert its own origin on the *existing-spec* path, not
+only when it creates a spec — `seedMandatory` always did; `seedShippedDefaults` did not, so on any
+profile that had launched the app once, **0 of the 41 `DefaultBundles.plist` bundles were Shipped**.
+Fixed 2026-08-19. The failure is silent and reads as a data problem: the Setup Assistant's bundles
+step renders empty and Preferences → Bundles' "Revert to Default" greys out, because both resolve
+through `origin == TMBundleOriginShipped`. Do not "fix" this by persisting `origin` — it is derived
+from three catalogues that change between releases, and a persisted copy goes stale the moment a
+bundle moves between them. (`Bundle.recommended`, set from the same check at
+`BundlesManager.mm:1012`, currently has **no reader anywhere** — there is no recommended badge in
+the prefs pane, so nothing was mis-rendering there.)
+
 Only **three** bundles are actually forked. `Frameworks/BundlesManager/src/MandatoryBundles.h` pins
 `textmatelives/{bundle-support,text,source}.tmbundle`, each ported to Ruby 2.6.10 — plus
 `textmate/themes.tmbundle` at `MandatoryBundles.h:53`, which still points at **upstream**. Every

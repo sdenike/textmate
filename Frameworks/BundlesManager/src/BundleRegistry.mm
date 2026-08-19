@@ -166,6 +166,14 @@ static NSString* const kBundleSupportSupportSubpath = @"Support";
 			{
 				if(NSString* c = entry[@"category"])
 					existing.category = c;
+
+				// origin is derived, never persisted (BundleSpec.h), so a spec
+				// reloaded from Bundles.plist always arrives as User. Restore
+				// it here — being listed in DefaultBundles.plist *is* what
+				// makes a bundle shipped-tier; user edits to a shipped default
+				// show up as url/ref divergence (bundleIsEditedShippedDefault:),
+				// not as a different origin. Same self-heal seedMandatory does.
+				existing.origin = TMBundleOriginShipped;
 			}
 			continue;
 		}
