@@ -53,11 +53,15 @@ static NSDictionary<NSString*, NSColor*>* colors_for_theme (theme_ptr const& the
 {
 	NSWindow* window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 640, 460) styleMask:(NSWindowStyleMaskTitled|NSWindowStyleMaskClosable) backing:NSBackingStoreBuffered defer:NO];
 	window.title = @"Setup Assistant";
+	// Defaults to YES (NSWindow.h:469), and the window this replaced cleared it
+	// explicitly for the same reason: an app-modal window that every existing
+	// user gets once after updating, over their already-restored documents,
+	// must not swallow Command-Q.
+	window.preventsApplicationTerminationWhenModal = NO;
 	[window center];
 
 	if(self = [super initWithWindow:window])
 	{
-		window.contentView = [SetupAssistantHostingController viewFor:self];
 		// NSWindowController does not become its window's delegate on its own.
 		// Without this, -windowWillClose: below never fires, -stopModal never
 		// runs, and the title-bar close button leaves the app in a modal
@@ -87,6 +91,17 @@ static NSDictionary<NSString*, NSColor*>* colors_for_theme (theme_ptr const& the
 		[self.window makeKeyAndOrderFront:self];
 		return;
 	}
+
+	// Past the guard, this is a genuine run, and every genuine run gets a new
+	// SwiftUI view and with it a new model. This controller is a
+	// process-lifetime singleton, so a model built once in -init would still be
+	// showing run one's state on run five: opening on the Bundles step with a
+	// Done button and no Welcome, re-offering bundles installed since, and
+	// reverting a theme picked from View -> Theme in between. The spec requires
+	// every step to reflect current state on every run. The replaced view and
+	// its model become unreferenced here, which also leaves the model's strong
+	// reference back to this controller with nothing to hold up.
+	self.window.contentView = [SetupAssistantHostingController viewFor:self];
 
 	[self.window center];
 	[NSApp runModalForWindow:self.window];

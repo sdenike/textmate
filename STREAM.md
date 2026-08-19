@@ -4,6 +4,55 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-19 — Final review fix wave on the Setup Assistant branch
+
+**What:** Seven findings from the whole-branch review, one commit, two files.
+
+The two critical ones. `SetupAssistantModel` held a single `selectedThemeIdentifier`, read once in
+`init` for whichever slot the *starting* appearance named, and `finish()` then wrote it into the slot
+the *ending* appearance named — so a fresh profile (automatic, editing light, Mac Classic selected)
+that picked Dark wrote Mac Classic into `darkModeThemeUUID`, and dark mode resolved to a light theme.
+It is now `selectedThemeIdentifiers: [String: String]`, one entry per slot, both seeded from the host
+in `init`, with a computed `selectedThemeBinding` that addresses `editingAppearance`. The list, the
+preview and the write therefore always name the same slot. That binding ignores a nil write: a `List`
+whose contents change under it can report the vanished selection as no selection, which would clear
+the slot's real theme.
+
+Second: `SetupAssistantWindowController` is a `sharedInstance`, and it built `contentView` — and with
+it the model, its `step`, and the `lazy allThemes`/`allBundles` caches — once in `-init`. Every run
+after the first therefore opened on the Bundles step with a Done button and no Welcome (losing Skip's
+discoverability), re-offered bundles installed during run one, and reverted a theme picked from
+`View → Theme` in between. `-runModal` now rebuilds the view *after* the `isVisible` reentrancy guard,
+so the re-focus path stays a pure no-op and only a genuine session gets fresh state. The discarded
+model is unreferenced, which also leaves its strong reference back to the controller holding nothing
+up.
+
+**Automatic mode could not set the dark theme** — `editingAppearance` collapsed `"auto"` to `"light"`,
+while the spec says both keys are editable in automatic because both are used. Fixed with the smallest
+honest UI: a second segmented picker (Light Theme / Dark Theme) that appears *only* when appearance is
+automatic and chooses which slot the existing single list edits, plus `finish()` writing both slots in
+that mode and one otherwise. Rejected as larger: two side-by-side theme lists, or a per-slot sub-step.
+Nothing changes for light or dark users, where the mode already names one slot.
+
+Four smaller ones. The window never cleared `preventsApplicationTerminationWhenModal` (defaults YES),
+so ⌘Q was inert during an app-modal wizard shown over already-restored documents; the retired
+`FirstLaunchBundleInstaller` window cleared it explicitly and now this one does too. Skip Setup gained
+`.keyboardShortcut(.cancelAction)`, because the spec and the assistant's own copy both promise ESC
+dismisses it and nothing wired ESC to anything. The bundles step gained an empty state — essentially
+every existing profile has all shipped-tier bundles installed, so the list is empty, and it sat under
+"Recommended ones are already selected". And its caption now discloses that unchecking is permanent:
+`installBundleIdentifiers:neverSuggest:` writes to the never-suggest list, which also silences
+`DocumentWindowController`'s on-demand per-extension prompt.
+
+**Why:** last pass before the branch is done; these were the findings that a user would actually hit,
+in severity order.
+
+**If interrupted here:** nothing outstanding on the code. `bin/build` succeeds and
+`bin/build TextMate/test` passes 14/14. Rendering was not verified — the appearance step's new
+automatic-mode picker and the bundles empty state have never been looked at in a running app.
+
+---
+
 ## 2026-08-19 — Task 8 landed: the Setup Assistant now runs at first launch
 
 **What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-8-brief.md`, the last task.

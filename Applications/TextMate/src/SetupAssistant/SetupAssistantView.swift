@@ -19,7 +19,14 @@ public enum TMSetupAssistantStep: Int, CaseIterable {
 final class SetupAssistantModel: ObservableObject {
 	@Published var step: TMSetupAssistantStep = .welcome
 	@Published var appearance: String = "auto"
-	@Published var selectedThemeIdentifier: String?
+	// One selection per theme slot, both seeded from the host. A single
+	// identifier could only ever describe the slot it was read for: picking
+	// Dark after opening in light mode then wrote the light theme's UUID into
+	// darkModeThemeUUID, and dark mode resolved to a light theme.
+	@Published var selectedThemeIdentifiers: [String: String] = [:]
+	// Which slot the theme list edits while appearance is "auto". Light and
+	// dark each name their own slot, so this is only consulted for automatic.
+	@Published var editingSlot: String = "light"
 	@Published var checkedBundleIdentifiers: Set<String> = []
 
 	let host: any TMSetupAssistantHost
@@ -32,23 +39,43 @@ final class SetupAssistantModel: ObservableObject {
 	init(host: any TMSetupAssistantHost) {
 		self.host = host
 		self.appearance = host.currentAppearance() ?? "auto"
-		self.selectedThemeIdentifier = host.currentThemeIdentifier(forAppearance: editingAppearance)
+		for slot in ["light", "dark"] {
+			if let identifier = host.currentThemeIdentifier(forAppearance: slot) {
+				self.selectedThemeIdentifiers[slot] = identifier
+			}
+		}
 		self.checkedBundleIdentifiers = Set(allBundles.filter { $0.recommended && !$0.installed }.map { $0.identifier })
 	}
 
 	var isFirstStep: Bool { step == .welcome }
 	var isLastStep: Bool  { step == .bundles }
 
-	// In automatic mode both keys are used, so the user edits the light theme
-	// here; the dark one keeps whatever it already had.
-	var editingAppearance: String { appearance == "dark" ? "dark" : "light" }
+	// Which slot the theme list is showing, and the one finish() writes. Light
+	// and dark each name a single slot; automatic uses both keys, so there the
+	// user picks which one to edit.
+	var editingAppearance: String { appearance == "auto" ? editingSlot : appearance }
+
+	// The list's selection always addresses the slot on screen, so switching
+	// the appearance picker switches both the selection and the preview to
+	// that slot's theme. nil is ignored rather than stored: a List whose
+	// contents change under it can report the vanished selection as no
+	// selection, which would drop the slot's real theme on the floor.
+	var selectedThemeBinding: Binding<String?> {
+		Binding(
+			get: { self.selectedThemeIdentifiers[self.editingAppearance] },
+			set: { identifier in
+				guard let identifier else { return }
+				self.selectedThemeIdentifiers[self.editingAppearance] = identifier
+			}
+		)
+	}
 
 	func themes(for appearance: String) -> [TMThemeChoice] {
 		allThemes.filter { $0.appearance == appearance || $0.appearance == "unspecified" }
 	}
 
 	var selectedTheme: TMThemeChoice? {
-		allThemes.first { $0.identifier == selectedThemeIdentifier }
+		allThemes.first { $0.identifier == selectedThemeIdentifiers[editingAppearance] }
 	}
 
 	func binding(for bundle: TMBundleChoice) -> Binding<Bool> {
@@ -72,15 +99,20 @@ final class SetupAssistantModel: ObservableObject {
 	}
 
 	func finish() {
-		if let identifier = selectedThemeIdentifier {
-			host.applyThemeIdentifier(identifier, appearance: editingAppearance)
+		// Automatic switches between both themes at runtime, so both slots are
+		// editable there and both are written; light and dark each name one
+		// slot and leave the other alone. A slot the host had no theme for and
+		// the user never chose one for stays absent.
+		for slot in (appearance == "auto" ? ["light", "dark"] : [editingAppearance]) {
+			if let identifier = selectedThemeIdentifiers[slot] {
+				host.applyThemeIdentifier(identifier, appearance: slot)
+			}
 		}
 		// The tri-state picker (light/dark/auto) is distinct from
-		// editingAppearance above, which is only ever "light" or "dark" --
-		// it picks which slot's theme list to show, and collapses "auto" to
-		// "light" for that purpose. Only this call can carry "auto" itself
-		// through to the "themeAppearance" default, so Automatic has a real
-		// effect instead of being indistinguishable from Light.
+		// editingAppearance above, which is only ever "light" or "dark" and
+		// only picks which slot's theme list to show. Only this call can carry
+		// "auto" itself through to the "themeAppearance" default, so Automatic
+		// has a real effect instead of being indistinguishable from Light.
 		host.applyAppearance(appearance == "auto" ? nil : appearance)
 
 		// -availableBundles never actually hands back an installed one today
@@ -132,7 +164,11 @@ struct SetupAssistantView: View {
 			Divider()
 
 			HStack {
+				// ESC skips, which is what the assistant's own copy and the
+				// spec both promise. Without .cancelAction the key does
+				// nothing at all in a modal session.
 				Button("Skip Setup") { model.skip() }
+					.keyboardShortcut(.cancelAction)
 				Spacer()
 				if !model.isFirstStep {
 					Button("Back") { model.back() }
@@ -161,8 +197,20 @@ struct AppearanceStepView: View {
 			.pickerStyle(.segmented)
 			.frame(maxWidth: 320)
 
+			// Automatic uses both themes, so both have to be reachable. This
+			// is the whole of that: one extra picker, shown only when it means
+			// something, choosing which slot the one list below is editing.
+			if model.appearance == "auto" {
+				Picker("Editing", selection: $model.editingSlot) {
+					Text("Light Theme").tag("light")
+					Text("Dark Theme").tag("dark")
+				}
+				.pickerStyle(.segmented)
+				.frame(maxWidth: 320)
+			}
+
 			HStack(alignment: .top, spacing: 16) {
-				List(model.themes(for: model.editingAppearance), id: \.identifier, selection: $model.selectedThemeIdentifier) { theme in
+				List(model.themes(for: model.editingAppearance), id: \.identifier, selection: model.selectedThemeBinding) { theme in
 					Text(theme.name).tag(theme.identifier)
 				}
 				.frame(width: 220)
@@ -179,17 +227,33 @@ struct BundlesStepView: View {
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 12) {
-			Text("Bundles add language support, commands and snippets. Recommended ones are already selected.")
+			Text("Bundles add language support, commands and snippets.")
 				.foregroundStyle(.secondary)
 
-			List(model.bundles, id: \.identifier) { bundle in
-				Toggle(isOn: model.binding(for: bundle)) {
-					VStack(alignment: .leading, spacing: 2) {
-						Text(bundle.name)
-						Text(bundle.category).font(.caption).foregroundStyle(.secondary)
+			// The common case on any established profile: everything offered
+			// here is installed, so the list is empty. Saying so beats an
+			// empty box under a caption about what is already selected.
+			if model.bundles.isEmpty {
+				Text("Every bundle offered here is already installed — there is nothing to choose.")
+					.foregroundStyle(.secondary)
+			}
+			else {
+				// Unchecking is not "not now": installBundleIdentifiers:neverSuggest:
+				// adds the bundle to the never-suggest list, which also silences
+				// the on-demand prompt when a matching file is opened. The window
+				// this replaced said as much in its subtitle.
+				Text("Recommended ones are already selected. Unchecked bundles will not be suggested again, not even when you open a file that needs one — you can still install them later from Preferences › Bundles.")
+					.foregroundStyle(.secondary)
+
+				List(model.bundles, id: \.identifier) { bundle in
+					Toggle(isOn: model.binding(for: bundle)) {
+						VStack(alignment: .leading, spacing: 2) {
+							Text(bundle.name)
+							Text(bundle.category).font(.caption).foregroundStyle(.secondary)
+						}
 					}
+					.disabled(bundle.installed)
 				}
-				.disabled(bundle.installed)
 			}
 		}
 	}
