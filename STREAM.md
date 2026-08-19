@@ -4,6 +4,38 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-18 — a test that could not fail, and the plan line that caused it
+
+`b22a2479` corrects `test_legacy_bundle_prompt_key_does_not_suppress_the_assistant`. It wrote
+`@"didPromptForDefaultBundles"`; the real constant is
+`kUserDefaultsDidPromptForDefaultBundlesKey = @"DidPromptForDefaultBundles"` — capital D —
+at `Frameworks/BundlesManager/src/BundlesManager.mm:28`. `NSUserDefaults` keys are case-sensitive,
+so the test had been setting a key that does not exist.
+
+**The failure mode is what makes this worth writing down: the test passed either way.** It would
+have gone on passing if someone later made `TMSetupAssistantShouldRunAtLaunch` consult the real
+legacy key — which is the single regression it exists to prevent, and one that would hide the Setup
+Assistant from every existing user, because they all have that key set. Shipped behaviour was never
+wrong; the guard was.
+
+The wrong literal came from the implementation plan itself (line 473), so it was transcribed
+faithfully. The plan is corrected in the same commit so it cannot be re-transcribed by anyone
+re-running it. The test now carries a comment naming the real constant's home and noting that the
+casing is load-bearing.
+
+`Ruling: the literal stays a literal rather than importing BundlesManager.h for the symbol.
+TextMate_test does not link that framework, and pulling a large dependency into the test target to
+avoid one string is the worse trade. The comment is what keeps it honest.`
+
+### If interrupted here
+
+Task 3 of `docs/superpowers/plans/2026-08-18-setup-assistant.md` is in fix round 1 of 5, awaiting a
+scoped re-review of `b22a2479`. Tasks 1-2 are complete and reviewed clean. Task 4 (the window and
+the Help menu item) is briefed and unstarted — it is the first task whose verification needs a human
+at a keyboard, because GUI gestures cannot be synthesised in the agent sandbox.
+
+---
+
 ## 2026-08-18 — Task 3 landed: the gating predicate
 
 **What:** Executed Task 3 of `.superpowers/sdd/2026-08-18-setup-assistant/task-3-brief.md`. Appended
