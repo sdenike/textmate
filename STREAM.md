@@ -4,6 +4,43 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-18 — Task 1 landed: the first committed Swift file
+
+**What:** Executed Task 1 of `docs/superpowers/plans/2026-08-18-setup-assistant.md`. Created
+`Applications/TextMate/src/SetupAssistant/SetupAssistantTypes.h` (pure-ObjC boundary types --
+`TMThemeChoice`, `TMBundleChoice`, the `TMSetupAssistantHost` protocol, and the two pure C
+functions later tasks unit-test), `Applications/TextMate/src/TextMate-Bridging-Header.h` (two
+imports, nothing else), and `Applications/TextMate/src/SetupAssistant/SetupAssistantView.swift`
+(`TMSetupAssistantStep`, a plain `public` step enum) -- all transcribed verbatim from
+`.superpowers/sdd/2026-08-18-setup-assistant/task-1-brief.md` and diffed byte-for-byte against its
+code blocks before saving. Registered the Swift source and `SWIFT_OBJC_BRIDGING_HEADER` on the
+`TextMate` target in `project.yml`, regenerated `TextMate.xcodeproj`, built clean with `bin/build`
+(`** BUILD SUCCEEDED **`, zero `error:` lines), and confirmed
+`~/build/textmate-revived/xcode/Release/TextMate.swiftmodule/arm64-apple-macos.swiftmodule` exists
+-- the only real proof the file compiled rather than being silently absent from `sources`.
+
+**Why:** This is the toolchain question settled *in a committed state*. The prior spike (see the
+".25 published, and Swift proved to work in this tree" entry below) proved the same shape then
+reverted it; Task 1 is that proof for real, on the branch, so nothing after it depends on a spike
+that no longer exists.
+
+One thing worth recording: the generated `TextMate-Swift.h` is 376 lines with zero `@interface` /
+`@protocol` in it -- `TMSetupAssistantStep` does not appear there. That is expected, not a defect:
+the spike already found `internal @objc` invisible to ObjC++, and a plain (non-`@objc`) enum is
+invisible the same way, by design, since nothing in Task 1 needs it seen from Objective-C++. It is
+consumed from Swift directly, starting at Task 5.
+
+### If interrupted here
+
+Task 1 is fully done, verified, and about to be committed. Task 2 is next: add the
+`SetupAssistantCore` `library.static` target to `project.yml`, linked by both `TextMate` and
+`TextMate_test`, holding the `.mm` that implements the types this task only declared plus
+`t_setup_assistant.mm`, the first test file. Read `docs/superpowers/plans/2026-08-18-setup-assistant.md`'s
+Task 2 section and `.superpowers/sdd/2026-08-18-setup-assistant/progress.md` first -- the latter
+records two rulings from plan self-review that still apply.
+
+---
+
 ## 2026-08-18 — RESUME HERE: Setup Assistant plan written, ready to execute
 
 Plan at `docs/superpowers/plans/2026-08-18-setup-assistant.md` — eight tasks. Branch

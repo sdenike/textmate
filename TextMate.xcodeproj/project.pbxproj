@@ -606,6 +606,7 @@
 		8786041C61C883E650D2B3A5 /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E66CC54D77D20A7F989E8DE /* CoreFoundation.framework */; };
 		87952FF5B9AEC49EADB84B73 /* OakFileURLSchemeHandler.mm in Sources */ = {isa = PBXBuildFile; fileRef = 3F8239BB46223984E4E925BC /* OakFileURLSchemeHandler.mm */; };
 		8798CD7603277AB23C5DBD8A /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E19F8AC3F6DFA3EF9E573C7B /* Security.framework */; };
+		87CB8EEC370BFD34D70945A8 /* SetupAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103A4FCC12A7948336C42F1B /* SetupAssistantView.swift */; };
 		88060C8845BA18D69B191054 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E19F8AC3F6DFA3EF9E573C7B /* Security.framework */; };
 		885EC988C561322BCB9C3228 /* libcf.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FC84BF1D53A4AFB200D408AF /* libcf.a */; };
 		887DDF56CF36E60E1855DCA9 /* libselection.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 12E2FD75966246A93CC5CC36 /* libselection.a */; };
@@ -4995,11 +4996,9 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstSubfolderSpec = 7;
 			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
-				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5008,9 +5007,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 7;
+			dstSubfolderSpec = 13;
 			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5070,6 +5071,7 @@
 		0E64CD87E06A78B547480572 /* libcommand.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libcommand.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		0F5DDEB0903A4D32EBC7D700 /* tm_dialog2.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = tm_dialog2.mm; sourceTree = "<group>"; };
 		101A476285F4784F7A676991 /* format.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = format.cc; sourceTree = "<group>"; };
+		103A4FCC12A7948336C42F1B /* SetupAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupAssistantView.swift; sourceTree = "<group>"; };
 		10B874173E1C9917097A3BF4 /* libio.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libio.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		10D44E59CB9EA2F8BBF1829B /* NSAlert Additions.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "NSAlert Additions.mm"; sourceTree = "<group>"; };
 		1101EC0D49B73EEC4099E790 /* FileItem.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = FileItem.mm; sourceTree = "<group>"; };
@@ -6638,6 +6640,14 @@
 			path = OakAppKit;
 			sourceTree = "<group>";
 		};
+		0C4DE2F0286DB623966A44E9 /* SetupAssistant */ = {
+			isa = PBXGroup;
+			children = (
+				103A4FCC12A7948336C42F1B /* SetupAssistantView.swift */,
+			);
+			path = SetupAssistant;
+			sourceTree = "<group>";
+		};
 		0E1655A3CCEC48DF500A3CB0 /* src */ = {
 			isa = PBXGroup;
 			children = (
@@ -7681,6 +7691,7 @@
 				E0112A5D550105A6703C8DD1 /* PreferencesMigration.mm */,
 				20E57C8797FE0749CAF2D105 /* RMateServer.mm */,
 				0DE2D2D453B7152E1FC340C2 /* TMPlugInController.mm */,
+				0C4DE2F0286DB623966A44E9 /* SetupAssistant */,
 			);
 			path = src;
 			sourceTree = "<group>";
@@ -11547,6 +11558,7 @@
 				596448034796D241C9BCBB53 /* ODBEditorSuite.mm in Sources */,
 				09BDFDF1862DE376EBC0C233 /* OakMainMenu.mm in Sources */,
 				569F2000FD6B26BE1DB79290 /* RMateServer.mm in Sources */,
+				87CB8EEC370BFD34D70945A8 /* SetupAssistantView.swift in Sources */,
 				4C62445B551B80D9D8BCE1BA /* TMPlugInController.mm in Sources */,
 				E3466E2679D726349FFC53FC /* main.mm in Sources */,
 			);
@@ -15040,6 +15052,7 @@
 					"-ObjC",
 				);
 				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "Applications/TextMate/src/TextMate-Bridging-Header.h";
 			};
 			name = Release;
 		};
@@ -17034,6 +17047,7 @@
 					"-ObjC",
 				);
 				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "Applications/TextMate/src/TextMate-Bridging-Header.h";
 			};
 			name = Debug;
 		};
