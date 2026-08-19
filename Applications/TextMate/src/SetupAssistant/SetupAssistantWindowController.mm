@@ -104,6 +104,14 @@ static NSDictionary<NSString*, NSColor*>* colors_for_theme (theme_ptr const& the
 	NSMutableArray<TMThemeChoice*>* res = [NSMutableArray array];
 	for(auto const& item : bundles::query(bundles::kFieldAny, NULL_STR, scope::wildcard, bundles::kItemTypeTheme))
 	{
+		// Same skip the themes menu applies (AppController Menus.mm:154) before
+		// it ever builds a menu item, so a theme hidden from View -> Theme
+		// (e.g. Themes.tmbundle's "macOS System Theme", hideFromUser) does not
+		// appear as a choice here either -- the two routes must offer the same
+		// list, not just write the same keys.
+		if(item->hidden_from_user())
+			continue;
+
 		theme_ptr theme = parse_theme(item);
 		if(!theme)
 			continue;

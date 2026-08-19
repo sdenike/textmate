@@ -4,6 +4,39 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-18 — Task 6, fix round 1/5: hidden themes were leaking into the assistant's picker
+
+**What:** Review caught that `-availableThemes` (`SetupAssistantWindowController.mm`) had no
+`hidden_from_user()` check, while `View -> Theme`'s own enumeration
+(`AppController Menus.mm:153-155`) skips hidden items before ever building a menu entry. Concrete
+instance: `Themes.tmbundle/Themes/macOS System Theme.tmTheme` sets `hideFromUser`, so it's absent
+from the menu but was appearing in the assistant. Added the same skip, with a comment pointing at
+`AppController Menus.mm:154` as the source of the rule, so the two stay in sync if the menu's rule
+ever changes.
+
+**Traced, not fixed: what happens if the user's actual configured theme is a hidden one.**
+`-currentThemeIdentifierForAppearance:` reads `NSUserDefaults` directly, unfiltered, so it still
+returns the hidden theme's real UUID. But `allThemes` (`host.availableThemes()`) no longer contains
+it post-fix, so `selectedTheme` resolves to `nil` (generic black preview, not the real theme's
+colours) and the SwiftUI `List`'s selection binding matches no row (blank selection) — no crash, no
+data loss on an untouched Done click (the same identifier writes back unchanged), but a user could
+mistake the blank selection for a lost setting and pick a visible theme to "fix" it, silently
+overwriting a working hidden-theme configuration. Proposed but did not implement the smallest fix:
+exempt whichever theme is currently active in either slot from the hidden check, mirroring
+`validateThemeMenuItem:` (`AppController Menus.mm:117-128`), which already looks up the active
+theme's name via `bundles::lookup` unfiltered by `hidden_from_user()` for its menu-item label.
+Left for the coordinator to schedule.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **`. `bin/build TextMate/test` → `** BUILD SUCCEEDED **`;
+`TextMate_test -v` run directly (same harness quirk as Task 6's own entry below) →
+`TextMate_test: 14 tests passed`.
+
+### If interrupted here
+
+Fix round 1/5 for Task 6 is committed. 4 more review rounds may follow before Task 7 starts. The
+hidden-current-theme exemption above is proposed, not implemented — needs a coordinator decision,
+not just a green build, before touching it.
+
 ## 2026-08-18 — Task 6 landed: the appearance step, and two more brief gaps caught by reading real headers
 
 **What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-6-brief.md`. Step 2 of
