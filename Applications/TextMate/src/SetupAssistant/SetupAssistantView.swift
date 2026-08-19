@@ -163,6 +163,17 @@ struct SetupAssistantView: View {
 			}
 			.frame(maxWidth: .infinity, alignment: .leading)
 			.padding(24)
+			.background {
+				// Applied after .padding(24), so it covers the padded frame --
+				// the whole content region up to the Divider below -- rather
+				// than sitting inset within it like a child of the VStack
+				// would. Only the welcome step gets a photo behind it: the
+				// appearance step's theme preview needs an honest backdrop and
+				// the bundle list needs to stay readable.
+				if model.step == .welcome {
+					WelcomeBackground()
+				}
+			}
 
 			Divider()
 
@@ -300,57 +311,59 @@ struct ThemePreview: View {
 	}
 }
 
-struct WelcomeStepView: View {
+// The welcome step's photo. Drawn as a background of the content region in
+// SetupAssistantView rather than of WelcomeStepView itself: WelcomeStepView
+// used to sit in a VStack alongside a Spacer(), so the two competed for the
+// remaining height, and the VStack's own .padding(24) inset the result again
+// -- an image living inside WelcomeStepView could never reach the bottom or
+// side edges of the content region. Applied outside that padding instead, it
+// covers the whole region edge to edge, matching how the same photo runs
+// full-bleed in the About window.
+struct WelcomeBackground: View {
 	// About/css/tml_image.png ships as an About-window asset under
 	// Contents/Resources/About/css/, a path NSImage(named:) cannot resolve by
 	// bare name -- so this is a bundle URL lookup rather than an asset-catalog
 	// entry, which would mean shipping the 579 KB file a second time. Either
-	// lookup failing (nil URL, or a URL NSImage can't decode) falls through to
-	// `copy` unadorned, identical to the step's pre-image appearance -- never a
-	// blank or broken step.
-	private var backgroundImage: NSImage? {
+	// lookup failing (nil URL, or a URL NSImage can't decode) renders nothing
+	// at all below -- no placeholder, no colour -- never a blank or broken step.
+	private var image: NSImage? {
 		guard let url = Bundle.main.url(forResource: "tml_image", withExtension: "png", subdirectory: "About/css") else { return nil }
 		return NSImage(contentsOf: url)
 	}
 
-	private var copy: some View {
+	var body: some View {
+		if let image {
+			// .fill crops centre-anchored by default, which shows the flower
+			// head and cuts the stem off mid-way. Sizing the child to the
+			// container explicitly and aligning it to .bottom instead crops the
+			// excess off the top, so the stem runs to the bottom of the region --
+			// matching how it exits the bottom edge on the About window.
+			GeometryReader { geo in
+				Image(nsImage: image)
+					.resizable()
+					.aspectRatio(contentMode: .fill)
+					.frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
+					.clipped()
+			}
+		}
+	}
+}
+
+struct WelcomeStepView: View {
+	var body: some View {
+		// The photo behind this text, when there is one, is WelcomeBackground
+		// above -- drawn behind the whole content region by SetupAssistantView,
+		// not by this view. The scrim wraps just the text block rather than the
+		// whole region, and adapts to light/dark automatically, matching how
+		// the rest of this wizard already leaves colour choices to the system
+		// rather than hand-picking one.
 		VStack(alignment: .leading, spacing: 12) {
 			Text("TextMate Revived is a fork of TextMate for macOS 26 on Apple Silicon.")
 			Text("This assistant sets up how the editor looks and which bundles you have. You can run it again at any time from the Help menu.")
 				.foregroundStyle(.secondary)
 		}
-	}
-
-	var body: some View {
-		if let backgroundImage {
-			// The About window's photo behind plain body text needs a scrim to
-			// stay legible; .thinMaterial behind just the copy (not the whole
-			// image) keeps the backdrop visible at the edges while adapting to
-			// light/dark automatically, matching how the rest of this wizard
-			// already leaves colour choices to the system rather than hand-picking one.
-			copy
-				.padding(16)
-				.background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-				.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-				.background(
-					// .fill crops centre-anchored by default, which shows the flower
-					// head and cuts the stem off mid-way. Sizing the child to the
-					// container explicitly and aligning it to .bottom instead crops the
-					// excess off the top, so the stem runs to the bottom of the step --
-					// matching how it exits the bottom edge on the About window.
-					GeometryReader { geo in
-						Image(nsImage: backgroundImage)
-							.resizable()
-							.aspectRatio(contentMode: .fill)
-							.frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
-							.clipped()
-					}
-				)
-				.clipShape(RoundedRectangle(cornerRadius: 12))
-		}
-		else {
-			copy
-		}
+		.padding(16)
+		.background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
 	}
 }
 

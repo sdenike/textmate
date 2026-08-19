@@ -4,6 +4,29 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-19 — Welcome step's photo moved from the step's own view to the content region
+
+**What:** The bottom-anchored crop below was correct but fixed the wrong layer: `WelcomeStepView`
+sat inside the content `VStack` alongside a `Spacer()`, so the two competed for the remaining
+height, and that `VStack`'s own `.padding(24)` inset the result again — an image living inside
+`WelcomeStepView` could never reach the bottom or side edges of the content region no matter how
+it was cropped. Moved the image load and crop into a new `WelcomeBackground: View` and attached it
+as `SetupAssistantView`'s content-region `.background { }`, applied *after* `.padding(24)` so it
+covers the padded frame rather than sitting inset within it, and shown only when
+`model.step == .welcome`. `WelcomeStepView` now holds only the copy text with its `.thinMaterial`
+scrim — no image, no background of its own. `bin/build` succeeded; `TextMate_test` 14/14.
+
+**Why:** The target is the About window's full-bleed photo — edge to edge above the button row,
+stem running off the bottom. That requires the image to be a sibling of the Spacer, not a child
+competing with it, and to sit outside the padding, not inside it.
+
+**If interrupted here:** nothing left to do; the diff is confined to
+`SetupAssistantView.swift` (the `.background` on the content `VStack`, the new `WelcomeBackground`
+struct, and the slimmed `WelcomeStepView`). Rendering itself is still unverified — this only
+confirms the structure now permits full bleed, not that a screenshot shows it.
+
+---
+
 ## 2026-08-19 — Welcome step's background crop now anchors to the stem, not the centre
 
 **What:** `WelcomeStepView`'s `.background` was cropping `tml_image.png` centre-anchored (the
