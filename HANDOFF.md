@@ -20,8 +20,8 @@ maintainer and enforced throughout:
 
 | | |
 |---|---|
-| Released | **v3.0.0-revived.25** — PR #18 merged as `a8bc6398` |
-| Unreleased | Setup Assistant, on `phase-6/swiftui-onboarding` — CHANGELOG has an `## Unreleased` entry, no version cut yet; pending the maintainer's manual first-launch QA and a green CI run |
+| Released | **v3.0.0-revived.26** — Setup Assistant, PR #19 |
+| Unreleased | none |
 | Phases complete | 0-5, 7 |
 | Phase 6 | remainder in progress — QuickLook done, onboarding island done, Preferences/About/update-sheet islands not written |
 | Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |

@@ -4,6 +4,41 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-19 — v3.0.0-revived.26 cut; the maintainer confirmed the two modal paths
+
+CHANGELOG's `## Unreleased` heading became `## 2026-08-19 (v3.0.0-revived.26)`. **Merging PR #19
+now publishes a real release** — that is the whole point of this commit, and it was the maintainer's
+explicit instruction rather than a side effect.
+
+### The last two unverifiable checks passed
+
+Closing the assistant with the red title-bar button ends the modal session and leaves the app
+responsive, and ⌘Q quits while the assistant is open. Both were confirmed by the maintainer at a
+keyboard, because neither is reachable from this environment.
+
+They matter because they are separate code paths from the ones normal use exercises: Done and Skip
+leave through `finishWithSkip:`, while the red button leaves through `windowWillClose:` — which only
+fires because the controller declares `<NSWindowDelegate>` and assigns itself as the window's
+delegate. Three distinct defects in this branch could each have left a modal session running with no
+window on screen, unresponsive and force-quit only. All three are now confirmed dead against a
+running app rather than reasoned about.
+
+### The release also carries a fix nobody was looking for
+
+`seedShippedDefaults` never restored `origin` for a bundle already in the persisted state, and
+`BundleSpec` never serialised it — so on any used profile, 0 of 41 default-tier bundles resolved as
+shipped. The visible symptom was "Revert to Default" being greyed out for every bundle TextMate
+ships, which is how it is described in the release notes. Found only because the maintainer reported
+an empty bundles step and asked why.
+
+### If interrupted here
+
+PR #19 is open against `master` with the version cut. Merging fires `release.yml` for real:
+build, test, sign, notarize, staple, tag `v3.0.0-revived.26`, publish, and update the Homebrew cask.
+Wait for CI green on the PR before merging.
+
+---
+
 ## 2026-08-19 — Welcome step's photo moved from the step's own view to the content region
 
 **What:** The bottom-anchored crop below was correct but fixed the wrong layer: `WelcomeStepView`

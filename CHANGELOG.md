@@ -2,7 +2,9 @@ Title: Release Notes
 
 # Changes
 
-## Unreleased
+## 2026-08-19 (v3.0.0-revived.26)
+
+A Setup Assistant walks you through first launch.
 
 ### Added
 
@@ -11,6 +13,18 @@ Title: Release Notes
   theme preview, then pick which bundled language and tool bundles to
   install. It replaces the old "Install Default Bundles" prompt, runs once,
   and stays available afterwards from Help → Setup Assistant….
+
+  Appearance and theme could previously be changed only from the View menu,
+  which made an untouched default hard to tell apart from a setting that had
+  been lost.
+
+### Fixed
+
+* "Revert to Default" in Settings → Bundles was greyed out for every bundle
+  that ships with TextMate, so an edited copy of a standard bundle could not
+  be restored. TextMate was forgetting which bundles it ships each time it
+  reloaded its bundle list, and treating all of them as bundles you had
+  added yourself.
 
 ## 2026-08-17 (v3.0.0-revived.25)
 
