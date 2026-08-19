@@ -33,6 +33,24 @@
 
 - (void)runModal
 {
+	// The Help menu item stays enabled while the assistant is open (nothing in
+	// validateMenuItem: special-cases it), so this can be re-entered. Calling
+	// runModalForWindow: a second time on the same window would start a nested
+	// modal session; closing the window then fires windowWillClose: only once,
+	// so stopModal unwinds just the inner session and the outer one is left
+	// blocked forever with the window already ordered out -- an unresponsive
+	// app with no window on screen. isVisible reflects AppKit's own bookkeeping
+	// for exactly the span this class puts the window on screen (set only as a
+	// side effect of runModalForWindow: below, cleared by the unconditional
+	// orderOut: that follows it), so re-entering here can only ever observe
+	// "currently in a session" or "not" -- there is no separate flag to leave
+	// stuck on if a session ends abnormally.
+	if(self.window.isVisible)
+	{
+		[self.window makeKeyAndOrderFront:self];
+		return;
+	}
+
 	[self.window center];
 	[NSApp runModalForWindow:self.window];
 	[self.window orderOut:self];
