@@ -2,6 +2,16 @@ Title: Release Notes
 
 # Changes
 
+## Unreleased
+
+### Added
+
+* A Setup Assistant now walks you through initial setup the first time you
+  launch TextMate: choose a light, dark or automatic appearance with a live
+  theme preview, then pick which bundled language and tool bundles to
+  install. It replaces the old "Install Default Bundles" prompt, runs once,
+  and stays available afterwards from Help → Setup Assistant….
+
 ## 2026-08-17 (v3.0.0-revived.25)
 
 Quick Look previews work again.

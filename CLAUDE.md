@@ -325,6 +325,34 @@ The deployment target is macOS 26.0, so never write `@available(macOS 26, *)` gu
 
 `OakTextView`'s own drawing is deliberately out of scope: text needs an opaque backdrop.
 
+### Setup Assistant (Phase 6)
+
+`Applications/TextMate/src/SetupAssistant/` is the onboarding island: a three-step SwiftUI wizard
+(welcome, appearance, bundles) that replaces `FirstLaunchBundleInstaller`'s modal window at first
+launch and is re-runnable from `Help → Setup Assistant…`. Gated by a new `didRunSetupAssistant`
+default (`SetupAssistantGating.h`) rather than a reuse of the legacy
+`kUserDefaultsDidPromptForDefaultBundlesKey` — every existing user already has the old key set, and
+reusing it would hide the assistant from exactly the people the appearance step exists for. The Help
+entry point never consults that gate; it always shows.
+
+**`TextMate-Bridging-Header.h` reaches only `SetupAssistantTypes.h`, and that header must stay a
+narrow, self-contained, pure-ObjC shim** — the constraint the Swift section above establishes in
+general (ClangImporter compiles a bridging header as C/ObjC only, with no prefix header, so
+anything it imports must stand alone). `SetupAssistantTypes.h`'s own file comment states the rule
+it follows: no C++, nothing under `Xcode/include/`, `#import <Cocoa/Cocoa.h>` for its own needs
+rather than relying on a prefix header supplying it. `TMThemeChoice` and `TMBundleChoice` are plain
+Objective-C mirrors of `theme_ptr` and `BundleSpec` for the same reason — neither real type can
+cross this header, one being C++ and the other living behind `Xcode/include/`.
+
+**`SetupAssistantCore` exists as its own `library.static`** (`SetupAssistantTypes.mm`,
+`SetupAssistantGating.mm`) because `TextMate_test` compiles only `bin/gen_test`'s generated runner
+(see Tests below) — anything the runner's tests exercise has to come from a library both `TextMate`
+and `TextMate_test` link, the same shape `PreferencesMigration` already used. `t_setup_assistant.mm`
+reaches the gating predicate and the never-suggest merge through it. `SetupAssistantWindowController.mm`
+and the SwiftUI view itself stay out of that library and in the `TextMate` app target's own
+sources instead — they need AppKit/SwiftUI, which a lightweight test tool has no reason to carry —
+so the window controller's C++ theme extraction is verified by hand rather than by this suite.
+
 ## Tests
 
 CxxTest-style, but home-grown: `bin/gen_test` reads each `tests/t_*.{cc,mm}` file, finds top-level `void test_*()` functions, and emits a single runner with `main()`. Assertions are `OAK_ASSERT`, `OAK_ASSERT_EQ`, `OAK_ASSERT_NE`. Filesystem fixtures use `test::jail_t` from `Frameworks/test`.

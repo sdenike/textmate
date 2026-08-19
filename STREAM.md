@@ -4,6 +4,82 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-19 — Task 8 landed: the Setup Assistant now runs at first launch
+
+**What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-8-brief.md`, the last task.
+`AppController.mm`'s `applicationDidFinishLaunching:` no longer calls `[FirstLaunchBundleInstaller
+promptIfNeeded]`; it now calls `[SetupAssistantWindowController.sharedInstance runModal]`, guarded
+by `TMSetupAssistantShouldRunAtLaunch(NSUserDefaults.standardUserDefaults)`. Added the
+`SetupAssistant/SetupAssistantGating.h` import beside the window-controller one and dropped the now-
+unused `FirstLaunchBundleInstaller.h` import — nothing else in the file referenced that class.
+`FirstLaunchBundleInstaller.mm`/`.h` lost `+promptIfNeeded`, `sActiveInstaller`,
+`-initWithCandidates:`, `-buildContentView`, `-show`, `-dismiss`, the `FLBITableView` subclass, the
+table view data source/delegate methods, and `-skip:`/`-installSelected:`/
+`-observeValueForKeyPath:...` — the entire window/NIB-free-construction layer. `+candidateSpecs`
+survives untouched, along with the three imports it needs (`BundlesManager.h`, `BundleRegistry.h`,
+`BundleSpec.h`); `SetupAssistantWindowController.mm`'s `-availableBundles` and
+`-installBundleIdentifiers:neverSuggest:` both still call it and needed no change. Verified before
+deleting anything: `grep -rn promptIfNeeded --include=*.mm --include=*.h .` had exactly three hits
+(the header declaration, the `.mm` definition, the one `AppController.mm` call site) — no other
+caller existed to update. Confirmed after: every symbol `candidateSpecs`'s body touches
+(`TMBundleOriginShipped`, `installedSHA`, `uuid`, `name`, `category`,
+`kUserDefaultsBundlesToNeverSuggestKey`, `BundleRegistry.sharedInstance.allSpecs`) still resolves
+through the kept imports. Rewrote the header's stale class comment, which had described the deleted
+modal ("Enter activates Install Selected; ESC activates Skip...") — left as-is it would have
+actively misdescribed the class.
+
+**One change outside the brief, called for explicitly:** `SetupAssistantView.swift`'s `finish()`
+switched both `.map { $0.identifier! }` calls to `.compactMap { $0.identifier }`. Same result under
+today's invariant (`BundleSpec.mm:21` refuses to construct a spec with a nil `uuid`, and
+`NSUUID.UUIDString` is non-nullable) — but `compactMap` drops a future nil instead of crashing on
+it, and a first-launch wizard is the worst place to force-unwrap something a later change to
+`TMBundleChoice`'s producers could break. Updated the comment above it, which had explained the old
+force-unwrap and would otherwise now describe code that no longer exists.
+
+**CHANGELOG.md gets `## Unreleased`, not a dated version heading.** Read
+`.github/workflows/release.yml` first: it fires on any push to `master` that touches
+`CHANGELOG.md`, extracts the version from the *first* `^## .* (v.*)$` line, and releases it if the
+version contains `-revived` and no matching tag exists yet. Inventing the next version number now
+would auto-publish the moment this branch merges — before the maintainer's own manual QA pass. Dug
+into `git log -S'## Unreleased' -- CHANGELOG.md` and found the repo already has exactly this
+pattern: commit `761a219a` added a bare `## Unreleased` heading for a feature landing, and a later,
+separate `release:` commit (`c0631a40`) renamed it to a dated `(v3.0.0-revived.23)` heading plus a
+one-line summary. Followed that convention exactly rather than inventing a new one. Confirmed safe
+by running the workflow's own extraction regex against the edited file: it still resolves to
+`3.0.0-revived.25`, the already-tagged top entry, because `## Unreleased` has no `(v...)` suffix to
+match.
+
+**HANDOFF.md:** Phase 6 items table's onboarding row is now `**done**`; the "Onboarding is designed
+and approved... Nothing is implemented yet" paragraph is rewritten to "Onboarding is done" naming
+what shipped and the two things that are genuinely still outstanding (both human-only, both outside
+this environment): the maintainer's manual walk of the five first-launch scenarios the spec names,
+and a green CI run on the pushed branch. Current-state table's `Phase 6` and `Unreleased` rows
+updated to match.
+
+**CLAUDE.md** gains a `### Setup Assistant (Phase 6)` subsection under Architecture: the gating-key
+rename rationale (a new `didRunSetupAssistant` default rather than reusing the legacy prompt key, so
+existing users see the assistant once too), that `TextMate-Bridging-Header.h` reaches only
+`SetupAssistantTypes.h` and why that header has to stay pure-ObjC, and why `SetupAssistantCore` is
+split into its own `library.static` — `TextMate_test` compiles only `bin/gen_test`'s generated
+runner, so anything its tests exercise has to come from a library both `TextMate` and
+`TextMate_test` link, the same shape `PreferencesMigration` already used.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **`. `bin/build TextMate/test` → `** BUILD SUCCEEDED
+**`; `TextMate_test -v` run directly → `TextMate_test: 14 tests passed`, unchanged count — the brief
+specified no new tests for this task.
+
+### If interrupted here
+
+All eight tasks of `docs/superpowers/specs/2026-08-18-setup-assistant-design.md` are implemented and
+committed on `phase-6/swiftui-onboarding`. `FirstLaunchBundleInstaller` no longer has a window at
+all; the Setup Assistant is the only path to installing default bundles now, both at first launch
+and from `Help → Setup Assistant…`. What's left is explicitly human-only and could not be done from
+here: the maintainer's manual walk of the brief's Step 4 checklist (fresh-profile launch order, ESC-
+skip persistence, Help reopening with live state rather than a blank wizard, a chosen theme actually
+applying, checked/unchecked bundles persisting correctly), and pushing the branch to confirm CI is
+green (Step 7) before treating the phase item as done. Until both happen, do not turn `##
+Unreleased` into a dated version heading — that is the deliberate act that ships this.
+
 ## 2026-08-18 — Task 7 landed: the bundles step, and the brief's own snippet failed to compile
 
 **What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-7-brief.md`.

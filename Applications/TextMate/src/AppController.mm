@@ -2,10 +2,10 @@
 #import "OakMainMenu.h"
 #import "Favorites.h"
 #import "AboutWindowController.h"
-#import "FirstLaunchBundleInstaller.h"
 #import "TMPlugInController.h"
 #import "RMateServer.h"
 #import "SetupAssistant/SetupAssistantWindowController.h"
+#import "SetupAssistant/SetupAssistantGating.h"
 #import <BundleEditor/BundleEditor.h>
 #import <BundlesManager/BundlesManager.h>
 #import <DocumentWindow/DocumentWindowController.h>
@@ -592,7 +592,8 @@ BOOL HasDocumentWindow (NSArray* windows)
 
 	self.didFinishLaunching = YES;
 
-	[FirstLaunchBundleInstaller promptIfNeeded];
+	if(TMSetupAssistantShouldRunAtLaunch(NSUserDefaults.standardUserDefaults))
+		[SetupAssistantWindowController.sharedInstance runModal];
 }
 
 - (void)applicationWillResignActive:(NSNotification*)aNotification

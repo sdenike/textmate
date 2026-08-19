@@ -89,16 +89,19 @@ final class SetupAssistantModel: ObservableObject {
 		// that changes, rather than silently re-installing or re-declining
 		// something already on disk.
 		//
-		// The trailing ! on each map: identifier has unspecified nullability in
-		// the header, so it imports as String!, and .map's inferred closure
-		// return type decays that to String? (SE-0054) -- which does not
-		// satisfy installBundleIdentifiers's [String] parameters. Force-unwrap
-		// is safe here: every TMBundleChoice comes from -availableBundles,
-		// which always passes a real identifier string (spec.uuid.UUIDString)
-		// into the factory method.
+		// identifier has unspecified nullability in the header, so it imports
+		// as String!, and satisfying installBundleIdentifiers's [String]
+		// parameters needs it unwrapped one way or another. compactMap drops
+		// any nil rather than force-unwrapping: every TMBundleChoice comes
+		// from -availableBundles, which always passes a real identifier
+		// string (spec.uuid.UUIDString, and BundleSpec.mm:21 refuses to
+		// construct a spec with no uuid) into the factory method, so this is
+		// an identical result today -- but a first-launch wizard is the worst
+		// place for a future producer of TMBundleChoice to crash the app over
+		// a nil identifier instead of just omitting one bundle.
 		let offered = allBundles.filter { !$0.installed }
-		let install = offered.filter { checkedBundleIdentifiers.contains($0.identifier) }.map { $0.identifier! }
-		let never   = offered.filter { !checkedBundleIdentifiers.contains($0.identifier) }.map { $0.identifier! }
+		let install = offered.filter { checkedBundleIdentifiers.contains($0.identifier) }.compactMap { $0.identifier }
+		let never   = offered.filter { !checkedBundleIdentifiers.contains($0.identifier) }.compactMap { $0.identifier }
 		host.installBundleIdentifiers(install, neverSuggest: never)
 
 		host.finish(withSkip: false)

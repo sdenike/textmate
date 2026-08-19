@@ -21,9 +21,9 @@ maintainer and enforced throughout:
 | | |
 |---|---|
 | Released | **v3.0.0-revived.25** — PR #18 merged as `a8bc6398` |
-| Unreleased | none |
+| Unreleased | Setup Assistant, on `phase-6/swiftui-onboarding` — CHANGELOG has an `## Unreleased` entry, no version cut yet; pending the maintainer's manual first-launch QA and a green CI run |
 | Phases complete | 0-5, 7 |
-| Phase 6 | remainder in progress — QuickLook done, Swift interop proven, islands not written |
+| Phase 6 | remainder in progress — QuickLook done, onboarding island done, Preferences/About/update-sheet islands not written |
 | Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |
 | Build | `TextMate.xcodeproj`, generated from `project.yml` by XcodeGen |
 | Bundle | 26,012 KB — **1,916 KB smaller than the `undead` baseline** |
@@ -42,7 +42,7 @@ were never started:
 | Scope bar | **already done — since 2014** | none |
 | Back/forward navigation | **already done — since 2018** | none |
 | **QuickLook extension** | **done and verified** — previews render syntax highlighted | — |
-| SwiftUI islands: onboarding | not done — no existing implementation | small-medium |
+| SwiftUI islands: onboarding | **done** — Setup Assistant, first launch and `Help → Setup Assistant…` | — |
 | SwiftUI islands: Preferences, About, update sheet | not done | large |
 | `NSSplitViewController` sidebar | not started | large — defer |
 | `NSRulerView` gutter | not done | large — **do not do** |
@@ -191,12 +191,16 @@ shape every island: Swift declarations must be `public` to be visible to ObjC++ 
 bridging header must be a narrow, self-contained, pure-ObjC shim rather than a pointer at the app's
 real ObjC++ headers.
 
-**Onboarding is designed and approved** —
-`docs/superpowers/specs/2026-08-18-setup-assistant-design.md`, committed 2026-08-18. It ships as a
-three-step **Setup Assistant** (welcome, appearance, bundles) that replaces
-`FirstLaunchBundleInstaller`'s modal and is re-runnable from `Help → Setup Assistant…`. The `mate`
-CLI step was considered and cut. Nothing is implemented yet; the next step is an implementation
-plan, not code.
+**Onboarding is done** — spec at
+`docs/superpowers/specs/2026-08-18-setup-assistant-design.md`, implemented 2026-08-18 across eight
+tasks on `phase-6/swiftui-onboarding`. It ships as a three-step **Setup Assistant** (welcome,
+appearance, bundles) that replaces `FirstLaunchBundleInstaller`'s modal, runs once at first launch
+(gated on a new `didRunSetupAssistant` default so existing users see it too — the Help entry point
+does not consult that gate and always shows), and is re-runnable from `Help → Setup Assistant…` with
+current state reflected rather than a blank wizard. The `mate` CLI step was considered and cut.
+`bin/build` and `bin/build TextMate/test` (14 tests) pass. Two things remain before this branch
+merges, both human-only and out of the agent sandbox: the maintainer's manual walk of the five
+first-launch scenarios the spec names, and a green CI run on the pushed branch.
 
 It was the right island to start with because it is the only one of the four with no existing
 implementation — nothing to reach parity with, so a mistake costs only itself.
