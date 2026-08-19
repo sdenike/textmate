@@ -5,6 +5,7 @@
 #import "FirstLaunchBundleInstaller.h"
 #import "TMPlugInController.h"
 #import "RMateServer.h"
+#import "SetupAssistant/SetupAssistantWindowController.h"
 #import <BundleEditor/BundleEditor.h>
 #import <BundlesManager/BundlesManager.h>
 #import <DocumentWindow/DocumentWindowController.h>
@@ -408,6 +409,8 @@ BOOL HasDocumentWindow (NSArray* windows)
 		{ @"Help",
 			.systemMenu = MBMenuTypeHelp, .submenu = {
 				{ @"TextMate Help", @selector(showHelp:), @"?" },
+				{ /* -------- */ },
+				{ @"Setup Assistant…", @selector(showSetupAssistant:) },
 			}
 		},
 	};
@@ -656,6 +659,11 @@ BOOL HasDocumentWindow (NSArray* windows)
 - (IBAction)orderFrontAboutPanel:(id)sender
 {
 	[AboutWindowController.sharedInstance showAboutWindow:self];
+}
+
+- (IBAction)showSetupAssistant:(id)sender
+{
+	[SetupAssistantWindowController.sharedInstance runModal];
 }
 
 - (IBAction)orderFrontFindPanel:(id)sender

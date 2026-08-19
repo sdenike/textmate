@@ -1851,6 +1851,7 @@ targets:
       - path: "Applications/TextMate/src/TMPlugInController.mm"
       - path: "Applications/TextMate/src/main.mm"
       - path: "Applications/TextMate/src/SetupAssistant/SetupAssistantView.swift"
+      - path: "Applications/TextMate/src/SetupAssistant/SetupAssistantWindowController.mm"
     settings:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"

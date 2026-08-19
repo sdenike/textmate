@@ -4,6 +4,41 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-18 — Task 4 landed: an empty assistant window, reachable from Help
+
+**What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-4-brief.md`. Added
+`SetupAssistantWindowController.{h,mm}` (an `NSWindowController` subclass with an empty content
+view — SwiftUI content is Task 5), a `Help → Setup Assistant…` menu item with a separator before it
+(`AppController.mm:408-414`, using the project's real separator literal `{ /* -------- */ }`,
+confirmed against existing uses in the Bundles and Window menus before writing it), and
+`-[AppController showSetupAssistant:]` beside `orderFrontAboutPanel:`. `project.yml` gained the one
+new source path; `xcodegen generate` picked it up along with the known harmless swap of the two
+"Embed Dependencies" phase orderings.
+
+**Deviation from the brief, required by the task instructions:** the brief's `-init` never sets
+`window.delegate`, so its own `-windowWillClose:` would never fire and `-stopModal` would never run
+— a modal session with no window and an unresponsive app, recoverable only by force-quit. Added
+`window.delegate = self;` after the `contentView` assignment. That assignment does not type-check
+against a bare `NSWindowController` subclass (`assigning to 'id<NSWindowDelegate>' from incompatible
+type`), so the class extension also gained `<NSWindowDelegate>` conformance — required for the fix
+to compile, not scope creep. The `TMSetupAssistantHost` class extension stays empty as briefed;
+that conformance is Task 5's.
+
+Build: `bin/build` → `** BUILD SUCCEEDED **`. `bin/build TextMate/test` → exit 0, 14/14 tests still
+passing (confirmed verbosely via the binary directly: `TextMate_test -v` → `14 tests passed`; no
+tests were added this task). Verification stops there — opening the window, confirming it's modal,
+and confirming the close button restores responsiveness all need a human at a keyboard, per the
+brief's own Step 6.
+
+### If interrupted here
+
+Task 4 is committed and built clean. Task 5 (the actual SwiftUI content view, replacing the empty
+`NSView`) is next and is the point where the modules-off Swift interop this repo has never exercised
+actually gets proven under a real window rather than in isolation. Read the "No target in this tree
+has ever contained a Swift file" note in `CLAUDE.md` before starting it.
+
+---
+
 ## 2026-08-18 — a test that could not fail, and the plan line that caused it
 
 `b22a2479` corrects `test_legacy_bundle_prompt_key_does_not_suppress_the_assistant`. It wrote

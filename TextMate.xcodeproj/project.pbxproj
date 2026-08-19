@@ -640,6 +640,7 @@
 		8E8D6480A5F95F0188E2BC44 /* libTMFileReference.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F81B4B589B102F75B74D1BE2 /* libTMFileReference.a */; };
 		8EC40641BBAD1A5B6AAC0FFB /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C05530F9E0175FD5842AE9E4 /* Carbon.framework */; };
 		8EE9A0874ADAED2E1778F8C9 /* load.cc in Sources */ = {isa = PBXBuildFile; fileRef = 602F37416AC93957C4E3838A /* load.cc */; };
+		8F5E3FCE816F2A1C44DF2859 /* SetupAssistantWindowController.mm in Sources */ = {isa = PBXBuildFile; fileRef = EF71DC13B18BAA073BE2377E /* SetupAssistantWindowController.mm */; };
 		8F620B2D976D7C50D629D299 /* Quartz.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E67BF38E3A6D8305D51F3E9B /* Quartz.framework */; };
 		8F86A2024D5BEE81552DCAFF /* libio.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 10B874173E1C9917097A3BF4 /* libio.a */; };
 		8FF00324F5C97BB547CF30AF /* libplist.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A9ED9849685A43ABB394279 /* libplist.a */; };
@@ -5015,11 +5016,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 6;
+			dstSubfolderSpec = 13;
 			files = (
-				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
-				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
-				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5028,11 +5029,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstSubfolderSpec = 6;
 			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
-				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
+				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
+				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
+				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5493,6 +5494,7 @@
 		ED242C5E3319DA0194C64914 /* libOakTextView.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libOakTextView.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		EEC055AD2A7C242CC1B702EE /* parser.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = parser.cc; sourceTree = "<group>"; };
 		EED8AE8E45753AB29C2AF2FC /* OakDebugLog.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = OakDebugLog.cc; sourceTree = "<group>"; };
+		EF71DC13B18BAA073BE2377E /* SetupAssistantWindowController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SetupAssistantWindowController.mm; sourceTree = "<group>"; };
 		EFAE8F629E437B87EBBC11B0 /* OakAssert.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OakAssert.mm; sourceTree = "<group>"; };
 		F00B8C329A723C2AAA9D0506 /* io_test */ = {isa = PBXFileReference; includeInIndex = 0; path = io_test; sourceTree = BUILT_PRODUCTS_DIR; };
 		F01927BFE24997B5F5A4E5C0 /* BundlesManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = BundlesManager.mm; sourceTree = "<group>"; };
@@ -6671,6 +6673,7 @@
 				D831CCB80EF83DC3B571D5A0 /* SetupAssistantGating.mm */,
 				B924106BC49F02D90F26A96B /* SetupAssistantTypes.mm */,
 				103A4FCC12A7948336C42F1B /* SetupAssistantView.swift */,
+				EF71DC13B18BAA073BE2377E /* SetupAssistantWindowController.mm */,
 			);
 			path = SetupAssistant;
 			sourceTree = "<group>";
@@ -11610,6 +11613,7 @@
 				09BDFDF1862DE376EBC0C233 /* OakMainMenu.mm in Sources */,
 				569F2000FD6B26BE1DB79290 /* RMateServer.mm in Sources */,
 				87CB8EEC370BFD34D70945A8 /* SetupAssistantView.swift in Sources */,
+				8F5E3FCE816F2A1C44DF2859 /* SetupAssistantWindowController.mm in Sources */,
 				4C62445B551B80D9D8BCE1BA /* TMPlugInController.mm in Sources */,
 				E3466E2679D726349FFC53FC /* main.mm in Sources */,
 			);
