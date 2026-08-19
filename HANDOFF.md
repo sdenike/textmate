@@ -191,8 +191,15 @@ shape every island: Swift declarations must be `public` to be visible to ObjC++ 
 bridging header must be a narrow, self-contained, pure-ObjC shim rather than a pointer at the app's
 real ObjC++ headers.
 
-**Start with onboarding.** It is the only one of the four with no existing implementation, so there
-is nothing to reach parity with — everything built is new, and a mistake costs only itself.
+**Onboarding is designed and approved** —
+`docs/superpowers/specs/2026-08-18-setup-assistant-design.md`, committed 2026-08-18. It ships as a
+three-step **Setup Assistant** (welcome, appearance, bundles) that replaces
+`FirstLaunchBundleInstaller`'s modal and is re-runnable from `Help → Setup Assistant…`. The `mate`
+CLI step was considered and cut. Nothing is implemented yet; the next step is an implementation
+plan, not code.
+
+It was the right island to start with because it is the only one of the four with no existing
+implementation — nothing to reach parity with, so a mistake costs only itself.
 
 Preferences, About and the update sheet are each large: together roughly 1,945 lines of working
 AppKit whose behaviour a SwiftUI rewrite has to match exactly, including key equivalents and the

@@ -4,7 +4,59 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-18 — RESUME HERE: .25 published, and Swift proved to work in this tree
+## 2026-08-18 — RESUME HERE: Setup Assistant designed and approved, not yet built
+
+Spec committed at `docs/superpowers/specs/2026-08-18-setup-assistant-design.md`. Branch
+`phase-6/swiftui-onboarding`, tree clean, **no implementation written yet**. Next step is the
+implementation plan, then TDD against it.
+
+### What the design decided, and the one thing that changed the premise
+
+Onboarding was described in HANDOFF as having "no existing implementation." That is true of
+onboarding as a concept and false in a way that matters: `FirstLaunchBundleInstaller` already runs a
+modal at `AppController.mm:592` offering default-tier bundles. So this is not new UI beside an empty
+space — it replaces a single-purpose modal and absorbs its job. The class stays as the engine; only
+its window is retired. `DocumentWindowController.mm:1231,1273-1274` reads
+`kUserDefaultsBundlesToNeverSuggestKey` for the on-demand per-extension prompt, so the bundles step
+has to keep writing it.
+
+Three steps: welcome, appearance, bundles. Appearance is the step that earns the feature — theme
+lives in `View → Theme` and nowhere else, which is exactly why an untouched `kMacClassicThemeUUID`
+default read as lost settings earlier this month.
+
+**The `mate` CLI step was cut by the maintainer.** It already installs from Settings → Terminal
+(`TerminalPreferences.mm:265-288`). Keeping it would have meant extracting `install_mate()` from
+file-static scope, duplicating an authentication flow, and proving a system auth dialog behaves over
+an app-modal window. Cutting it removed the riskiest part of the island and the only change to
+existing privileged code.
+
+`Ruling: the bridge shape is dictated by the spike's measurements, not by taste. A bridging header
+is parsed as C/ObjC and compiled without the prelude PCH, so neither C++ nor this tree's own
+framework headers can cross it. ObjC++ therefore owns the window and every side effect; Swift owns
+presentation and local view state only. Any design that put Swift in charge would have widened the
+boundary, not narrowed it.`
+
+### Two checks during spec self-review that were worth doing
+
+- Claimed "twenty-two themes on a stock profile" when what was measured was **this** machine, which
+  has 54 bundles installed. Corrected to state the measurement and its date rather than imply a
+  floor.
+- Verified rather than assumed that `gen_test.sh` globs `Applications/TextMate/tests/`. It does —
+  `:29-31` falls back `Frameworks/<name>` → `vendor/<name>` → `Applications/<name>`. Had it not, the
+  planned `t_setup_assistant.mm` would never have compiled and the suite would have reported green
+  without running it.
+
+### If interrupted here
+
+The spec is approved but **no plan document exists yet**. Read the spec, then invoke
+`superpowers:writing-plans`. Do not start writing Swift before the plan exists. The two risks the
+spec names and neither the spec nor anything else has retired: this is the first target to carry
+both `.swift` and `.mm` through a clean CI build, and SwiftUI initialising inside a modal session
+before session restore is something this app has never done.
+
+---
+
+## 2026-08-18 — .25 published, and Swift proved to work in this tree
 
 **PR #18 merged** as `a8bc6398`, branch deleted locally and on origin. That fired `release.yml` and
 published **v3.0.0-revived.25**. Now on `phase-6/swiftui-onboarding`, tree clean, nothing in flight.
