@@ -4,6 +4,45 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-18 — Task 2 landed: SetupAssistantCore library, and the first test that runs
+
+**What:** Executed Task 2 of `docs/superpowers/plans/2026-08-18-setup-assistant.md`. Wrote
+`Applications/TextMate/tests/t_setup_assistant.mm` first (two tests exercising `TMThemeChoice` /
+`TMBundleChoice`) and confirmed it fails at link with `Undefined symbols … _OBJC_CLASS_$_TMThemeChoice`
+(plus `NSColor`, `TMBundleChoice`, and the two color-constant symbols, since `TextMate_test` did not
+yet link AppKit or anything implementing the header). Then created
+`Applications/TextMate/src/SetupAssistant/SetupAssistantTypes.mm` implementing the two classes and
+the two pure rule functions (`TMThemeAppearanceForSemanticClass`, `TMMergeNeverSuggestIdentifiers`),
+appended the three pure-rule tests, added the `SetupAssistantCore` `library.static` target to
+`project.yml` (linked by both `TextMate` and `TextMate_test`, plus `AppKit.framework` on the test
+target for `NSColor`), regenerated `TextMate.xcodeproj`, and got `** BUILD SUCCEEDED **` with all
+10 tests passing (`TextMate_test -v` → `10 tests passed`: 5 new + the 5 existing
+preferences-migration ones).
+
+**Why:** `TextMate_test` compiles only the generated runner, so anything it exercises has to come
+from a library both binaries link — the shape `PreferencesMigration` already established.
+`SetupAssistantCore` is that library for the Setup Assistant's boundary types.
+
+One thing worth recording for later tasks transcribing brief code verbatim: the brief's
+`test_never_suggest_merges_rather_than_replaces` body, as written, does not compile.
+`OAK_ASSERT` is a plain preprocessor macro (`bin/gen_test:110`), and the preprocessor's macro
+argument splitting only tracks `()`, not `[]` — so the un-parenthesized top-level commas inside
+`@[ @"A", @"B", @"C" ]` inside the assertion read as extra macro arguments
+(`error: too many arguments provided to function-like macro invocation`). Fixed by wrapping the
+whole assertion expression in one extra parenthesis pair (`OAK_ASSERT((...))`); no semantic change.
+Full detail in `.superpowers/sdd/2026-08-18-setup-assistant/task-2-report.md`.
+
+### If interrupted here
+
+Task 2 is fully done, verified, and about to be committed. Task 3 is next: append
+`SetupAssistantGating.mm` to `SetupAssistantCore`'s sources and more tests to `t_setup_assistant.mm`
+(append-only, per the pre-flight scan in `.superpowers/sdd/2026-08-18-setup-assistant/progress.md`).
+Read that file's Task 3 self-consistency note first, and re-check any brief code block containing
+an `@[ ... ]` literal inside an `OAK_ASSERT(...)` for the same unparenthesized-macro-argument trap
+before assuming it compiles as transcribed.
+
+---
+
 ## 2026-08-18 — Task 1 landed: the first committed Swift file
 
 **What:** Executed Task 1 of `docs/superpowers/plans/2026-08-18-setup-assistant.md`. Created

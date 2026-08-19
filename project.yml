@@ -1964,6 +1964,8 @@ targets:
         link: true
       - target: PreferencesMigration
         link: true
+      - target: SetupAssistantCore
+        link: true
       - sdk: Cocoa.framework
       - sdk: AddressBook.framework
       - sdk: Foundation.framework
@@ -2031,6 +2033,14 @@ targets:
     settings:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
+  SetupAssistantCore:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: "Applications/TextMate/src/SetupAssistant/SetupAssistantTypes.mm"
+    settings:
+      base:
+        GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
   TextMate_test:
     type: tool
     platform: macOS
@@ -2049,7 +2059,9 @@ targets:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
     dependencies:
       - target: PreferencesMigration
+      - target: SetupAssistantCore
       - sdk: Foundation.framework
+      - sdk: AppKit.framework
   PrivilegedTool:
     type: tool
     platform: macOS
