@@ -301,11 +301,47 @@ struct ThemePreview: View {
 }
 
 struct WelcomeStepView: View {
-	var body: some View {
+	// About/css/tml_image.png ships as an About-window asset under
+	// Contents/Resources/About/css/, a path NSImage(named:) cannot resolve by
+	// bare name -- so this is a bundle URL lookup rather than an asset-catalog
+	// entry, which would mean shipping the 579 KB file a second time. Either
+	// lookup failing (nil URL, or a URL NSImage can't decode) falls through to
+	// `copy` unadorned, identical to the step's pre-image appearance -- never a
+	// blank or broken step.
+	private var backgroundImage: NSImage? {
+		guard let url = Bundle.main.url(forResource: "tml_image", withExtension: "png", subdirectory: "About/css") else { return nil }
+		return NSImage(contentsOf: url)
+	}
+
+	private var copy: some View {
 		VStack(alignment: .leading, spacing: 12) {
 			Text("TextMate Revived is a fork of TextMate for macOS 26 on Apple Silicon.")
 			Text("This assistant sets up how the editor looks and which bundles you have. You can run it again at any time from the Help menu.")
 				.foregroundStyle(.secondary)
+		}
+	}
+
+	var body: some View {
+		if let backgroundImage {
+			// The About window's photo behind plain body text needs a scrim to
+			// stay legible; .thinMaterial behind just the copy (not the whole
+			// image) keeps the backdrop visible at the edges while adapting to
+			// light/dark automatically, matching how the rest of this wizard
+			// already leaves colour choices to the system rather than hand-picking one.
+			copy
+				.padding(16)
+				.background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+				.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+				.background(
+					Image(nsImage: backgroundImage)
+						.resizable()
+						.aspectRatio(contentMode: .fill)
+						.clipped()
+				)
+				.clipShape(RoundedRectangle(cornerRadius: 12))
+		}
+		else {
+			copy
 		}
 	}
 }

@@ -4,6 +4,38 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-19 — The textmatelives background image is back, at the maintainer's request, in the About window and behind Setup Assistant's Welcome step
+
+**What:** Recovered `Applications/TextMate/about/css/tml_image.png` (579,466 bytes) from git blob
+`bb196fc9`, the exact bytes `ac04adfa` deleted on 2026-08-14, via `git cat-file -p`. Restored the
+`background-image: url("tml_image.png")` rule in `about/css/stylesheet.css` that commit removed,
+and rewrote the comment above it — it used to explain the removal; now it records the removal *and*
+the restoration, with both commit references, rather than leaving a stale note beside the image it
+described as gone. `Xcode/scripts/assemble_resources.sh` already ships it: its About-section copy is
+`cp -p "$app/about/css/"*`, an unfiltered glob, not an extension allowlist, so no script change was
+needed — confirmed by inspection and then by listing the built bundle's `About/css/`. Added a
+background to `WelcomeStepView` in `SetupAssistantView.swift` (Setup Assistant's first step only,
+not `AppearanceStepView`, `BundlesStepView`, or the shared window chrome around all three): a bundle
+URL lookup (`Bundle.main.url(forResource:withExtension:subdirectory:)`, subdirectory `About/css`,
+verified against the installed `NSBundle.h`) rather than an asset-catalog copy, `.thinMaterial`
+behind the copy text as a scrim, and a nil-image fallback that renders the step exactly as before —
+Swift here can't reach `NSImage(named:)`'s app-bundle resolution the ObjC side gets for free. `bin/build`
+succeeded; `TextMate_test` 14/14. Built bundle confirmed to contain both `stylesheet.css` and
+`tml_image.png` under `Contents/Resources/About/css/`.
+
+**Why:** The maintainer knows the provenance — textmatelives' artwork, not this fork's — and asked
+for it back anyway; `ac04adfa`'s own removal rationale doesn't apply once that's an informed choice
+rather than an inherited default. Same image, two spots: the About window already had the CSS
+machinery for it, and the Setup Assistant's Welcome step is the other "first impression" surface in
+the app, so reusing the recovered file there costs nothing further to ship (579 KB once, not twice)
+and gives the wizard's opening screen the same visual identity as the About window.
+
+**If interrupted here:** nothing left to do for this change; it's a complete, self-contained diff.
+If picking this up cold, `git log -1` on this entry's commit shows the whole thing — CSS rule,
+comment rewrite, and the new `WelcomeStepView` body — in one place.
+
+---
+
 ## 2026-08-19 — Shipped-tier origin is now restored on reload, not only on first sight
 
 **What:** One-line-plus-comment fix in `+[BundleRegistry seedShippedDefaults]`
