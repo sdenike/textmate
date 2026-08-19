@@ -105,7 +105,12 @@ void test_legacy_bundle_prompt_key_does_not_suppress_the_assistant ()
 	NSString* suite = @"com.macromates.TextMate.SetupAssistantTest.Legacy";
 	NSUserDefaults* defaults = fresh_defaults(suite);
 
-	[defaults setBool:YES forKey:@"didPromptForDefaultBundles"];
+	// Real constant: kUserDefaultsDidPromptForDefaultBundlesKey, BundlesManager.mm:28,
+	// is @"DidPromptForDefaultBundles" -- capital D. Not imported symbolically:
+	// TextMate_test does not link BundlesManager, and pulling that framework in for
+	// one string constant is not worth it. The casing here is load-bearing; a lowercase
+	// "tidy-up" would silently make this test assert nothing.
+	[defaults setBool:YES forKey:@"DidPromptForDefaultBundles"];
 	OAK_ASSERT_EQ(TMSetupAssistantShouldRunAtLaunch(defaults), true);
 
 	[NSUserDefaults.standardUserDefaults removePersistentDomainForName:suite];

@@ -470,7 +470,7 @@ void test_legacy_bundle_prompt_key_does_not_suppress_the_assistant ()
 	NSString* suite = @"com.macromates.TextMate.SetupAssistantTest.Legacy";
 	NSUserDefaults* defaults = fresh_defaults(suite);
 
-	[defaults setBool:YES forKey:@"didPromptForDefaultBundles"];
+	[defaults setBool:YES forKey:@"DidPromptForDefaultBundles"];
 	OAK_ASSERT_EQ(TMSetupAssistantShouldRunAtLaunch(defaults), true);
 
 	[NSUserDefaults.standardUserDefaults removePersistentDomainForName:suite];
@@ -534,7 +534,7 @@ In `project.yml`, add to `SetupAssistantCore`'s `sources:`:
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `xcodegen generate --spec project.yml && bin/build TextMate/test`
-Expected: `** BUILD SUCCEEDED **`, all six tests passing.
+Expected: `** BUILD SUCCEEDED **`, 9 tests passing in this file, 14 in the target.
 
 - [ ] **Step 7: Commit**
 
