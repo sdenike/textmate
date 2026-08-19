@@ -1,8 +1,10 @@
 // Applications/TextMate/src/SetupAssistant/SetupAssistantWindowController.mm
 #import "SetupAssistantWindowController.h"
 #import "SetupAssistantGating.h"
+#import "SetupAssistantTypes.h"
+#import "TextMate-Swift.h"
 
-@interface SetupAssistantWindowController () <NSWindowDelegate>
+@interface SetupAssistantWindowController () <NSWindowDelegate, TMSetupAssistantHost>
 @end
 
 @implementation SetupAssistantWindowController
@@ -20,7 +22,7 @@
 
 	if(self = [super initWithWindow:window])
 	{
-		window.contentView = [[NSView alloc] initWithFrame:NSZeroRect];
+		window.contentView = [SetupAssistantHostingController viewFor:self];
 		// NSWindowController does not become its window's delegate on its own.
 		// Without this, -windowWillClose: below never fires, -stopModal never
 		// runs, and the title-bar close button leaves the app in a modal
@@ -62,6 +64,18 @@
 	// Closing the window with the title-bar button must end the modal session,
 	// or the app is left running a session with no window and stops responding
 	// to everything.
+	[NSApp stopModal];
+}
+
+- (NSArray<TMThemeChoice*>*)availableThemes                                   { return @[]; }
+- (NSArray<TMBundleChoice*>*)availableBundles                                 { return @[]; }
+- (NSString*)currentAppearance                                                { return nil; }
+- (NSString*)currentThemeIdentifierForAppearance:(NSString*)appearance        { return nil; }
+- (void)applyThemeIdentifier:(NSString*)identifier appearance:(NSString*)appearance { }
+- (void)installBundleIdentifiers:(NSArray<NSString*>*)install neverSuggest:(NSArray<NSString*>*)neverSuggest { }
+
+- (void)finishWithSkip:(BOOL)skipped
+{
 	[NSApp stopModal];
 }
 @end

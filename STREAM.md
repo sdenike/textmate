@@ -4,6 +4,63 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-18 — Task 5 landed: the SwiftUI shell, and a brief that was wrong on the load-bearing line
+
+**What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-5-brief.md`. `SetupAssistantView.swift`
+now holds the three-step shell: `SetupAssistantModel` (`@MainActor`, owns only which step is
+showing), `SetupAssistantView`, `WelcomeStepView`, and the Objective-C++ entry point
+`SetupAssistantHostingController.view(for:)`, exposed to ObjC as `+viewFor:`.
+`SetupAssistantWindowController.mm` installs the resulting `NSHostingView` as the window's
+`contentView` and implements `TMSetupAssistantHost` with the six data stubs the brief specifies
+(empty arrays / nil) plus `-finishWithSkip:`, which calls `[NSApp stopModal]`.
+
+**The brief's Step 2 code sample was wrong, and the task instructions that assigned this work said
+so up front.** It showed replacing the class extension with `<TMSetupAssistantHost>` alone, which
+would have dropped `<NSWindowDelegate>`. That conformance is what lets `-init` assign
+`window.delegate = self` and what makes `-windowWillClose:` — which calls `[NSApp stopModal]` — ever
+get invoked. Losing it is the same failure the previous entry's "Route one" describes, reopened: an
+app-modal session with no window on screen and no way out but a force-quit. It would not have shown
+up as a build error either — `window.delegate = self` still compiles against a narrower protocol
+list as long as nothing else in the file demanded `NSWindowDelegate`, so the break is silent until
+someone closes the window at runtime. Committed extension is
+`@interface SetupAssistantWindowController () <NSWindowDelegate, TMSetupAssistantHost>` — both
+protocols, confirmed present before building and again before committing.
+
+**Two further gaps, neither named in the brief, both compiler-caught rather than silent.**
+`SetupAssistantWindowController.mm` had never imported `SetupAssistantTypes.h` — Task 4 needed
+none of `TMThemeChoice`/`TMBundleChoice`/`TMSetupAssistantHost`, and the generated
+`TextMate-Swift.h` only forward-declares them (`@protocol TMSetupAssistantHost;`, no definition),
+which is enough for a bare pointer but not for declaring conformance or a method returning
+`NSArray<TMThemeChoice*>*`. Fixed with a direct import, ordered before `TextMate-Swift.h`.
+Separately, Swift 6 strict concurrency rejected the hosting bridge outright:
+`view(for:)` called `SetupAssistantModel.init(host:)`, which is `@MainActor`, from a nonisolated
+static context — `error: call to main actor-isolated initializer 'init(host:)' in a synchronous
+nonisolated context`. Marked `view(for:)` itself `@MainActor`; every real caller (window
+construction, from the Help menu action) is already on the main thread, so the isolation the
+function declares matches the isolation its caller is already running under. Nothing about who
+owns the model or the step state changed.
+
+**Build:** `bin/build` → `** BUILD SUCCEEDED **`, clean of SetupAssistant-related warnings.
+`bin/build TextMate/test` → `TextMate_test: 14 tests passed`, unchanged from Task 4 — this task
+added no new tests, per the brief.
+
+**Not yet done, deliberately:** all six data-returning/data-applying `TMSetupAssistantHost` methods
+are stubs; the appearance and bundles steps are placeholder `Text` views (Tasks 6 and 7). Nobody has
+put the window on screen — the task that assigned this work ruled that out for this environment, so
+verification here is build and test only. A human still needs to `bin/deploy-local` and click
+through: Back/Continue/Skip navigate three steps, Back is absent on step one, the last step's button
+reads "Done", Return activates the default button, and closing with the title-bar button leaves the
+app responsive.
+
+### If interrupted here
+
+Tasks 1-5 are complete. Task 6 (appearance step: wire `availableThemes`, `currentAppearance`,
+`applyThemeIdentifier:appearance:`) and Task 7 (bundles step) remain, plus the manual click-through
+above. Nothing is wired into launch yet — the assistant is reachable only from the Help menu until
+Task 8, so none of this can affect normal startup in the meantime.
+
+---
+
 ## 2026-08-18 — two independent routes to a hung app, both closed before anyone clicked
 
 Task 4 of the Setup Assistant plan landed the window and the `Help → Setup Assistant…` item
