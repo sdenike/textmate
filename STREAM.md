@@ -4,6 +4,46 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-18 — two independent routes to a hung app, both closed before anyone clicked
+
+Task 4 of the Setup Assistant plan landed the window and the `Help → Setup Assistant…` item
+(`a0d16a0c`), then a reentrancy guard (`399cd307`). Both changes exist because of the same failure:
+an app-modal session with no window on screen, unresponsive, recoverable only by force-quit.
+
+**Route one — no window delegate.** The plan's code relied on `-windowWillClose:` calling
+`[NSApp stopModal]`, but nothing made the controller the window's delegate, so it would never fire.
+Caught in the pre-flight scan before implementation. Fixing it required
+`@interface SetupAssistantWindowController () <NSWindowDelegate>` as well, since assigning `self` to
+`window.delegate` does not compile without it.
+
+**Route two — no reentrancy guard.** `AppController.mm:770`'s `validateMenuItem:` does not disable
+`showSetupAssistant:` during a modal session, so choosing the menu item again while the assistant is
+open starts a *nested* `runModalForWindow:` on the same singleton window. The single
+`windowWillClose:` unwinds only the innermost session; the outer one blocks forever. Found by task
+review, not by the compiler and not by the test suite — neither can see it.
+
+`Ruling: fixed rather than parked, because the maintainer was about to be handed a build and asked
+to exercise that exact menu item. Reopening a new window is the first thing anyone does while poking
+at one. Cost if wrong: a few inert lines in the single-open case.`
+
+### Still open at time of writing
+
+The guard tests `self.window.isVisible`, which is only correct if `-runModalForWindow:` itself makes
+the window visible. **That is unverified.** The macOS 26 SDK's `NSApplication.h` carries no doc
+comment for the method, and the in-repo comment at `SoftwareUpdate.mm:606` does *not* support it —
+it concerns the window's level after the session ends, not ordering front. A guard resting on an
+unproven assumption is close to no guard, so a scoped re-review is establishing the answer with a
+standalone test program. If `isVisible` proves unreliable the guard becomes an explicit `BOOL` set
+around the session, which depends on nothing.
+
+### If interrupted here
+
+Tasks 1-3 are complete and reviewed. Task 4 is in fix round 1 of 5 awaiting that re-review. Task 5
+(the SwiftUI shell) is briefed and unstarted. Nothing is wired into launch yet — the assistant is
+reachable only from the Help menu until Task 8, so a hang cannot affect normal startup.
+
+---
+
 ## 2026-08-18 — Task 4 landed: an empty assistant window, reachable from Help
 
 **What:** Executed `.superpowers/sdd/2026-08-18-setup-assistant/task-4-brief.md`. Added
