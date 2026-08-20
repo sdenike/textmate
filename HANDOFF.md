@@ -196,8 +196,23 @@ match exactly — including the key equivalents and responder chain the gate nam
 cheap to get wrong because it had no predecessor; these are not. Expect each to need its own spec and
 plan rather than one sweep across all three.
 
+**About was evaluated and dropped, 2026-08-19.** It is not an AppKit window — it is a `WKWebView`
+in a 292-line controller, rendering HTML that `assemble_resources.sh` generates from Markdown at
+build time, with version and copyright injected at runtime as JavaScript globals
+(`AboutWindowController.mm:84-94`). Porting it to SwiftUI would mean writing a Markdown renderer
+good enough for the Changes page — 269 KB, 202 releases of nested lists, headings, links and code —
+plus re-implementing text selection, scrolling and link handling, all to replace what a browser
+already does. The gate for these islands is *visual parity*, so the best available outcome is that
+it looks identical. The other islands are hand-built AppKit, where SwiftUI genuinely buys less code;
+About is a different category and the trade does not hold.
+
+There is a worthwhile change to About that is **not** a port: Changes shows 202 releases, most of
+them upstream TextMate's rather than this fork's. Trimming it to recent history with a link to the
+Releases page is small, self-contained, and belongs to no phase.
+
 Settled, do not reopen:
 
+- **About** — see above. A `WKWebView`, not AppKit; porting buys nothing the gate can reward.
 - **Scope bar** and **back/forward navigation** — present since 2014 and 2018.
 - **`NSRulerView` gutter** — recommended **against**: deletes ~600 lines of better-fitted code for a
   system class that does not model multi-column icons.
