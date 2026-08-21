@@ -4,6 +4,56 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — RESUME HERE: Software Update pane ported; a crash caught by the whole-branch review
+
+Branch `phase-6/swiftui-preferences`, 13 commits, **unpushed and unmerged**. Build green, 4 tests
+passing and now actually running in CI. All four plan tasks complete, each reviewed, plus a final
+whole-branch pass and its fix wave (`4c1ea1ab`).
+
+### The finding that justified the whole-branch review
+
+Eight task-level reviews passed. The final pass found that the app **SIGTRAPs on every automatic
+update check while the pane is open** — the default configuration.
+
+`SoftwareUpdate.mm:313`'s `NSBackgroundActivityScheduler` block runs off-main, synchronously reaches
+`:368 self.checking = YES`, fires KVO into the pane, and calls a `@MainActor` Swift method. Under
+Swift 6 on macOS 26 the `@objc` thunk traps before its body runs. Both ends were measured, not
+argued: the scheduler block reports `isMainThread = 0`, and an off-main `@MainActor` thunk exits 133.
+
+**The old AppKit pane had the same off-main KVO**, feeding a Cocoa binding that misbehaved quietly.
+Swift 6's isolation checking converts that latent thread bug into a hard crash. The port did not
+introduce the defect; it made it impossible to ignore.
+
+`Ruling: this ledger recorded @MainActor soundness as "verified against SoftwareUpdate.mm:326,344,368,417"
+after Task 3. That was WRONG and I passed it on as settled. All four of those sites are main-dispatched
+or on the button path — but :368 has a second caller at :313 that is not. Checking the call sites you
+are handed is not the same as checking all callers.`
+
+### Also fixed: the branch's own tests never ran
+
+`Preferences_test` was absent from the hand-maintained `TESTS` list in
+`.github/workflows/build-and-test.yml`, whose own comment says new targets must be added by hand.
+The plan created the target and never wired it, so four passing tests guarded nothing.
+
+### What shipped
+
+The AppKit pane is gone. `SoftwareUpdatePreferences.loadView` now installs an `NSHostingView`; the
+shell — window, toolbar, pane switching, persistence — is untouched. Behavioural parity with the
+deleted pane was verified against git history: the negated `SoftwareUpdateDisablePolling` checkbox,
+both separate disabled-bindings, Check-Now-while-checking, and all four "Last check" states.
+`fittingSize` measured 490×252 and stable across every change, against controls (`EmptyView` 10×10,
+empty `Form` 40×40).
+
+### If interrupted here
+
+Branch is complete and unmerged; it needs the maintainer's manual QA, none of which has been done.
+The highest-value check is the defaults diff — `SoftwareUpdateDisablePolling` is stored **inverted**,
+and a lost negation would silently disable updates for everyone while the checkbox still looked
+right. Five panes remain (Projects, Variables, Files, Terminal, Bundles); the spec holds the order
+and the reasoning.
+
+---
+
 ## 2026-08-21 — Final fix wave: the pane's own KVO could kill the app on the hourly update check
 
 Whole-branch review found one crash and one gap; both fixed here along with three smaller items, in
