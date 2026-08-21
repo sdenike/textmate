@@ -60,10 +60,34 @@ final class SoftwareUpdateModel: ObservableObject {
 	}
 }
 
+// Pushed from SoftwareUpdatePreferences's own KVO, not polled. The ObjC side
+// already declares +keyPathsForValuesAffectingLastCheckDescription over
+// softwareUpdateController.checking, .errorString and relativeStringForLastCheck,
+// so observing that one derived property on self is enough to catch all three,
+// and this is where it hands the result across the bridge. @MainActor because
+// it is only ever touched from KVO callbacks that fire on the main thread --
+// every mutation of checking/errorString in SoftwareUpdate.mm either runs on
+// the main thread already (the synchronous self.checking = YES at the start of
+// a check) or is dispatched back to it (the async completion handler).
+@objc(SettingsPaneUpdateStatus)
+@MainActor
+public final class SettingsPaneUpdateStatus: NSObject, ObservableObject {
+	@Published var lastCheckDescription: String = ""
+	@Published var isChecking: Bool = false
+
+	@objc public override init() {
+		super.init()
+	}
+
+	@objc public func update(lastCheckDescription: String, isChecking: Bool) {
+		self.lastCheckDescription = lastCheckDescription
+		self.isChecking = isChecking
+	}
+}
+
 struct SoftwareUpdatePaneView: View {
 	@ObservedObject var model: SoftwareUpdateModel
-	let lastCheckDescription: String
-	let isChecking: Bool
+	@ObservedObject var status: SettingsPaneUpdateStatus
 	let checkNow: () -> Void
 
 	var body: some View {
@@ -84,9 +108,9 @@ struct SoftwareUpdatePaneView: View {
 			}
 
 			Section {
-				LabeledContent("Last check", value: lastCheckDescription)
+				LabeledContent("Last check", value: status.lastCheckDescription)
 				Button("Check Now", action: checkNow)
-					.disabled(isChecking)
+					.disabled(status.isChecking)
 			}
 		}
 		.formStyle(.grouped)
@@ -99,15 +123,13 @@ public final class SettingsPaneFactory: NSObject {
 	// generated Preferences-Swift.h and fails at the ObjC++ call site with
 	// "use of undeclared identifier", pointing at the wrong file entirely.
 	@MainActor
-	@objc public static func softwareUpdateView(checkNow: @escaping () -> Void) -> NSView {
+	@objc public static func softwareUpdateView(checkNow: @escaping () -> Void, status: SettingsPaneUpdateStatus) -> NSView {
 		let model = SoftwareUpdateModel()
-		let view = NSHostingView(rootView: SoftwareUpdatePaneView(model: model,
-		                                                          lastCheckDescription: "",
-		                                                          isChecking: false,
-		                                                          checkNow: checkNow))
+		let view = NSHostingView(rootView: SoftwareUpdatePaneView(model: model, status: status, checkNow: checkNow))
 		// PreferencesPane.mm:36 sizes a pane from its fittingSize, and
 		// OakTransitionViewController pins to it. A 0x0 here is what made the
-		// Terminal pane look like a dead click for months.
+		// Terminal pane look like a dead click for months. status is seeded by
+		// the caller before this runs, so this measures real text, not "".
 		view.frame = NSRect(origin: .zero, size: view.fittingSize)
 		return view
 	}

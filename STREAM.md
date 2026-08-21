@@ -4,6 +4,54 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — Task 3 fix round 1/5: "Last check" and "Check Now" go live
+
+Coordinator finding: Task 3 shipped with `lastCheckDescription: ""` and `isChecking: false`
+hardcoded into `SettingsPaneFactory.softwareUpdateView`, so the pane's "Last check" field was
+permanently blank and "Check Now" never greyed out while a check ran -- a real regression against
+the AppKit pane it replaced, not the deferred nicety the brief's Step 2/3 split implied. Flagged in
+the Task 3 report rather than invented at the time, since the brief's own factory signature took
+only `checkNow:`; this round supplies the wiring the brief promised ("Step 3") but never wrote.
+
+Added `SettingsPaneUpdateStatus` to `SettingsSupport.swift` -- an `@objc(SettingsPaneUpdateStatus)
+@MainActor public final class … : NSObject, ObservableObject` with `@Published` `lastCheckDescription`/
+`isChecking` and one bridge method, `update(lastCheckDescription:isChecking:)`. The factory now
+takes it as a second parameter and `SoftwareUpdatePaneView` observes it (`@ObservedObject`)
+instead of taking plain values. `SoftwareUpdatePreferences.mm` creates one in `loadView`, seeds it
+synchronously before calling the factory (so `fittingSize` measures real text, not `""`), and pushes
+into it from a single KVO observation of **its own** `lastCheckDescription` -- reusing
+`+keyPathsForValuesAffectingLastCheckDescription`, already declared over
+`softwareUpdateController.checking`, `.errorString` and `relativeStringForLastCheck`, so one
+`addObserver:forKeyPath:@"lastCheckDescription"` (registered in `viewWillAppear`, removed in
+`viewDidDisappear`, matching the existing timer/notification lifecycle in the same two methods)
+catches all three without three separate observers. `NSKeyValueObservingOptionInitial` re-syncs on
+every appear, covering a check that ran while the pane was hidden and thus unobserved.
+
+Confirmed the KVO source is always main-thread before relying on `@MainActor` for the pushed-into
+object: `SoftwareUpdate.mm`'s `self.checking = YES` runs synchronously on the thread that called
+`checkForUpdate:` (the SwiftUI button action, main thread); the async completion's `self.checking =
+NO` and `self.errorString = …` are both inside `dispatch_async(dispatch_get_main_queue(), …)`. No
+loosened isolation needed.
+
+Re-measured `fittingSize` the same way as Task 3 (standalone harness compiling the real
+`SettingsSupport.swift` against a stub defining the bridging header's extern constants, since
+linking the real `Preferences.a` standalone remains impractical) -- **unchanged at 490x252**, both
+for `"Never"`/not-checking and for a longer string (`"5 minutes ago"`) with `isChecking: true`, so
+neither real last-check text nor the checking state grows the pane.
+
+`bin/build` -> `** BUILD SUCCEEDED **`, no warnings from either changed file (checked by touching
+both and grepping the full log). `bin/build Preferences/test` -> `** BUILD SUCCEEDED **`,
+`Preferences_test -v` -> `4 tests passed`. `SoftwareUpdate.mm` untouched this round -- the nightly
+channel change from Task 3 stands as committed.
+
+### If interrupted here
+
+This fix round is committed. Round 1/5 per the coordinator's numbering; no further findings
+outstanding as of this entry. Next is whatever the coordinator's round 2 raises, or if none, the
+next pane in `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`'s ordering.
+
+---
+
 ## 2026-08-21 — Task 3 done: the Software Update pane in SwiftUI, first pane ported
 
 Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-3-brief.md`. Appended
