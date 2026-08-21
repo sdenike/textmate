@@ -4,6 +4,59 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — Task 3 done: the Software Update pane in SwiftUI, first pane ported
+
+Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-3-brief.md`. Appended
+`SoftwareUpdateModel`, `SoftwareUpdatePaneView` and `@objc public final class SettingsPaneFactory`
+to `Frameworks/Preferences/src/SettingsSupport.swift`, then rewrote
+`SoftwareUpdatePreferences.mm`'s `loadView` to install `[SettingsPaneFactory
+softwareUpdateViewWithCheckNow:]`'s `NSHostingView` instead of building an `NSGridView`. The watch
+checkbox stays inverted (`pollingDisabled` backs `watchForUpdates` negated) and the channel now
+persists through `SettingsChannel` rather than a runtime-registered `NSSelectedTagBinding`
+transformer -- `OakSoftwareUpdateChannelTransformer`'s registration in `init` came out too, since
+`loadView`'s rewrite deleted its only binding and it would otherwise sit there naming a stale
+2-of-3 channel list.
+
+Deleted the pre-10.15 branch of `relativeStringForDate:` and the `@available(macos 11.0, *)` icon
+guard, both dead at a macOS 26 deployment target. `-lastCheckDescription` now calls
+`TMSettingsLastCheckDescription`, so Task 2's tested function has a real caller -- though nothing
+in the new pane displays its result yet: per the brief, `SettingsPaneFactory`'s factory takes only
+`checkNow:` and hardcodes `lastCheckDescription: ""`/`isChecking: false` into the view. The "Last
+check" field will render blank and "Check Now" won't visibly grey out while checking until a later
+task threads live values through; flagging this rather than silently wiring it myself, since the
+brief's own interface line pins the factory to `checkNow:` only.
+
+**Measured `fittingSize` rather than trusting it.** Linking the real `Preferences` static lib
+standalone was impractical (it pulls the whole app's transitive dependency graph through the other
+panes in the same target), so verification compiled the actual, unmodified `SettingsSupport.swift`
+in a throwaway harness against a stub `.m` defining the same extern constants, called
+`SettingsPaneFactory.softwareUpdateView`, and printed `.fittingSize`. Got 490x252, against control
+baselines of 10x10 for a bare `EmptyView` and 40x40 for an empty grouped `Form` -- confirms the
+number reflects real content, not a default. This is the failure mode `CLAUDE.md` records for the
+Terminal pane; it did not reproduce here.
+
+`Frameworks/SoftwareUpdate/src/SoftwareUpdate.mm:392`'s `includePrereleases` now triggers for any
+non-release channel rather than prerelease only, so Nightly actually differs from Normal releases
+in the picker. Also moves test builds (forced onto canary at `:359`) from stable-only to including
+prereleases -- a recorded consequence, not a surprise.
+
+`bin/build` -> `** BUILD SUCCEEDED **`; no warnings from either changed file (checked by touching
+them and grepping the full log). `bin/build Preferences/test` -> `** BUILD SUCCEEDED **`,
+`Preferences_test -v` -> `4 tests passed`. The extern link check the brief warned about (this task
+is the first to force `Preferences-Bridging-Header.h`'s symbols to link) surfaced nothing -- clean
+link both times.
+
+### If interrupted here
+
+Task 3 is committed. Everything the maintainer needs to check interactively is Step 6 of
+`docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md` -- rendering, the disabled
+states, the defaults diff (checkbox negation is the likeliest thing to have inverted silently),
+channel storage values, and Nightly's "Check Now". Next pane in the series picks up wherever
+`docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`'s ordering says to go after
+Software Update.
+
+---
+
 ## 2026-08-21 — Task 2 done: `Preferences_test`, the framework's first test target
 
 Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-2-brief.md` verbatim.

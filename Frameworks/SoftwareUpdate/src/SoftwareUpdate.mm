@@ -390,7 +390,12 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 				}
 				else if([contentType hasPrefix:@"application/x-git-upload-pack-advertisement"])
 				{
-					BOOL includePrereleases = [updateChannel isEqualToString:kSoftwareUpdateChannelPrerelease];
+					// Anything other than the stable channel opts into prerelease tags. Nightly is
+					// offered in Settings, and without this it would deliver exactly what release
+					// does -- a control labelled "Nightly builds" that silently means "Normal
+					// releases". The feed is git tags with two tiers, so nightly and prerelease
+					// deliver the same updates until a nightly tag stream exists.
+					BOOL includePrereleases = ![updateChannel isEqualToString:kSoftwareUpdateChannelRelease];
 					remoteVersion = OakLatestVersionInUploadPackAdvertisement(data, includePrereleases);
 					remoteURL     = OakUpdateAssetURLForVersion(remoteVersion, url);
 					if(!remoteURL || !remoteVersion)

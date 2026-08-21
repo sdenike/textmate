@@ -1,10 +1,8 @@
 #import "SoftwareUpdatePreferences.h"
 #import "Keys.h"
-#import <OakAppKit/NSImage Additions.h>
-#import <OakAppKit/OakUIConstructionFunctions.h>
-#import <OakFoundation/OakStringListTransformer.h>
+#import "Preferences-Swift.h"
+#import "SettingsSupportBridge.h"
 #import <SoftwareUpdate/SoftwareUpdate.h>
-#import <MenuBuilder/MenuBuilder.h>
 
 @interface SoftwareUpdatePreferences ()
 {
@@ -19,14 +17,8 @@
 
 - (id)init
 {
-	NSImage* icon = [NSImage imageNamed:@"Software Update" inSameBundleAsClass:[self class]];
-	if(@available(macos 11.0, *))
-		icon = [NSImage imageWithSystemSymbolName:@"arrow.triangle.2.circlepath" accessibilityDescription:@"Software Update"];
-	if(self = [super initWithNibName:nil label:@"Software Update" image:icon])
-	{
-		[OakStringListTransformer createTransformerWithName:@"OakSoftwareUpdateChannelTransformer" andObjectsArray:@[ kSoftwareUpdateChannelRelease, kSoftwareUpdateChannelPrerelease ]];
-	}
-	return self;
+	NSImage* icon = [NSImage imageWithSystemSymbolName:@"arrow.triangle.2.circlepath" accessibilityDescription:@"Software Update"];
+	return [super initWithNibName:nil label:@"Software Update" image:icon];
 }
 
 - (SoftwareUpdate*)softwareUpdateController
@@ -36,63 +28,14 @@
 
 - (NSString*)lastCheckDescription
 {
-	return self.softwareUpdateController.isChecking ? @"Checking…" : (self.softwareUpdateController.errorString ?: _relativeStringForLastCheck ?: @"Never");
+	return TMSettingsLastCheckDescription(self.softwareUpdateController.isChecking, self.softwareUpdateController.errorString, _relativeStringForLastCheck);
 }
 
 - (NSString*)relativeStringForDate:(NSDate*)date
 {
 	if(!date)
 		return nil;
-
-#if defined(MAC_OS_X_VERSION_10_15) && (MAC_OS_X_VERSION_10_15 <= MAC_OS_X_VERSION_MAX_ALLOWED)
-	if(@available(macos 10.15, *))
-	{
-		return -[date timeIntervalSinceNow] < 5 ? @"Just now" : [[[NSRelativeDateTimeFormatter alloc] init] localizedStringForDate:date relativeToDate:NSDate.now];
-	}
-	else
-#endif
-	{
-		NSTimeInterval const minute =  60;
-		NSTimeInterval const hour   =  60*minute;
-		NSTimeInterval const day    =  24*hour;
-		NSTimeInterval const week   =   7*day;
-		NSTimeInterval const month  =  31*day;
-		NSTimeInterval const year   = 365*day;
-
-		NSString* res;
-
-		NSTimeInterval t = -[date timeIntervalSinceNow];
-		if(t < 1)
-			res = @"Just now";
-		else if(t < minute)
-			res = @"Less than a minute ago";
-		else if(t < 2 * minute)
-			res = @"1 minute ago";
-		else if(t < hour)
-			res = [NSString stringWithFormat:@"%.0f minutes ago", t / minute];
-		else if(t < 2 * hour)
-			res = @"1 hour ago";
-		else if(t < day)
-			res = [NSString stringWithFormat:@"%.0f hours ago", t / hour];
-		else if(t < 2*day)
-			res = @"Yesterday";
-		else if(t < week)
-			res = [NSString stringWithFormat:@"%.0f days ago", t / day];
-		else if(t < 2*week)
-			res = @"Last week";
-		else if(t < month)
-			res = [NSString stringWithFormat:@"%.0f weeks ago", t / week];
-		else if(t < 2*month)
-			res = @"Last month";
-		else if(t < year)
-			res = [NSString stringWithFormat:@"%.0f months ago", t / month];
-		else if(t < 2*year)
-			res = @"Last year";
-		else
-			res = [NSString stringWithFormat:@"%.0f years ago", t / year];
-
-		return res;
-	}
+	return -[date timeIntervalSinceNow] < 5 ? @"Just now" : [[[NSRelativeDateTimeFormatter alloc] init] localizedStringForDate:date relativeToDate:NSDate.now];
 }
 
 - (void)viewWillAppear
@@ -116,39 +59,9 @@
 
 - (void)loadView
 {
-	NSButton* watchForUpdatesCheckBox      = OakCreateCheckBox(@"Watch for:");
-	NSPopUpButton* updateChannelPopUp      = OakCreatePopUpButton();
-	NSButton* askBeforeDownloadingCheckBox = OakCreateCheckBox(@"Ask before downloading updates");
-
-	NSStackView* watchForStackView = [NSStackView stackViewWithViews:@[ watchForUpdatesCheckBox, updateChannelPopUp ]];
-	watchForStackView.alignment = NSLayoutAttributeFirstBaseline;
-
-	NSTextField* lastCheckTextField        = OakCreateLabel(@"Some time ago");
-	NSButton* checkNowButton               = [NSButton buttonWithTitle:@"Check Now" target:self.softwareUpdateController action:@selector(checkForUpdate:)];
-
-	MBMenu const updateChannelMenuItems = {
-		{ @"Normal releases", .tag = 0 },
-		{ @"Prereleases",     .tag = 1 },
-	};
-	MBCreateMenu(updateChannelMenuItems, updateChannelPopUp.menu);
-
-	NSGridView* gridView = [NSGridView gridViewWithViews:@[
-		@[ OakCreateLabel(@"Software update:"),        watchForStackView                 ],
-		@[ NSGridCell.emptyContentView,                askBeforeDownloadingCheckBox      ],
-		@[ ],
-		@[ OakCreateLabel(@"Last check:"),             lastCheckTextField                ],
-		@[ NSGridCell.emptyContentView,                checkNowButton                    ],
-	]];
-
-	self.view = OakSetupGridViewWithSeparators(gridView, { 2 });
-
-	[watchForUpdatesCheckBox      bind:NSValueBinding       toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:[NSString stringWithFormat:@"values.%@", kUserDefaultsDisableSoftwareUpdateKey]   options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
-	[updateChannelPopUp           bind:NSSelectedTagBinding toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:[NSString stringWithFormat:@"values.%@", kUserDefaultsSoftwareUpdateChannelKey]   options:@{ NSValueTransformerNameBindingOption: @"OakSoftwareUpdateChannelTransformer" }];
-	[askBeforeDownloadingCheckBox bind:NSValueBinding       toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:[NSString stringWithFormat:@"values.%@", kUserDefaultsAskBeforeUpdatingKey]       options:nil];
-	[lastCheckTextField           bind:NSValueBinding       toObject:self                                                  withKeyPath:@"lastCheckDescription"                                                           options:nil];
-
-	[updateChannelPopUp           bind:NSEnabledBinding     toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:[NSString stringWithFormat:@"values.%@", kUserDefaultsDisableSoftwareUpdateKey]   options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
-	[askBeforeDownloadingCheckBox bind:NSEnabledBinding     toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:[NSString stringWithFormat:@"values.%@", kUserDefaultsDisableSoftwareUpdateKey]   options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
-	[checkNowButton               bind:NSEnabledBinding     toObject:self.softwareUpdateController                         withKeyPath:@"checking"                                                                       options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
+	SoftwareUpdate* controller = self.softwareUpdateController;
+	self.view = [SettingsPaneFactory softwareUpdateViewWithCheckNow:^{
+		[controller checkForUpdate:nil];
+	}];
 }
 @end
