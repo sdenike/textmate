@@ -4,6 +4,56 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-20 — RESUME HERE: Settings plan blocked on a product decision, not on code
+
+The Settings panes spec is written and has now been corrected twice — once at self-review, once
+while planning. **No implementation plan exists**, and writing it is blocked on one question only
+the maintainer can answer.
+
+### The blocker: a third update channel the popup cannot represent
+
+`SoftwareUpdate.mm:17-19` defines three channels — `release`, `beta`, `nightly`. The pane's popup is
+backed by an `OakStringListTransformer` registered over only the first two
+(`SoftwareUpdatePreferences.mm:27`), so a user whose `SoftwareUpdateChannel` is `nightly` opens the
+pane to a tag lookup that matches nothing. What happens next is whatever the binding happens to do,
+and touching any other control in the pane may silently rewrite their channel to `release`.
+
+That is pre-existing, and a rewrite has to choose deliberately rather than reproduce an accident.
+Three defensible answers — add Nightly to the picker, show it read-only only when already active, or
+match the current two-item picker and define what a nightly user sees — and they are different
+products, so the plan's code cannot be written until one is chosen.
+
+### Three spec errors found while planning
+
+- **`OakSoftwareUpdateChannelTransformer` is not a class.** It is registered at runtime by
+  `OakStringListTransformer createTransformerWithName:andObjectsArray:`. The spec had named it as
+  something to unit-test.
+- **Prerelease is `@"beta"`, not `"prerelease"`** — and the third channel above was missed entirely.
+- **The first pane's keys are not in `Keys.h`.** They live in `Frameworks/SoftwareUpdate`, whose
+  header is under `Xcode/include/` and can never be imported by a bridging header. The spec's
+  "make `Keys.h` bridgeable" plan is correct for later panes and irrelevant to this one.
+
+`Ruling: the general mechanism becomes a small pure-ObjC shim that RE-DECLARES the extern keys it
+needs. Re-declaring an extern is not duplicating a literal — the declaration carries no value, the
+definition stays in its own .mm, and the linker resolves it. A misspelled name is a link error
+rather than a silently wrong key, which is exactly what the retyped literal behind this session's
+didPromptForDefaultBundles casing bug was not.`
+
+### Worth noting about process
+
+This spec has had errors corrected at self-review and again at planning, both times because it
+described code that had been surveyed rather than read. The next pane's design should start from
+reading its source.
+
+### If interrupted here
+
+Branch `phase-6/swiftui-preferences`, unpushed, tree clean. Spec at
+`docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`. Ask the maintainer the nightly
+question, then invoke `superpowers:writing-plans`. PR #20 (update-alert wording) is open and green
+against master, unmerged.
+
+---
+
 ## 2026-08-20 — Settings panes designed as islands; About dropped with reasons
 
 Spec at `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`. Branch

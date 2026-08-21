@@ -83,10 +83,30 @@ persistence, ⌘1–⌘9 — never learns that anything changed.
 
 ### How Swift reaches the defaults
 
-`Keys.h` is pure Objective-C: it declares every key as `extern NSString* const` and contains no C++
-whatsoever. It is one line short of being bridgeable — it currently relies on the prefix header for
-`NSString`, so it needs its own `#import <Foundation/Foundation.h>`. With that, the bridging header
-can import it and Swift uses `@AppStorage` against the **real** constants.
+**Corrected 2026-08-20, while planning the first pane.** This design originally said Swift would
+reach the defaults by making `Keys.h` bridgeable. That is true of `Keys.h` — it is pure
+Objective-C with no C++ and needs only its own `#import <Foundation/Foundation.h>`, since it
+currently leans on the prefix header for `NSString`. But it is **irrelevant to the first pane**:
+`SoftwareUpdatePreferences`'s keys are not in `Keys.h` at all. They are defined in
+`Frameworks/SoftwareUpdate/src/SoftwareUpdate.mm` and declared in that framework's header, which
+lives under `Xcode/include/` and can never be imported by a bridging header.
+
+The general mechanism is therefore a **small pure-ObjC shim header** for the `Preferences` framework's
+bridging header, which `#import <Foundation/Foundation.h>` itself and **re-declares** the keys it
+needs:
+
+```objc
+extern NSString* const kUserDefaultsDisableSoftwareUpdateKey;
+```
+
+Re-declaring an `extern` is not the same as duplicating a literal, and the distinction is what makes
+this safe. The declaration carries no value; the definition stays in `SoftwareUpdate.mm` and the
+linker resolves to it. A misspelled name is a **link error**, not a silently wrong key — unlike the
+retyped string literal that produced this session's `didPromptForDefaultBundles` casing bug, where
+the wrong value compiled, linked, and passed its test.
+
+Swift then uses `@AppStorage` against those constants. `Keys.h`'s one-line fix still applies to
+later panes, whose keys do live there.
 
 This is worth the one-line change rather than retyping key names in Swift. Retyped literals are
 exactly what produced this session's `didPromptForDefaultBundles` / `DidPromptForDefaultBundles`
@@ -138,8 +158,14 @@ different. It is replaced by behaviour:
 - **The responder chain still works.** Pane switching sets first responder from `nextValidKeyView`
   (`Preferences.mm:50-54`); tab order within a pane must be sensible.
 - **Panes size correctly** — see Risks.
-- **Automated where possible.** The channel mapping performed by `OakSoftwareUpdateChannelTransformer`
-  is pure logic and should be tested. **Creating a `Preferences_test` target is part of this work** —
+- **Automated where possible.** The channel mapping is pure logic and should be tested. Note that
+  `OakSoftwareUpdateChannelTransformer` is **not a class** — it is registered at runtime by
+  `OakStringListTransformer createTransformerWithName:andObjectsArray:` over
+  `@[ kSoftwareUpdateChannelRelease, kSoftwareUpdateChannelPrerelease ]`, mapping popup tag 0/1 to
+  `@"release"`/`@"beta"`. **A third channel exists that the popup cannot represent:**
+  `kSoftwareUpdateChannelCanary` = `@"nightly"`. A user already on that channel opens the pane and
+  the tag lookup matches nothing, so the port must decide explicitly what to show rather than
+  inheriting whatever the old binding happened to do. **Creating a `Preferences_test` target is part of this work** —
   verified: no such target exists in `project.yml`, there is no `Frameworks/Preferences/tests/`
   directory, and nothing anywhere exercises this framework. Follow the `SetupAssistantCore`
   precedent: testable logic lives where a test binary can link it.
