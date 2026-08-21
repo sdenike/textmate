@@ -523,6 +523,7 @@
 		71BA8252073BBCE2C9260E07 /* BundleEditor.mm in Sources */ = {isa = PBXBuildFile; fileRef = DEF6972BBD425455652D7953 /* BundleEditor.mm */; settings = {COMPILER_FLAGS = "-include $(SRCROOT)/Shared/PCH/prelude.mm"; }; };
 		72B32DDC9333122AA96EF3F1 /* libOakSystem.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C471B5AD93E7C5234A4F5A43 /* libOakSystem.a */; };
 		72CE0AFB632EC2156E7ABC4D /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E19F8AC3F6DFA3EF9E573C7B /* Security.framework */; };
+		72D151BDF807429F3552F928 /* SettingsSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77E5A9F337A4DF6309A498F6 /* SettingsSupport.swift */; };
 		72E15157B425C2A8034C0DA4 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3624DA120E80CCCD37A5B1A2 /* Cocoa.framework */; };
 		735783694ED9E65625DE7899 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C05530F9E0175FD5842AE9E4 /* Carbon.framework */; };
 		7357D096D0989780DF75CD23 /* libns.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5ACA089AE982352D6F430735 /* libns.a */; };
@@ -5016,19 +5017,6 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
-				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
-			);
-			name = "Embed Dependencies";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
 			dstSubfolderSpec = 6;
 			files = (
 				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
@@ -5038,13 +5026,26 @@
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
+		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 7;
 			files = (
 				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+			);
+			name = "Embed Dependencies";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5287,6 +5288,7 @@
 		76BB05C4AB9D1AFB87185FE2 /* libOakFoundation.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libOakFoundation.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		770CF0245E0DE8E9F21870DE /* FileBrowserView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = FileBrowserView.mm; sourceTree = "<group>"; };
 		77E34967A9F7E76B7029D08E /* marks.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = marks.cc; sourceTree = "<group>"; };
+		77E5A9F337A4DF6309A498F6 /* SettingsSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSupport.swift; sourceTree = "<group>"; };
 		78064C5B5C03A1B478A3A400 /* CLIProxy.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CLIProxy.mm; sourceTree = "<group>"; };
 		78D0800F6433D85E4E510F5A /* types.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = types.cc; sourceTree = "<group>"; };
 		78F2E83628BB4CDA35B812EF /* intermediate.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = intermediate.mm; sourceTree = "<group>"; };
@@ -6874,6 +6876,7 @@
 				30E570F4D97F24C50926CF54 /* Preferences.mm */,
 				567B54F40779104512154CC6 /* PreferencesPane.mm */,
 				6B855EEEAC6ACF41C1A6E6B1 /* ProjectsPreferences.mm */,
+				77E5A9F337A4DF6309A498F6 /* SettingsSupport.swift */,
 				552158142570056B4898175F /* SoftwareUpdatePreferences.mm */,
 				E010D6C0758DDA8DB0B291B0 /* TerminalPreferences.mm */,
 				D25BE24D216758BF7BBB70BC /* VariablesPreferences.mm */,
@@ -10031,6 +10034,7 @@
 			buildConfigurationList = F203CF7855AC6E755B8E62B3 /* Build configuration list for PBXNativeTarget "Preferences" */;
 			buildPhases = (
 				D9A4FC51379126325F8E9239 /* Sources */,
+				FD9CEE1831FC35BFB109414E /* Copy Swift Objective-C Interface Header */,
 			);
 			buildRules = (
 			);
@@ -11190,6 +11194,22 @@
 			shellPath = /bin/sh;
 			shellScript = "\"$SRCROOT/Xcode/scripts/gen_test.sh\" scm";
 		};
+		FD9CEE1831FC35BFB109414E /* Copy Swift Objective-C Interface Header */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			name = "Copy Swift Objective-C Interface Header";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/include/$(PRODUCT_MODULE_NAME)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -12016,6 +12036,7 @@
 				0D4597798F6836808511B40F /* Preferences.mm in Sources */,
 				EA83479DC2438EE94901898B /* PreferencesPane.mm in Sources */,
 				0BE0C51FAEBDD5AC2C964440 /* ProjectsPreferences.mm in Sources */,
+				72D151BDF807429F3552F928 /* SettingsSupport.swift in Sources */,
 				077F59BDF5D881094281C3E4 /* SoftwareUpdatePreferences.mm in Sources */,
 				0575CCA12F080E77A4C26E5C /* TerminalPreferences.mm in Sources */,
 				99A7F61B7FF6DA0CE79227FA /* VariablesPreferences.mm in Sources */,
@@ -16440,6 +16461,7 @@
 				);
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Frameworks/Preferences/src/Preferences-Bridging-Header.h";
 			};
 			name = Release;
 		};
@@ -16903,6 +16925,7 @@
 				);
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Frameworks/Preferences/src/Preferences-Bridging-Header.h";
 			};
 			name = Debug;
 		};

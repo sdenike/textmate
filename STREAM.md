@@ -4,6 +4,39 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — Task 1 done: Swift compiles in the Preferences static library
+
+Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-1-brief.md` verbatim. Added
+`Frameworks/Preferences/src/Preferences-Bridging-Header.h` (re-declares the four defaults keys and
+three channel constants defined in `SoftwareUpdate.mm:12-19`) and
+`Frameworks/Preferences/src/SettingsSupport.swift` (`SettingsChannel`, a public enum for the three
+channels, Nightly included per the ruling below). Wired `project.yml`'s `Preferences` target: the
+`.swift` file went into `sources:`, and `SWIFT_OBJC_BRIDGING_HEADER` went into `settings.base` right
+after `GCC_PREFIX_HEADER`. No `dependencies:` key was added -- the target still resolves everything
+through `HEADER_SEARCH_PATHS`, unchanged.
+
+**Proves what it needed to prove.** No framework target in this repo had ever contained Swift before
+this. `bin/build` succeeded, and forcing a rebuild of just the `Preferences` target shows
+`SwiftCompile ... SettingsSupport.swift ... (in target 'Preferences' ...)` in the log, so the file is
+confirmed compiled, not just silently absent from `sources` behind a green build. The module landed
+at `~/build/textmate-revived/xcode/Release/Preferences.swiftmodule/` (also present, redundantly,
+under `obj/TextMate.build/Release/Preferences.build/Objects-normal/arm64/`) -- later tasks building
+on this target should expect that path.
+
+**Extern-linking not yet exercised.** Nothing in Task 1 calls `SettingsChannel.storedValue` or
+`.title` from outside the enum itself, so a misspelled extern in the bridging header would not yet
+surface as a link error -- nothing forces the linker to resolve those symbols yet. That check only
+becomes real once a later task references `SettingsChannel` from outside this file.
+
+### If interrupted here
+
+Task 1 is committed. Start Task 2 next, per
+`docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md`. Task 1's build is proven above;
+no need to re-verify unless `project.yml` or the two new files under `Frameworks/Preferences/src`
+change again.
+
+---
+
 ## 2026-08-21 — RESUME HERE: Nightly IS offered; the entry below this one is superseded
 
 **Reverses the ruling in the previous entry.** That entry says nightly stays out of the picker. It
