@@ -4,6 +4,58 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — Final fix wave: the pane's own KVO could kill the app on the hourly update check
+
+Whole-branch review found one crash and one gap; both fixed here along with three smaller items, in
+one commit.
+
+**The crash.** `SoftwareUpdatePreferences.mm`'s `-pushUpdateStatus` called
+`-updateWithLastCheckDescription:isChecking:`, which is `@MainActor` on the Swift side, from a chain
+that is fully synchronous and starts off-main: `SoftwareUpdate.mm`'s `NSBackgroundActivityScheduler`
+block runs on an XPC activity queue, calls `-checkForTestBuild:`, whose `self.checking = YES` fires
+KVO straight into `-observeValueForKeyPath:`. With automatic checks on -- the default -- opening
+Settings on this pane and waiting for the hourly check would take the app down. Reproduced the
+mechanism standalone before touching anything: an `@objc @MainActor` method compiled at
+`-swift-version 6` for `arm64-apple-macos26.0`, invoked through its ObjC thunk from a background
+queue, exits **133 (SIGTRAP) with the body never running**; the same binary with a conditional
+main-queue hop runs the body on the main thread and exits 0.
+
+`-pushUpdateStatus` now reads the two values on the calling thread and **hops only when not already
+on main**, rather than dispatching unconditionally. That is a correctness requirement, not a latency
+preference: `-loadView` seeds the status synchronously and `SettingsPaneFactory` measures
+`fittingSize` off the view it builds immediately after, so an unconditional `dispatch_async` would
+defer the seed past the measurement and size the "Last check" row for empty text -- precisely what
+seeding-before-the-factory exists to prevent. The Swift side's isolation was left alone;
+`SettingsPaneUpdateStatus` drives SwiftUI and belongs on the main actor. Its comment claiming the
+KVO chain is always main-thread was the false premise behind the bug and has been corrected in
+place. **This is a pre-existing threading defect, not one the port introduced** -- the AppKit pane
+fed the same off-main KVO into a Cocoa binding, which misbehaved quietly instead of trapping. The
+port converted silent misbehaviour into a hard crash.
+
+**The gap.** `.github/workflows/build-and-test.yml` carries a hand-maintained `TESTS` list and
+`Preferences_test` was not in it, so this branch's four tests guarded nothing (`release.yml` gates
+on the same job). Added, alphabetically between `plist_test` and `regexp_test`, and deliberately
+**not** added to the `--no-parallel` case beside it: those eight are frameworks whose runners call
+Cocoa APIs asserting `NSThread.isMainThread`, and this suite exercises only
+`TMSettingsLastCheckDescription`, a pure C function over `BOOL` and `NSString*`. Confirmed by
+running the binary bare five times plus once with `-v`: 4/4 every time.
+
+Three smaller items. `#import "Keys.h"` is gone from `SoftwareUpdatePreferences.mm` -- every key the
+file uses is declared in `SoftwareUpdate/SoftwareUpdate.h`, and `Keys.h` declares none of them.
+`import SwiftUI` moved from mid-file to the top of `SettingsSupport.swift`. And the pane's
+`-removeObserver:forKeyPath:` is now flag-guarded on both sides: unlike the notification-centre
+`-removeObserver:` next to it, an unbalanced call throws, and the pair is balanced today only
+because `OakTransitionViewController` happens to drop the old subview on animation completion.
+
+`fittingSize` re-measured with the same standalone harness: **490x252, unchanged**. `bin/build` and
+`bin/build Preferences/test` both succeed, no new diagnostics on either changed source.
+
+**If interrupted here:** the branch is complete and green. Nothing is half-done. The one thing not
+covered by a test is the crash fix itself -- it was verified by standalone repro and by inspection,
+not by a test in this tree, because reproducing it needs a live `NSBackgroundActivityScheduler`.
+
+---
+
 ## 2026-08-21 — Task 4 done: the shared pane style, extracted rather than designed ahead
 
 Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-4-brief.md` verbatim. Added

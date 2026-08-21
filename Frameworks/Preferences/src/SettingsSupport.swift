@@ -1,5 +1,6 @@
 // Frameworks/Preferences/src/SettingsSupport.swift
 import Foundation
+import SwiftUI
 
 // All three channels the app defines. Nightly is offered at the maintainer's
 // direction; Task 3 changes SoftwareUpdate.mm:392 so it actually differs from
@@ -38,8 +39,6 @@ public enum SettingsChannel: String, CaseIterable, Identifiable {
 	}
 }
 
-import SwiftUI
-
 @MainActor
 final class SoftwareUpdateModel: ObservableObject {
 	// Stored inverted in defaults: the key disables polling, the checkbox enables
@@ -65,10 +64,12 @@ final class SoftwareUpdateModel: ObservableObject {
 // softwareUpdateController.checking, .errorString and relativeStringForLastCheck,
 // so observing that one derived property on self is enough to catch all three,
 // and this is where it hands the result across the bridge. @MainActor because
-// it is only ever touched from KVO callbacks that fire on the main thread --
-// every mutation of checking/errorString in SoftwareUpdate.mm either runs on
-// the main thread already (the synchronous self.checking = YES at the start of
-// a check) or is dispatched back to it (the async completion handler).
+// it drives SwiftUI, and NOT because the KVO chain is main-thread -- it is not.
+// SoftwareUpdate.mm's NSBackgroundActivityScheduler block runs the synchronous
+// `self.checking = YES` on an XPC activity queue, so -pushUpdateStatus hops to
+// the main queue before calling in here. Do not relax this isolation to make
+// that call site compile: the @objc thunk of a @MainActor method SIGTRAPs when
+// invoked off-main.
 @objc(SettingsPaneUpdateStatus)
 @MainActor
 public final class SettingsPaneUpdateStatus: NSObject, ObservableObject {
