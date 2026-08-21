@@ -4,6 +4,53 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — RESUME HERE: SoftwareUpdate pane plan written, ready to execute
+
+Plan at `docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md` — four tasks. Branch
+`phase-6/swiftui-preferences`, unpushed, **no implementation yet**.
+
+### Reading the source changed two decisions
+
+The maintainer's instruction was to read rather than guess, and doing so overturned things a survey
+summary had settled.
+
+**The pane is not three controls.** It is five, with cascading enablement — the channel picker and
+the ask-before-downloading checkbox are *both* disabled when updates are off, via two separate
+`NSEnabledBinding`s — plus a computed `lastCheckDescription` combining checking, error and date
+states, and about forty lines of pre-10.15 date formatting behind a `#if` that cannot run on a
+macOS 26 deployment target.
+
+**And Nightly should not be added to the picker, though it had already been asked for.**
+`SoftwareUpdate.mm:392` sets `includePrereleases` only for the prerelease channel, so `nightly`
+delivers exactly what `release` does. The feed is git tags (`AppController.mm:507`) and has no third
+tier to expose. It survives only because `SoftwareUpdate.mm:359` forces it for test builds.
+
+`Ruling: nightly stays out of the picker, reversing the maintainer's earlier instruction after
+showing them the evidence. Adding it would ship a control labelled "Nightly builds" that silently
+means "Normal releases". Cost if wrong: a channel that power users cannot select from the UI,
+though they can still set it with `defaults write`.`
+
+### The mechanism that removes a failure class
+
+The bridging shim **re-declares** the extern keys rather than retyping their values. A re-declared
+extern shares the symbol — the definitions stay in `SoftwareUpdate.mm` — so a misspelled name is a
+link error, not a key that compiles, links and silently reads nothing. That is precisely what the
+`didPromptForDefaultBundles` casing bug was earlier in this work.
+
+### Three errors caught in the plan's own self-review
+
+A type promised in an Interfaces block that no task defined (`SettingsPaneHost`); a step that said
+"replace `loadView`" without showing the code, at exactly the Swift/ObjC++ seam where this repo's
+constraints bite hardest; and a wrong Files list. All fixed before the plan was committed.
+
+### If interrupted here
+
+Read the plan and start at Task 1. Do not re-plan. The risk it exists to catch: `PreferencesPane.mm:36`
+sizes a pane from `fittingSize` and `OakTransitionViewController` pins to it — a `0×0` there is what
+made the Terminal pane look like a dead click for months. Execution mode not chosen yet.
+
+---
+
 ## 2026-08-20 — RESUME HERE: Settings plan blocked on a product decision, not on code
 
 The Settings panes spec is written and has now been corrected twice — once at self-review, once
