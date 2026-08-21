@@ -501,6 +501,34 @@ Spec is written and committed; **no implementation plan exists yet**. Next step 
 be the second Swift-bearing target ever in this repo (the first was the app target, proven by
 spike), and `OakTransitionViewController` pins panes to `fittingSize` — a 0×0 there is what made the
 Terminal pane look like a dead click for months.
+## 2026-08-19 — the update alert accused the download; the running copy was the problem
+
+`SoftwareUpdate.mm`'s trust gate reported *"The downloaded update is not signed by the expected
+developer"* for two different situations, and for the common one that sentence is simply false.
+
+`OakRunningApplicationTeamIdentifier()` returns nil when the **running** app has no Developer ID —
+an ad-hoc `bin/deploy-local` build. `OakBundleIsSignedByTeam(url, nil)` can then never succeed, so a
+correctly signed, notarized release is refused and the user is told their download is untrustworthy.
+It is not: it is the running copy that has no identity to check against. Every contributor running a
+local build hits this, and the message sends them to re-download a file that was already fine.
+
+Now split by cause. A nil expected team ID reports *"This Copy Cannot Update Itself"* and explains
+that the build was made locally, that the download is fine, and how to get onto a signed release. A
+non-nil team ID that fails to match keeps the original wording — that is the genuine trust failure
+the gate exists for, and there the download really is the suspicious party.
+
+`Ruling: fix the message, not the gate. The check is correct and load-bearing — it is what stops a
+build signed by someone else replacing yours. Only the explanation was wrong. Cost if wrong: a
+wordier alert.`
+
+Found by the maintainer hitting it while updating from a local build to v3.0.0-revived.26. The
+release itself verified clean: Developer ID signed, notarized, stapled, and `spctl` accepted.
+
+### If interrupted here
+
+Branch `fix/update-message-names-the-real-cause`, one commit, unmerged. Build and
+`SoftwareUpdate_test` (20 tests) both pass. Not exercisable without two differently-signed builds,
+so it is verified by reading rather than by running.
 
 ---
 

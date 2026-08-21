@@ -785,8 +785,24 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 		NSString* expectedTeamID = OakRunningApplicationTeamIdentifier();
 		if(!OakBundleIsSignedByTeam(applicationURL, expectedTeamID))
 		{
+			// Two different situations reach here, and naming the wrong one costs
+			// the user real time. A nil expectedTeamID means the RUNNING copy
+			// carries no Developer ID -- an ad-hoc local build -- so no download
+			// could ever match it and the download is not what is wrong. A
+			// non-nil expectedTeamID that failed to match is the genuine trust
+			// failure this gate exists for. Both used to report the latter, which
+			// reads as an accusation against a download that is perfectly fine,
+			// and every contributor running a local build hits it.
+			BOOL runningCopyIsUnsigned = expectedTeamID == nil;
+
 			os_log_error(OS_LOG_DEFAULT, "Software update rejected: %{public}@ is not signed by the expected Developer ID team (%{public}@)", applicationURL.path, expectedTeamID ?: @"<none>");
-			[self presentAlertWithMessage:@"Update Could Not Be Verified" informativeText:@"The downloaded update is not signed by the expected developer, so it will not be installed.\n\nDownload the latest version manually from the project’s Releases page." buttonTitles:@[ @"OK" ] completionHandler:^BOOL(NSModalResponse returnCode){
+
+			NSString* message = runningCopyIsUnsigned ? @"This Copy Cannot Update Itself" : @"Update Could Not Be Verified";
+			NSString* details = runningCopyIsUnsigned
+				? @"This copy of TextMate was built locally rather than installed from a signed release, so it has no developer identity to check an update against. The download itself is fine — it just cannot be installed over an unsigned build.\n\nTo get automatic updates, install a release: brew install --cask textmate-revived, or download it from the project’s Releases page."
+				: @"The downloaded update is not signed by the expected developer, so it will not be installed.\n\nDownload the latest version manually from the project’s Releases page.";
+
+			[self presentAlertWithMessage:message informativeText:details buttonTitles:@[ @"OK" ] completionHandler:^BOOL(NSModalResponse returnCode){
 				return YES; // close the update window
 			}];
 			return;
