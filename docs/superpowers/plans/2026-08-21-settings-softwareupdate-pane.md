@@ -65,31 +65,37 @@ extern NSString* const kUserDefaultsLastSoftwareUpdateCheckKey; // @"SoftwareUpd
 
 extern NSString* const kSoftwareUpdateChannelRelease;           // @"release"
 extern NSString* const kSoftwareUpdateChannelPrerelease;        // @"beta"
+extern NSString* const kSoftwareUpdateChannelCanary;            // @"nightly"
 ```
 
 - [ ] **Step 2: Create the first Swift file**
 
-`SettingsChannel` models the two user-selectable channels. **`kSoftwareUpdateChannelCanary` (`@"nightly"`) is deliberately absent** — `SoftwareUpdate.mm:392` sets `includePrereleases` only for `kSoftwareUpdateChannelPrerelease`, so `nightly` behaves identically to `release`, and the feed (git tags) has no third tier to offer. It survives only because `SoftwareUpdate.mm:359` forces it for test builds.
+`SettingsChannel` models all three channels the app defines. **Nightly is included at the maintainer's explicit direction**, and Task 3 makes it mean something: `SoftwareUpdate.mm:392` currently sets `includePrereleases` only for the prerelease channel, so today `nightly` delivers exactly what `release` does. Left alone, the picker would carry a control labelled "Nightly builds" that silently means "Normal releases".
+
+**Be clear-eyed about what this buys.** The feed is git tags (`AppController.mm:507`) with two tiers — stable and prerelease. Once nightly also sets `includePrereleases`, it and Prereleases deliver identical updates until a nightly tag stream exists. The entry is forward-looking, not a distinct tier today, and the spec records that.
 
 ```swift
 // Frameworks/Preferences/src/SettingsSupport.swift
 import Foundation
 
-// The two channels a user can choose. "nightly" (kSoftwareUpdateChannelCanary)
-// is intentionally not here: SoftwareUpdate.mm:392 sets includePrereleases only
-// for the prerelease channel, so nightly resolves to exactly the same updates as
-// release. It exists for test builds (SoftwareUpdate.mm:359), not as a tier.
+// All three channels the app defines. Nightly is offered at the maintainer's
+// direction; Task 3 changes SoftwareUpdate.mm:392 so it actually differs from
+// release. Until a nightly tag stream exists it delivers the same updates as
+// prerelease -- the feed is git tags with two tiers.
 public enum SettingsChannel: String, CaseIterable, Identifiable {
 	case release
 	case prerelease
+	case nightly
 
 	public var id: String { rawValue }
 
-	// The stored defaults value. Not the case name: prerelease persists as "beta".
+	// The stored defaults value. Not the case name: prerelease persists as "beta"
+	// and nightly as "nightly".
 	public var storedValue: String {
 		switch self {
 			case .release:    return kSoftwareUpdateChannelRelease
 			case .prerelease: return kSoftwareUpdateChannelPrerelease
+			case .nightly:    return kSoftwareUpdateChannelCanary
 		}
 	}
 
@@ -97,11 +103,13 @@ public enum SettingsChannel: String, CaseIterable, Identifiable {
 		switch self {
 			case .release:    return "Normal releases"
 			case .prerelease: return "Prereleases"
+			case .nightly:    return "Nightly builds"
 		}
 	}
 
-	// Anything unrecognised -- including "nightly" -- reads as release, which is
-	// what those channels actually deliver.
+	// Unrecognised values fall back to release, which is what an unknown channel
+	// delivers -- SoftwareUpdate.mm:363 looks the channel up in a dictionary and
+	// errors if it is missing.
 	public static func from(storedValue: String?) -> SettingsChannel {
 		allCases.first { $0.storedValue == storedValue } ?? .release
 	}
@@ -435,26 +443,48 @@ Keep `viewWillAppear`/`viewDidDisappear`'s observer and 60-second timer, and kee
 
 **Report the measured `fittingSize`.** If it is `0×0` or absurd, stop and report rather than working around it — that is the failure this task exists to catch.
 
-- [ ] **Step 4: Build and test**
+- [ ] **Step 4: Make Nightly deliver something other than stable**
+
+`Frameworks/SoftwareUpdate/src/SoftwareUpdate.mm:392` currently reads:
+
+```objc
+BOOL includePrereleases = [updateChannel isEqualToString:kSoftwareUpdateChannelPrerelease];
+```
+
+Only the prerelease channel opts in, so `nightly` resolves to the same updates as `release`. Change it so any channel other than release includes prereleases:
+
+```objc
+// Anything other than the stable channel opts into prerelease tags. Nightly is
+// offered in Settings, and without this it would deliver exactly what release
+// does -- a control labelled "Nightly builds" that silently means "Normal
+// releases". The feed is git tags with two tiers, so nightly and prerelease
+// deliver the same updates until a nightly tag stream exists.
+BOOL includePrereleases = ![updateChannel isEqualToString:kSoftwareUpdateChannelRelease];
+```
+
+**This also changes behaviour for test builds.** `SoftwareUpdate.mm:359` forces `kSoftwareUpdateChannelCanary` when `testBuild` is set, so those builds move from stable-only to including prereleases. That is almost certainly what a test build wanted; note it in your report so it is a recorded consequence rather than a surprise.
+
+- [ ] **Step 5: Build and test**
 
 Run: `bin/build && bin/build Preferences/test`
 Expected: `** BUILD SUCCEEDED **` for both; `Preferences_test -v` still reports `4 tests passed`.
 
-- [ ] **Step 5: Verify manually — this cannot be automated**
+- [ ] **Step 6: Verify manually — this cannot be automated**
 
 GUI behaviour cannot be exercised in the agent sandbox. Ask the maintainer to `bin/deploy-local` or run the built app and confirm:
 
 1. Settings → Software Update renders, with content, correctly sized — not collapsed, not clipped.
 2. Unchecking "Watch for updates" disables both the channel picker and "Ask before downloading updates".
 3. **The defaults diff.** `defaults export com.shelbydenike.TextMate /tmp/before.plist`, toggle every control, export to `/tmp/after.plist`, `diff` them. `SoftwareUpdateDisablePolling` must be **`true` when the checkbox is unchecked** — that is the negation, and it is the single most likely thing to invert silently.
-4. Selecting "Prereleases" writes `SoftwareUpdateChannel = beta` — not `prerelease`.
-5. ⌘1–⌘6 still switch panes; tabbing through the pane is sane.
-6. "Check Now" runs a check and greys out while checking.
+4. Selecting "Prereleases" writes `SoftwareUpdateChannel = beta` — not `prerelease`. Selecting "Nightly builds" writes `nightly`.
+5. With Nightly selected, "Check Now" completes without the error `No channel named 'nightly'.` — all three channels are registered at `AppController.mm:508-512`, so this should pass, and failing means the registration was disturbed.
+6. ⌘1–⌘6 still switch panes; tabbing through the pane is sane.
+7. "Check Now" runs a check and greys out while checking.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add Frameworks/Preferences/src project.yml TextMate.xcodeproj STREAM.md
+git add Frameworks/Preferences/src Frameworks/SoftwareUpdate/src project.yml TextMate.xcodeproj STREAM.md
 git commit -m "feat(settings): the Software Update pane in SwiftUI
 
 First pane ported. The AppKit shell is untouched -- window, toolbar, key
@@ -545,6 +575,8 @@ scrolls internally reports a small fitting size and clips."
 
 **The risk that has already shipped here once.** `OakTransitionViewController` pins the pane to `fittingSize`, and `CLAUDE.md` records the Terminal pane appearing as a dead click for months because an empty view was pinned to `0×0` with the previous pane still visible underneath. Measure and report `fittingSize` at every step that touches layout. It fails silently and looks like a rendering glitch.
 
-**`nightly` is deliberately not offered.** `SoftwareUpdate.mm:392` sets `includePrereleases` only for the prerelease channel, so `nightly` delivers exactly what `release` does; the feed is git tags and has no third tier. It survives because `SoftwareUpdate.mm:359` forces it for test builds. Do not "fix" its absence from the picker.
+**Nightly is offered, and Task 3 makes it mean something.** `SoftwareUpdate.mm:392` currently sets `includePrereleases` only for the prerelease channel, so untouched, `nightly` delivers exactly what `release` does — a picker entry labelled "Nightly builds" that silently means "Normal releases". Task 3 changes that line so any non-release channel includes prereleases.
+
+Until a nightly tag stream exists, Nightly and Prereleases therefore deliver identical updates. That is understood and accepted: the feed is git tags with two tiers, and the entry is forward-looking. Do not "simplify" it back out.
 
 **Read the file before changing it.** This plan exists because a survey summary produced three wrong statements in the spec — a class that does not exist, a constant whose value was wrong, and keys located in the wrong framework. Every code block above was written against the real source.

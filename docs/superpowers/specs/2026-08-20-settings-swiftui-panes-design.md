@@ -162,10 +162,20 @@ different. It is replaced by behaviour:
   `OakSoftwareUpdateChannelTransformer` is **not a class** — it is registered at runtime by
   `OakStringListTransformer createTransformerWithName:andObjectsArray:` over
   `@[ kSoftwareUpdateChannelRelease, kSoftwareUpdateChannelPrerelease ]`, mapping popup tag 0/1 to
-  `@"release"`/`@"beta"`. **A third channel exists that the popup cannot represent:**
-  `kSoftwareUpdateChannelCanary` = `@"nightly"`. A user already on that channel opens the pane and
-  the tag lookup matches nothing, so the port must decide explicitly what to show rather than
-  inheriting whatever the old binding happened to do. **Creating a `Preferences_test` target is part of this work** —
+  `@"release"`/`@"beta"`.
+
+**All three channels are offered, decided 2026-08-21.** The app defines a third,
+`kSoftwareUpdateChannelCanary` = `@"nightly"`, which the old popup could not represent — a user
+already on it opened the pane to a tag lookup matching nothing. The maintainer's direction is to
+offer it, so the port adds it *and* changes `SoftwareUpdate.mm:392`, which sets `includePrereleases`
+only for the prerelease channel. Without that change the entry would be a control labelled "Nightly
+builds" that silently means "Normal releases".
+
+Recorded plainly, because it will look like an oversight otherwise: the feed is git tags
+(`AppController.mm:507`) with two tiers, stable and prerelease. Nightly and Prereleases therefore
+deliver **identical** updates until a nightly tag stream exists. The entry is forward-looking. The
+same change also moves test builds — which `SoftwareUpdate.mm:359` forces onto canary — from
+stable-only to including prereleases. **Creating a `Preferences_test` target is part of this work** —
   verified: no such target exists in `project.yml`, there is no `Frameworks/Preferences/tests/`
   directory, and nothing anywhere exercises this framework. Follow the `SetupAssistantCore`
   precedent: testable logic lives where a test binary can link it.

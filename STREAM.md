@@ -4,6 +4,44 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — RESUME HERE: Nightly IS offered; the entry below this one is superseded
+
+**Reverses the ruling in the previous entry.** That entry says nightly stays out of the picker. It
+does not. The maintainer was shown the evidence, reaffirmed the instruction, and Nightly is offered.
+Read this entry, not that one, on the channel question.
+
+### What was added, and why it is more than a picker entry
+
+Adding "Nightly builds" alone would have shipped a control that lies.
+`Frameworks/SoftwareUpdate/src/SoftwareUpdate.mm:392` sets `includePrereleases` only for the
+prerelease channel, so an untouched `nightly` resolves to exactly the same updates as `release`. The
+plan therefore also changes that line to `![updateChannel isEqualToString:kSoftwareUpdateChannelRelease]`
+— any channel other than stable opts into prerelease tags.
+
+`Ruling: implement the maintainer's instruction fully rather than partially. A picker entry whose
+label says "Nightly builds" and whose behaviour is "Normal releases" is worse than not offering it,
+and worse than the extra line of change. Cost if wrong: nightly and prerelease behave identically,
+which is already true and now documented.`
+
+### Two consequences recorded so they are not discovered later
+
+- **Nightly and Prereleases deliver identical updates today.** The feed is git tags
+  (`AppController.mm:507`) with two tiers, stable and prerelease. There is nothing more bleeding-edge
+  to fetch. The entry is forward-looking and becomes distinct only if a nightly tag stream starts.
+- **Test builds change behaviour.** `SoftwareUpdate.mm:359` forces canary when `testBuild` is set,
+  so those builds move from stable-only to including prereleases. Almost certainly what a test build
+  wanted, but it is a real change, not a no-op.
+
+### If interrupted here
+
+Plan at `docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md`, four tasks, **no
+implementation yet**. Branch `phase-6/swiftui-preferences`, unpushed. Start at Task 1; do not
+re-plan. Execution mode was not chosen. The risk Task 3 exists to catch: `PreferencesPane.mm:36`
+sizes a pane from `fittingSize` and `OakTransitionViewController` pins to it — a `0×0` there is what
+made the Terminal pane look like a dead click for months.
+
+---
+
 ## 2026-08-21 — RESUME HERE: SoftwareUpdate pane plan written, ready to execute
 
 Plan at `docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md` — four tasks. Branch
