@@ -4,6 +4,54 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-20 — Settings panes designed as islands; About dropped with reasons
+
+Spec at `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`. Branch
+`phase-6/swiftui-preferences`, nothing implemented yet.
+
+### About was evaluated and dropped
+
+It is not an AppKit window — a 292-line controller around a `WKWebView` rendering HTML that
+`assemble_resources.sh` generates from Markdown, with version and copyright injected at runtime as
+JavaScript globals. Porting it means writing a Markdown renderer for a 269 KB Changes page of 202
+releases, plus selection, scrolling and link handling, to replace what a browser does for free —
+and the gate is visual parity, so success looks identical to doing nothing. Recorded in `HANDOFF.md`
+with the reasoning, not just the verdict.
+
+### Settings: the shell stays, the panes become islands
+
+2,544 lines across 18 files, and the cost is in the panes. Four of six bind through
+`NSUserDefaultsController` and value transformers; one loads from a xib. The 234-line shell works,
+so it keeps the window, toolbar, key equivalents, transitions and persistence, and each pane's
+`loadView` installs an `NSHostingView` instead of hand-built AppKit.
+
+Maintainer's decisions: modern `Form` styling rather than visual parity, since the goal is a uniform
+modern look; and all panes held on one branch so Settings never ships half-modern.
+
+`Ruling: SoftwareUpdate goes first, not Files. Files looked obvious at 145 lines until reading it —
+its checkboxes go to NSUserDefaults but file types, encoding and line endings go through
+settings_t, a C++ layer that cannot cross a bridging header, and it uses a custom encoding control
+backed by Charsets.plist. That is the two hardest pieces of the whole effort sitting on the pane
+whose job is to prove the easy case. SoftwareUpdate is three controls and plain defaults.`
+
+### The one-line change that removes a whole failure class
+
+`Keys.h` is pure Objective-C and contains no C++, so it is one `#import <Foundation/Foundation.h>`
+away from being usable through a bridging header. That lets Swift use the real `extern NSString*
+const` key constants via `@AppStorage` instead of retyped literals — the exact failure that produced
+this session's `didPromptForDefaultBundles` casing bug, where a test passed while proving nothing.
+Six panes of retyped keys would be six chances to repeat it.
+
+### If interrupted here
+
+Spec is written and committed; **no implementation plan exists yet**. Next step is
+`superpowers:writing-plans`, not code. Two risks the spec names and nothing has retired: this would
+be the second Swift-bearing target ever in this repo (the first was the app target, proven by
+spike), and `OakTransitionViewController` pins panes to `fittingSize` — a 0×0 there is what made the
+Terminal pane look like a dead click for months.
+
+---
+
 ## 2026-08-19 — v3.0.0-revived.26 cut; the maintainer confirmed the two modal paths
 
 CHANGELOG's `## Unreleased` heading became `## 2026-08-19 (v3.0.0-revived.26)`. **Merging PR #19

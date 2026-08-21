@@ -132,14 +132,17 @@ different. It is replaced by behaviour:
   mechanically: `defaults export com.shelbydenike.TextMate before.plist`, toggle every control in
   the pane, export again, diff. A transformer whose negation was lost shows up immediately, and four
   panes currently depend on negation.
-- **⌘1–⌘9 still switch panes** (`Preferences.mm:155`).
+- **The pane-switching key equivalents still work.** `Preferences.mm:155` assigns them by index —
+  `i < 9 ? '1' + i : @""` — so with six panes the live shortcuts are ⌘1 through ⌘6, not ⌘1–⌘9.
+  Testing ⌘7 proves nothing.
 - **The responder chain still works.** Pane switching sets first responder from `nextValidKeyView`
   (`Preferences.mm:50-54`); tab order within a pane must be sensible.
 - **Panes size correctly** — see Risks.
 - **Automated where possible.** The channel mapping performed by `OakSoftwareUpdateChannelTransformer`
-  is pure logic and belongs somewhere `Preferences_test` can reach, following the `SetupAssistantCore`
-  precedent. There is currently **no test target for `Preferences` at all**, and no test anywhere
-  exercises it.
+  is pure logic and should be tested. **Creating a `Preferences_test` target is part of this work** —
+  verified: no such target exists in `project.yml`, there is no `Frameworks/Preferences/tests/`
+  directory, and nothing anywhere exercises this framework. Follow the `SetupAssistantCore`
+  precedent: testable logic lives where a test binary can link it.
 
 ## Risks
 
