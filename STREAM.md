@@ -4,6 +4,43 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — Task 2 done: `Preferences_test`, the framework's first test target
+
+Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-2-brief.md` verbatim.
+`Frameworks/Preferences` had no test target, no `tests/` directory, and nothing anywhere
+exercising it -- confirmed before writing anything. TDD order: wrote
+`Frameworks/Preferences/tests/t_settings_support.mm` first, ran `bin/build Preferences/test`, and
+got the expected first failure (`xcodebuild: error: The project 'TextMate.xcodeproj' does not
+contain a target named 'Preferences_test'.`) before the target existed. Then added
+`Frameworks/Preferences/src/SettingsSupportBridge.{h,mm}` -- `TMSettingsLastCheckDescription`,
+pulled out of `SoftwareUpdatePreferences.mm:37`'s precedence (checking beats an error, an error
+beats a date, "Never" is the floor) so it can be tested as a free function, since `bin/gen_test`
+wraps every test file in a namespace and Objective-C forbids declaring a class inside one.
+
+Wired `project.yml`: a `PreferencesSupport` static library (just the one new `.mm`, none of
+`Preferences`'s AppKit/`settings_t`/BundlesManager baggage) and a `Preferences_test` tool target
+linking only that. The `Preferences` target had **no `dependencies:` key at all** before this --
+it resolved everything through `HEADER_SEARCH_PATHS` -- so the brief's instruction to add
+`PreferencesSupport` there meant adding the key itself, not appending to a list. Confirmed by
+reading the target block first. Ran `xcodegen generate --spec project.yml`; the diff is purely
+additive (225 lines, 0 deletions in `project.pbxproj`) -- the "Embed Dependencies" phase-order
+swap noted as expected elsewhere didn't happen this time.
+
+`bin/build Preferences/test` -> `** BUILD SUCCEEDED **`; running the binary directly (as the brief
+directs, since the wrapper's `exec`'d output isn't visible through this session's non-tty capture)
+gives `Preferences_test: 4 tests passed`, exit 0. Full `bin/build` (whole app) also still succeeds
+with `PreferencesSupport` linked in.
+
+### If interrupted here
+
+Task 2 is committed. Start Task 3 next, per
+`docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md` -- it rewires
+`SoftwareUpdatePreferences.mm`'s `-lastCheckDescription` to call `TMSettingsLastCheckDescription`
+so the tested function is the one that actually runs, and consumes Task 1's `SettingsChannel`.
+Neither happens yet: this task only extracted and tested the logic, per its own scope.
+
+---
+
 ## 2026-08-21 — Task 1 done: Swift compiles in the Preferences static library
 
 Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-1-brief.md` verbatim. Added
