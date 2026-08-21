@@ -1301,6 +1301,7 @@ targets:
       - path: "Frameworks/Preferences/src/Preferences.mm"
       - path: "Frameworks/Preferences/src/PreferencesPane.mm"
       - path: "Frameworks/Preferences/src/ProjectsPreferences.mm"
+      - path: "Frameworks/Preferences/src/SettingsFormStyle.swift"
       - path: "Frameworks/Preferences/src/SettingsSupport.swift"
       - path: "Frameworks/Preferences/src/SoftwareUpdatePreferences.mm"
       - path: "Frameworks/Preferences/src/TerminalPreferences.mm"

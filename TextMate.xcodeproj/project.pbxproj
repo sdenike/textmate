@@ -749,6 +749,7 @@
 		A567A6AE37399054E5B3041A /* libeditor.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5B7C77CF74A740586778C5A9 /* libeditor.a */; };
 		A5A4A8AF265DCFAD6C34929C /* libselection.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 12E2FD75966246A93CC5CC36 /* libselection.a */; };
 		A5C9ED48432C59F8594C3077 /* OakUIConstructionFunctions.mm in Sources */ = {isa = PBXBuildFile; fileRef = BED7B993C340A43D940599CB /* OakUIConstructionFunctions.mm */; };
+		A6102F6E1AA22D25DB875BF7 /* SettingsFormStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A629C4F6000F3AEB413AD2A /* SettingsFormStyle.swift */; };
 		A68D466B695AA89EF4A411C0 /* liblayout.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 94BD9BE3CBA0747D978099C6 /* liblayout.a */; };
 		A69C0C1A22205D8330FB0521 /* _Tselection.cc in Sources */ = {isa = PBXBuildFile; fileRef = 2F1345266C7C9BE687B243A5 /* _Tselection.cc */; };
 		A6A20129B2683AE138655E2C /* PreferencesMigration.mm in Sources */ = {isa = PBXBuildFile; fileRef = E0112A5D550105A6703C8DD1 /* PreferencesMigration.mm */; };
@@ -5036,6 +5037,19 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
+			);
+			name = "Embed Dependencies";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
 			dstSubfolderSpec = 6;
 			files = (
 				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
@@ -5045,26 +5059,13 @@
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
+		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 7;
 			files = (
 				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
-			);
-			name = "Embed Dependencies";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
-				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5362,6 +5363,7 @@
 		9A085E363BAC2E1FCD11ED19 /* pipe.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = pipe.cc; sourceTree = "<group>"; };
 		9A2E8F67B1B6366CFC38B229 /* libencoding.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libencoding.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		9A2EC78BB400155B0D3C2874 /* status.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = status.cc; sourceTree = "<group>"; };
+		9A629C4F6000F3AEB413AD2A /* SettingsFormStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFormStyle.swift; sourceTree = "<group>"; };
 		9A9968764A062001B6CBD81B /* OakHTMLOutputRequestMetadata.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OakHTMLOutputRequestMetadata.mm; sourceTree = "<group>"; };
 		9B509B2F24FB72F200986766 /* server.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = server.cc; sourceTree = "<group>"; };
 		9BB1BEDA806C41954CC11CDF /* commit.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = commit.mm; sourceTree = "<group>"; };
@@ -6918,6 +6920,7 @@
 				30E570F4D97F24C50926CF54 /* Preferences.mm */,
 				567B54F40779104512154CC6 /* PreferencesPane.mm */,
 				6B855EEEAC6ACF41C1A6E6B1 /* ProjectsPreferences.mm */,
+				9A629C4F6000F3AEB413AD2A /* SettingsFormStyle.swift */,
 				77E5A9F337A4DF6309A498F6 /* SettingsSupport.swift */,
 				E76EEECEC32CABEE6089DE13 /* SettingsSupportBridge.mm */,
 				552158142570056B4898175F /* SoftwareUpdatePreferences.mm */,
@@ -12163,6 +12166,7 @@
 				0D4597798F6836808511B40F /* Preferences.mm in Sources */,
 				EA83479DC2438EE94901898B /* PreferencesPane.mm in Sources */,
 				0BE0C51FAEBDD5AC2C964440 /* ProjectsPreferences.mm in Sources */,
+				A6102F6E1AA22D25DB875BF7 /* SettingsFormStyle.swift in Sources */,
 				72D151BDF807429F3552F928 /* SettingsSupport.swift in Sources */,
 				077F59BDF5D881094281C3E4 /* SoftwareUpdatePreferences.mm in Sources */,
 				0575CCA12F080E77A4C26E5C /* TerminalPreferences.mm in Sources */,

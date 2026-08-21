@@ -91,7 +91,7 @@ struct SoftwareUpdatePaneView: View {
 	let checkNow: () -> Void
 
 	var body: some View {
-		Form {
+		SettingsPane {
 			Section {
 				Toggle("Watch for updates", isOn: Binding(get: { model.watchForUpdates },
 				                                          set: { model.watchForUpdates = $0 }))
@@ -113,7 +113,6 @@ struct SoftwareUpdatePaneView: View {
 					.disabled(status.isChecking)
 			}
 		}
-		.formStyle(.grouped)
 	}
 }
 

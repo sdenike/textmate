@@ -4,6 +4,50 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — Task 4 done: the shared pane style, extracted rather than designed ahead
+
+Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-4-brief.md` verbatim. Added
+`Frameworks/Preferences/src/SettingsFormStyle.swift`, a `public struct SettingsPane<Content: View>:
+View` that wraps `content` in `Form { … }.formStyle(.grouped).scrollDisabled(true)` -- transcribed
+from the brief exactly, including its `.scrollDisabled(true)`, which is load-bearing rather than
+cosmetic: the shell sizes each pane from `fittingSize` (`PreferencesPane.mm:36`, then
+`OakTransitionViewController`), and a pane that scrolls internally would report a small fitting size
+and clip, the same failure mode `CLAUDE.md` records for the Terminal pane. `public`, not merely
+`@objc`, because `SettingsPane` is generic (`@objc` cannot express a generic type at all) and is
+consumed only from Swift -- `SoftwareUpdatePaneView`, same module -- so ObjC visibility was never in
+play; the constraint that forces `public` elsewhere in this file (`SettingsPaneFactory`,
+`SettingsPaneUpdateStatus`) is about crossing to Objective-C++, and this type never does.
+
+`SoftwareUpdatePaneView.body` in `SettingsSupport.swift` now wraps its two `Section`s in
+`SettingsPane { … }` instead of `Form { … }.formStyle(.grouped)` directly -- the only change to that
+file. Added the new file to `Preferences`'s `sources:` in `project.yml` (alphabetically before
+`SettingsSupport.swift`) and ran `xcodegen generate --spec project.yml`; the resulting
+`TextMate.xcodeproj` diff is exactly the new file's two entries plus the documented order-only swap
+of two `PBXCopyFilesBuildPhase` "Embed Dependencies" objects, nothing else.
+
+**Measured `fittingSize` before and after, not just after.** Rebuilt the same kind of throwaway
+harness Task 3 used (a stub `.m` defining the bridging header's extern constants, linked against the
+real, unmodified `SettingsSupport.swift` compiled standalone via `swiftc`) to get a real "before"
+number rather than trusting the figure recorded in the brief: 490x252, matching Task 3's own
+measurement and its control baselines (10x10 `EmptyView`, 40x40 empty grouped `Form`). Recompiled the
+same harness against the edited `SettingsSupport.swift` plus the new `SettingsFormStyle.swift` --
+**after is also 490x252, unchanged**. `.scrollDisabled(true)` did not move it because the pane's two
+`Section`s already fit inside 252pt without scrolling; the modifier is there for later, taller panes,
+per the brief's own note, not because this one needed it.
+
+`bin/build` -> `** BUILD SUCCEEDED **`; touched both changed files and grepped the full log for their
+names next to "warning" -- none. `bin/build Preferences/test` -> `** BUILD SUCCEEDED **`;
+`Preferences_test -v --no-parallel` -> `4 tests passed`.
+
+### If interrupted here
+
+Task 4 is committed -- this was the last task in
+`docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md`. Every later pane in
+`docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`'s ordering should now wrap its
+content in `SettingsPane { … }` rather than reaching for `Form` directly.
+
+---
+
 ## 2026-08-21 — Task 3 fix round 1/5: "Last check" and "Check Now" go live
 
 Coordinator finding: Task 3 shipped with `lastCheckDescription: ""` and `isChecking: false`
