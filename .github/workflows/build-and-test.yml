@@ -61,8 +61,8 @@ jobs:
           # Fixed list, not discovered: the `.rave` files this used to be grepped from are
           # gone (Phase 2 Task 8). This was the 19 CI-included test targets from the parity
           # baseline (docs/benchmarks/2026-08-12-ninja-parity.md); OakAppKit_test (Phase 6
-          # Task 1) makes 20 -- add a new framework's `<name>_test` target here by hand if it
-          # ships tests.
+          # Task 1) makes 20 and Preferences_test (Phase 6, SwiftUI Settings) 21 -- add a new
+          # framework's `<name>_test` target here by hand if it ships tests.
           #
           # network_test was removed from this list on 2026-08-14: the framework was deleted
           # in 42e674ce ("build!: delete the dead network framework"), so xcodebuild aborted
@@ -71,7 +71,7 @@ jobs:
           # the resulting 26 -> 25 drop; this list had simply never been updated, and could
           # not fail visibly while the workflow was triggering on a branch that does not
           # exist here.
-          TESTS="authorization_test bundles_test BundlesManager_test document_test encoding_test FileBrowser_test HTMLOutput_test io_test ns_test OakAppKit_test parse_test plist_test regexp_test scm_test scope_test selection_test settings_test SoftwareUpdate_test text_test theme_test"
+          TESTS="authorization_test bundles_test BundlesManager_test document_test encoding_test FileBrowser_test HTMLOutput_test io_test ns_test OakAppKit_test parse_test plist_test Preferences_test regexp_test scm_test scope_test selection_test settings_test SoftwareUpdate_test text_test theme_test"
           echo "Running tests: $TESTS"
           FAIL=0
           for t in $TESTS; do

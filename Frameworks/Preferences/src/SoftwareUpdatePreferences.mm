@@ -1,15 +1,14 @@
 #import "SoftwareUpdatePreferences.h"
-#import "Keys.h"
-#import <OakAppKit/NSImage Additions.h>
-#import <OakAppKit/OakUIConstructionFunctions.h>
-#import <OakFoundation/OakStringListTransformer.h>
+#import "Preferences-Swift.h"
+#import "SettingsSupportBridge.h"
 #import <SoftwareUpdate/SoftwareUpdate.h>
-#import <MenuBuilder/MenuBuilder.h>
 
 @interface SoftwareUpdatePreferences ()
 {
 	id _relativeDateUserDefaultsObserver;
 	NSTimer* _relativeDateUpdateTimer;
+	SettingsPaneUpdateStatus* _updateStatus;
+	BOOL _observingLastCheckDescription;
 }
 @property (nonatomic) NSString* relativeStringForLastCheck;
 @end
@@ -19,14 +18,8 @@
 
 - (id)init
 {
-	NSImage* icon = [NSImage imageNamed:@"Software Update" inSameBundleAsClass:[self class]];
-	if(@available(macos 11.0, *))
-		icon = [NSImage imageWithSystemSymbolName:@"arrow.triangle.2.circlepath" accessibilityDescription:@"Software Update"];
-	if(self = [super initWithNibName:nil label:@"Software Update" image:icon])
-	{
-		[OakStringListTransformer createTransformerWithName:@"OakSoftwareUpdateChannelTransformer" andObjectsArray:@[ kSoftwareUpdateChannelRelease, kSoftwareUpdateChannelPrerelease ]];
-	}
-	return self;
+	NSImage* icon = [NSImage imageWithSystemSymbolName:@"arrow.triangle.2.circlepath" accessibilityDescription:@"Software Update"];
+	return [super initWithNibName:nil label:@"Software Update" image:icon];
 }
 
 - (SoftwareUpdate*)softwareUpdateController
@@ -36,63 +29,14 @@
 
 - (NSString*)lastCheckDescription
 {
-	return self.softwareUpdateController.isChecking ? @"Checking…" : (self.softwareUpdateController.errorString ?: _relativeStringForLastCheck ?: @"Never");
+	return TMSettingsLastCheckDescription(self.softwareUpdateController.isChecking, self.softwareUpdateController.errorString, _relativeStringForLastCheck);
 }
 
 - (NSString*)relativeStringForDate:(NSDate*)date
 {
 	if(!date)
 		return nil;
-
-#if defined(MAC_OS_X_VERSION_10_15) && (MAC_OS_X_VERSION_10_15 <= MAC_OS_X_VERSION_MAX_ALLOWED)
-	if(@available(macos 10.15, *))
-	{
-		return -[date timeIntervalSinceNow] < 5 ? @"Just now" : [[[NSRelativeDateTimeFormatter alloc] init] localizedStringForDate:date relativeToDate:NSDate.now];
-	}
-	else
-#endif
-	{
-		NSTimeInterval const minute =  60;
-		NSTimeInterval const hour   =  60*minute;
-		NSTimeInterval const day    =  24*hour;
-		NSTimeInterval const week   =   7*day;
-		NSTimeInterval const month  =  31*day;
-		NSTimeInterval const year   = 365*day;
-
-		NSString* res;
-
-		NSTimeInterval t = -[date timeIntervalSinceNow];
-		if(t < 1)
-			res = @"Just now";
-		else if(t < minute)
-			res = @"Less than a minute ago";
-		else if(t < 2 * minute)
-			res = @"1 minute ago";
-		else if(t < hour)
-			res = [NSString stringWithFormat:@"%.0f minutes ago", t / minute];
-		else if(t < 2 * hour)
-			res = @"1 hour ago";
-		else if(t < day)
-			res = [NSString stringWithFormat:@"%.0f hours ago", t / hour];
-		else if(t < 2*day)
-			res = @"Yesterday";
-		else if(t < week)
-			res = [NSString stringWithFormat:@"%.0f days ago", t / day];
-		else if(t < 2*week)
-			res = @"Last week";
-		else if(t < month)
-			res = [NSString stringWithFormat:@"%.0f weeks ago", t / week];
-		else if(t < 2*month)
-			res = @"Last month";
-		else if(t < year)
-			res = [NSString stringWithFormat:@"%.0f months ago", t / month];
-		else if(t < 2*year)
-			res = @"Last year";
-		else
-			res = [NSString stringWithFormat:@"%.0f years ago", t / year];
-
-		return res;
-	}
+	return -[date timeIntervalSinceNow] < 5 ? @"Just now" : [[[NSRelativeDateTimeFormatter alloc] init] localizedStringForDate:date relativeToDate:NSDate.now];
 }
 
 - (void)viewWillAppear
@@ -106,49 +50,87 @@
 	}];
 
 	self.relativeStringForLastCheck = [self relativeStringForDate:[NSUserDefaults.standardUserDefaults objectForKey:kUserDefaultsLastSoftwareUpdateCheckKey]];
+
+	// lastCheckDescription's own dependent keys (declared above) already cover
+	// softwareUpdateController.checking/.errorString and relativeStringForLastCheck,
+	// so observing that one derived property is enough to catch all three without
+	// three separate observers. Initial fires this immediately on registration,
+	// which is what re-syncs the SwiftUI status after a pane was hidden (and thus
+	// unobserved) while a check ran or completed.
+	//
+	// Flag-guarded on both sides: -removeObserver:forKeyPath: throws when it is
+	// unbalanced, unlike the -removeObserver: sitting beside it below. Today the
+	// pair is balanced only because OakTransitionViewController removes the old
+	// subview on animation completion, which is not this file's invariant to
+	// rely on.
+	if(!_observingLastCheckDescription)
+	{
+		[self addObserver:self forKeyPath:@"lastCheckDescription" options:NSKeyValueObservingOptionInitial context:NULL];
+		_observingLastCheckDescription = YES;
+	}
 }
 
 - (void)viewDidDisappear
 {
 	[_relativeDateUpdateTimer invalidate];
 	[NSNotificationCenter.defaultCenter removeObserver:_relativeDateUserDefaultsObserver];
+	if(_observingLastCheckDescription)
+	{
+		[self removeObserver:self forKeyPath:@"lastCheckDescription"];
+		_observingLastCheckDescription = NO;
+	}
+}
+
+- (void)observeValueForKeyPath:(NSString*)keyPath ofObject:(id)object change:(NSDictionary*)change context:(void*)context
+{
+	if([keyPath isEqualToString:@"lastCheckDescription"])
+			[self pushUpdateStatus];
+	else	[super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+}
+
+- (void)pushUpdateStatus
+{
+	// -updateWithLastCheckDescription:isChecking: is @MainActor, and the @objc
+	// thunk of a @MainActor method SIGTRAPs (exit 133) *before its body runs*
+	// when invoked off-main under -swift-version 6. This is reachable off-main:
+	// SoftwareUpdate.mm's NSBackgroundActivityScheduler block runs on an XPC
+	// activity queue and gets here synchronously via checkForTestBuild:'s
+	// `self.checking = YES` -> KVO -> observeValueForKeyPath:. So an automatic
+	// hourly check with the pane open would kill the app. (The AppKit pane this
+	// replaced fed the same off-main KVO into a Cocoa binding, which misbehaved
+	// quietly instead of trapping -- the threading defect predates the port.)
+	//
+	// Conditional rather than an unconditional dispatch_async: -loadView seeds
+	// the status synchronously and SettingsPaneFactory measures fittingSize off
+	// the view it then builds, so deferring the on-main case by a runloop turn
+	// would size the "Last check" row for empty text -- exactly what seeding
+	// before the factory runs exists to prevent.
+	NSString* description = self.lastCheckDescription;
+	BOOL isChecking       = self.softwareUpdateController.isChecking;
+	if(NSThread.isMainThread)
+	{
+		[_updateStatus updateWithLastCheckDescription:description isChecking:isChecking];
+	}
+	else
+	{
+		SettingsPaneUpdateStatus* status = _updateStatus;
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[status updateWithLastCheckDescription:description isChecking:isChecking];
+		});
+	}
 }
 
 - (void)loadView
 {
-	NSButton* watchForUpdatesCheckBox      = OakCreateCheckBox(@"Watch for:");
-	NSPopUpButton* updateChannelPopUp      = OakCreatePopUpButton();
-	NSButton* askBeforeDownloadingCheckBox = OakCreateCheckBox(@"Ask before downloading updates");
+	// Seeded before the factory runs, not after: SettingsPaneFactory measures
+	// fittingSize off the view it builds, and status starting at "" would size
+	// the "Last check" row for empty text instead of the real string.
+	_updateStatus = [[SettingsPaneUpdateStatus alloc] init];
+	[self pushUpdateStatus];
 
-	NSStackView* watchForStackView = [NSStackView stackViewWithViews:@[ watchForUpdatesCheckBox, updateChannelPopUp ]];
-	watchForStackView.alignment = NSLayoutAttributeFirstBaseline;
-
-	NSTextField* lastCheckTextField        = OakCreateLabel(@"Some time ago");
-	NSButton* checkNowButton               = [NSButton buttonWithTitle:@"Check Now" target:self.softwareUpdateController action:@selector(checkForUpdate:)];
-
-	MBMenu const updateChannelMenuItems = {
-		{ @"Normal releases", .tag = 0 },
-		{ @"Prereleases",     .tag = 1 },
-	};
-	MBCreateMenu(updateChannelMenuItems, updateChannelPopUp.menu);
-
-	NSGridView* gridView = [NSGridView gridViewWithViews:@[
-		@[ OakCreateLabel(@"Software update:"),        watchForStackView                 ],
-		@[ NSGridCell.emptyContentView,                askBeforeDownloadingCheckBox      ],
-		@[ ],
-		@[ OakCreateLabel(@"Last check:"),             lastCheckTextField                ],
-		@[ NSGridCell.emptyContentView,                checkNowButton                    ],
-	]];
-
-	self.view = OakSetupGridViewWithSeparators(gridView, { 2 });
-
-	[watchForUpdatesCheckBox      bind:NSValueBinding       toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:[NSString stringWithFormat:@"values.%@", kUserDefaultsDisableSoftwareUpdateKey]   options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
-	[updateChannelPopUp           bind:NSSelectedTagBinding toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:[NSString stringWithFormat:@"values.%@", kUserDefaultsSoftwareUpdateChannelKey]   options:@{ NSValueTransformerNameBindingOption: @"OakSoftwareUpdateChannelTransformer" }];
-	[askBeforeDownloadingCheckBox bind:NSValueBinding       toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:[NSString stringWithFormat:@"values.%@", kUserDefaultsAskBeforeUpdatingKey]       options:nil];
-	[lastCheckTextField           bind:NSValueBinding       toObject:self                                                  withKeyPath:@"lastCheckDescription"                                                           options:nil];
-
-	[updateChannelPopUp           bind:NSEnabledBinding     toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:[NSString stringWithFormat:@"values.%@", kUserDefaultsDisableSoftwareUpdateKey]   options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
-	[askBeforeDownloadingCheckBox bind:NSEnabledBinding     toObject:NSUserDefaultsController.sharedUserDefaultsController withKeyPath:[NSString stringWithFormat:@"values.%@", kUserDefaultsDisableSoftwareUpdateKey]   options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
-	[checkNowButton               bind:NSEnabledBinding     toObject:self.softwareUpdateController                         withKeyPath:@"checking"                                                                       options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
+	SoftwareUpdate* controller = self.softwareUpdateController;
+	self.view = [SettingsPaneFactory softwareUpdateViewWithCheckNow:^{
+		[controller checkForUpdate:nil];
+	} status:_updateStatus];
 }
 @end

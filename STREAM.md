@@ -4,6 +4,503 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — RESUME HERE: Software Update pane ported; a crash caught by the whole-branch review
+
+Branch `phase-6/swiftui-preferences`, 13 commits, **unpushed and unmerged**. Build green, 4 tests
+passing and now actually running in CI. All four plan tasks complete, each reviewed, plus a final
+whole-branch pass and its fix wave (`4c1ea1ab`).
+
+### The finding that justified the whole-branch review
+
+Eight task-level reviews passed. The final pass found that the app **SIGTRAPs on every automatic
+update check while the pane is open** — the default configuration.
+
+`SoftwareUpdate.mm:313`'s `NSBackgroundActivityScheduler` block runs off-main, synchronously reaches
+`:368 self.checking = YES`, fires KVO into the pane, and calls a `@MainActor` Swift method. Under
+Swift 6 on macOS 26 the `@objc` thunk traps before its body runs. Both ends were measured, not
+argued: the scheduler block reports `isMainThread = 0`, and an off-main `@MainActor` thunk exits 133.
+
+**The old AppKit pane had the same off-main KVO**, feeding a Cocoa binding that misbehaved quietly.
+Swift 6's isolation checking converts that latent thread bug into a hard crash. The port did not
+introduce the defect; it made it impossible to ignore.
+
+`Ruling: this ledger recorded @MainActor soundness as "verified against SoftwareUpdate.mm:326,344,368,417"
+after Task 3. That was WRONG and I passed it on as settled. All four of those sites are main-dispatched
+or on the button path — but :368 has a second caller at :313 that is not. Checking the call sites you
+are handed is not the same as checking all callers.`
+
+### Also fixed: the branch's own tests never ran
+
+`Preferences_test` was absent from the hand-maintained `TESTS` list in
+`.github/workflows/build-and-test.yml`, whose own comment says new targets must be added by hand.
+The plan created the target and never wired it, so four passing tests guarded nothing.
+
+### What shipped
+
+The AppKit pane is gone. `SoftwareUpdatePreferences.loadView` now installs an `NSHostingView`; the
+shell — window, toolbar, pane switching, persistence — is untouched. Behavioural parity with the
+deleted pane was verified against git history: the negated `SoftwareUpdateDisablePolling` checkbox,
+both separate disabled-bindings, Check-Now-while-checking, and all four "Last check" states.
+`fittingSize` measured 490×252 and stable across every change, against controls (`EmptyView` 10×10,
+empty `Form` 40×40).
+
+### If interrupted here
+
+Branch is complete and unmerged; it needs the maintainer's manual QA, none of which has been done.
+The highest-value check is the defaults diff — `SoftwareUpdateDisablePolling` is stored **inverted**,
+and a lost negation would silently disable updates for everyone while the checkbox still looked
+right. Five panes remain (Projects, Variables, Files, Terminal, Bundles); the spec holds the order
+and the reasoning.
+
+---
+
+## 2026-08-21 — Final fix wave: the pane's own KVO could kill the app on the hourly update check
+
+Whole-branch review found one crash and one gap; both fixed here along with three smaller items, in
+one commit.
+
+**The crash.** `SoftwareUpdatePreferences.mm`'s `-pushUpdateStatus` called
+`-updateWithLastCheckDescription:isChecking:`, which is `@MainActor` on the Swift side, from a chain
+that is fully synchronous and starts off-main: `SoftwareUpdate.mm`'s `NSBackgroundActivityScheduler`
+block runs on an XPC activity queue, calls `-checkForTestBuild:`, whose `self.checking = YES` fires
+KVO straight into `-observeValueForKeyPath:`. With automatic checks on -- the default -- opening
+Settings on this pane and waiting for the hourly check would take the app down. Reproduced the
+mechanism standalone before touching anything: an `@objc @MainActor` method compiled at
+`-swift-version 6` for `arm64-apple-macos26.0`, invoked through its ObjC thunk from a background
+queue, exits **133 (SIGTRAP) with the body never running**; the same binary with a conditional
+main-queue hop runs the body on the main thread and exits 0.
+
+`-pushUpdateStatus` now reads the two values on the calling thread and **hops only when not already
+on main**, rather than dispatching unconditionally. That is a correctness requirement, not a latency
+preference: `-loadView` seeds the status synchronously and `SettingsPaneFactory` measures
+`fittingSize` off the view it builds immediately after, so an unconditional `dispatch_async` would
+defer the seed past the measurement and size the "Last check" row for empty text -- precisely what
+seeding-before-the-factory exists to prevent. The Swift side's isolation was left alone;
+`SettingsPaneUpdateStatus` drives SwiftUI and belongs on the main actor. Its comment claiming the
+KVO chain is always main-thread was the false premise behind the bug and has been corrected in
+place. **This is a pre-existing threading defect, not one the port introduced** -- the AppKit pane
+fed the same off-main KVO into a Cocoa binding, which misbehaved quietly instead of trapping. The
+port converted silent misbehaviour into a hard crash.
+
+**The gap.** `.github/workflows/build-and-test.yml` carries a hand-maintained `TESTS` list and
+`Preferences_test` was not in it, so this branch's four tests guarded nothing (`release.yml` gates
+on the same job). Added, alphabetically between `plist_test` and `regexp_test`, and deliberately
+**not** added to the `--no-parallel` case beside it: those eight are frameworks whose runners call
+Cocoa APIs asserting `NSThread.isMainThread`, and this suite exercises only
+`TMSettingsLastCheckDescription`, a pure C function over `BOOL` and `NSString*`. Confirmed by
+running the binary bare five times plus once with `-v`: 4/4 every time.
+
+Three smaller items. `#import "Keys.h"` is gone from `SoftwareUpdatePreferences.mm` -- every key the
+file uses is declared in `SoftwareUpdate/SoftwareUpdate.h`, and `Keys.h` declares none of them.
+`import SwiftUI` moved from mid-file to the top of `SettingsSupport.swift`. And the pane's
+`-removeObserver:forKeyPath:` is now flag-guarded on both sides: unlike the notification-centre
+`-removeObserver:` next to it, an unbalanced call throws, and the pair is balanced today only
+because `OakTransitionViewController` happens to drop the old subview on animation completion.
+
+`fittingSize` re-measured with the same standalone harness: **490x252, unchanged**. `bin/build` and
+`bin/build Preferences/test` both succeed, no new diagnostics on either changed source.
+
+**If interrupted here:** the branch is complete and green. Nothing is half-done. The one thing not
+covered by a test is the crash fix itself -- it was verified by standalone repro and by inspection,
+not by a test in this tree, because reproducing it needs a live `NSBackgroundActivityScheduler`.
+
+---
+
+## 2026-08-21 — Task 4 done: the shared pane style, extracted rather than designed ahead
+
+Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-4-brief.md` verbatim. Added
+`Frameworks/Preferences/src/SettingsFormStyle.swift`, a `public struct SettingsPane<Content: View>:
+View` that wraps `content` in `Form { … }.formStyle(.grouped).scrollDisabled(true)` -- transcribed
+from the brief exactly, including its `.scrollDisabled(true)`, which is load-bearing rather than
+cosmetic: the shell sizes each pane from `fittingSize` (`PreferencesPane.mm:36`, then
+`OakTransitionViewController`), and a pane that scrolls internally would report a small fitting size
+and clip, the same failure mode `CLAUDE.md` records for the Terminal pane. `public`, not merely
+`@objc`, because `SettingsPane` is generic (`@objc` cannot express a generic type at all) and is
+consumed only from Swift -- `SoftwareUpdatePaneView`, same module -- so ObjC visibility was never in
+play; the constraint that forces `public` elsewhere in this file (`SettingsPaneFactory`,
+`SettingsPaneUpdateStatus`) is about crossing to Objective-C++, and this type never does.
+
+`SoftwareUpdatePaneView.body` in `SettingsSupport.swift` now wraps its two `Section`s in
+`SettingsPane { … }` instead of `Form { … }.formStyle(.grouped)` directly -- the only change to that
+file. Added the new file to `Preferences`'s `sources:` in `project.yml` (alphabetically before
+`SettingsSupport.swift`) and ran `xcodegen generate --spec project.yml`; the resulting
+`TextMate.xcodeproj` diff is exactly the new file's two entries plus the documented order-only swap
+of two `PBXCopyFilesBuildPhase` "Embed Dependencies" objects, nothing else.
+
+**Measured `fittingSize` before and after, not just after.** Rebuilt the same kind of throwaway
+harness Task 3 used (a stub `.m` defining the bridging header's extern constants, linked against the
+real, unmodified `SettingsSupport.swift` compiled standalone via `swiftc`) to get a real "before"
+number rather than trusting the figure recorded in the brief: 490x252, matching Task 3's own
+measurement and its control baselines (10x10 `EmptyView`, 40x40 empty grouped `Form`). Recompiled the
+same harness against the edited `SettingsSupport.swift` plus the new `SettingsFormStyle.swift` --
+**after is also 490x252, unchanged**. `.scrollDisabled(true)` did not move it because the pane's two
+`Section`s already fit inside 252pt without scrolling; the modifier is there for later, taller panes,
+per the brief's own note, not because this one needed it.
+
+`bin/build` -> `** BUILD SUCCEEDED **`; touched both changed files and grepped the full log for their
+names next to "warning" -- none. `bin/build Preferences/test` -> `** BUILD SUCCEEDED **`;
+`Preferences_test -v --no-parallel` -> `4 tests passed`.
+
+### If interrupted here
+
+Task 4 is committed -- this was the last task in
+`docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md`. Every later pane in
+`docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`'s ordering should now wrap its
+content in `SettingsPane { … }` rather than reaching for `Form` directly.
+
+---
+
+## 2026-08-21 — Task 3 fix round 1/5: "Last check" and "Check Now" go live
+
+Coordinator finding: Task 3 shipped with `lastCheckDescription: ""` and `isChecking: false`
+hardcoded into `SettingsPaneFactory.softwareUpdateView`, so the pane's "Last check" field was
+permanently blank and "Check Now" never greyed out while a check ran -- a real regression against
+the AppKit pane it replaced, not the deferred nicety the brief's Step 2/3 split implied. Flagged in
+the Task 3 report rather than invented at the time, since the brief's own factory signature took
+only `checkNow:`; this round supplies the wiring the brief promised ("Step 3") but never wrote.
+
+Added `SettingsPaneUpdateStatus` to `SettingsSupport.swift` -- an `@objc(SettingsPaneUpdateStatus)
+@MainActor public final class … : NSObject, ObservableObject` with `@Published` `lastCheckDescription`/
+`isChecking` and one bridge method, `update(lastCheckDescription:isChecking:)`. The factory now
+takes it as a second parameter and `SoftwareUpdatePaneView` observes it (`@ObservedObject`)
+instead of taking plain values. `SoftwareUpdatePreferences.mm` creates one in `loadView`, seeds it
+synchronously before calling the factory (so `fittingSize` measures real text, not `""`), and pushes
+into it from a single KVO observation of **its own** `lastCheckDescription` -- reusing
+`+keyPathsForValuesAffectingLastCheckDescription`, already declared over
+`softwareUpdateController.checking`, `.errorString` and `relativeStringForLastCheck`, so one
+`addObserver:forKeyPath:@"lastCheckDescription"` (registered in `viewWillAppear`, removed in
+`viewDidDisappear`, matching the existing timer/notification lifecycle in the same two methods)
+catches all three without three separate observers. `NSKeyValueObservingOptionInitial` re-syncs on
+every appear, covering a check that ran while the pane was hidden and thus unobserved.
+
+Confirmed the KVO source is always main-thread before relying on `@MainActor` for the pushed-into
+object: `SoftwareUpdate.mm`'s `self.checking = YES` runs synchronously on the thread that called
+`checkForUpdate:` (the SwiftUI button action, main thread); the async completion's `self.checking =
+NO` and `self.errorString = …` are both inside `dispatch_async(dispatch_get_main_queue(), …)`. No
+loosened isolation needed.
+
+Re-measured `fittingSize` the same way as Task 3 (standalone harness compiling the real
+`SettingsSupport.swift` against a stub defining the bridging header's extern constants, since
+linking the real `Preferences.a` standalone remains impractical) -- **unchanged at 490x252**, both
+for `"Never"`/not-checking and for a longer string (`"5 minutes ago"`) with `isChecking: true`, so
+neither real last-check text nor the checking state grows the pane.
+
+`bin/build` -> `** BUILD SUCCEEDED **`, no warnings from either changed file (checked by touching
+both and grepping the full log). `bin/build Preferences/test` -> `** BUILD SUCCEEDED **`,
+`Preferences_test -v` -> `4 tests passed`. `SoftwareUpdate.mm` untouched this round -- the nightly
+channel change from Task 3 stands as committed.
+
+### If interrupted here
+
+This fix round is committed. Round 1/5 per the coordinator's numbering; no further findings
+outstanding as of this entry. Next is whatever the coordinator's round 2 raises, or if none, the
+next pane in `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`'s ordering.
+
+---
+
+## 2026-08-21 — Task 3 done: the Software Update pane in SwiftUI, first pane ported
+
+Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-3-brief.md`. Appended
+`SoftwareUpdateModel`, `SoftwareUpdatePaneView` and `@objc public final class SettingsPaneFactory`
+to `Frameworks/Preferences/src/SettingsSupport.swift`, then rewrote
+`SoftwareUpdatePreferences.mm`'s `loadView` to install `[SettingsPaneFactory
+softwareUpdateViewWithCheckNow:]`'s `NSHostingView` instead of building an `NSGridView`. The watch
+checkbox stays inverted (`pollingDisabled` backs `watchForUpdates` negated) and the channel now
+persists through `SettingsChannel` rather than a runtime-registered `NSSelectedTagBinding`
+transformer -- `OakSoftwareUpdateChannelTransformer`'s registration in `init` came out too, since
+`loadView`'s rewrite deleted its only binding and it would otherwise sit there naming a stale
+2-of-3 channel list.
+
+Deleted the pre-10.15 branch of `relativeStringForDate:` and the `@available(macos 11.0, *)` icon
+guard, both dead at a macOS 26 deployment target. `-lastCheckDescription` now calls
+`TMSettingsLastCheckDescription`, so Task 2's tested function has a real caller -- though nothing
+in the new pane displays its result yet: per the brief, `SettingsPaneFactory`'s factory takes only
+`checkNow:` and hardcodes `lastCheckDescription: ""`/`isChecking: false` into the view. The "Last
+check" field will render blank and "Check Now" won't visibly grey out while checking until a later
+task threads live values through; flagging this rather than silently wiring it myself, since the
+brief's own interface line pins the factory to `checkNow:` only.
+
+**Measured `fittingSize` rather than trusting it.** Linking the real `Preferences` static lib
+standalone was impractical (it pulls the whole app's transitive dependency graph through the other
+panes in the same target), so verification compiled the actual, unmodified `SettingsSupport.swift`
+in a throwaway harness against a stub `.m` defining the same extern constants, called
+`SettingsPaneFactory.softwareUpdateView`, and printed `.fittingSize`. Got 490x252, against control
+baselines of 10x10 for a bare `EmptyView` and 40x40 for an empty grouped `Form` -- confirms the
+number reflects real content, not a default. This is the failure mode `CLAUDE.md` records for the
+Terminal pane; it did not reproduce here.
+
+`Frameworks/SoftwareUpdate/src/SoftwareUpdate.mm:392`'s `includePrereleases` now triggers for any
+non-release channel rather than prerelease only, so Nightly actually differs from Normal releases
+in the picker. Also moves test builds (forced onto canary at `:359`) from stable-only to including
+prereleases -- a recorded consequence, not a surprise.
+
+`bin/build` -> `** BUILD SUCCEEDED **`; no warnings from either changed file (checked by touching
+them and grepping the full log). `bin/build Preferences/test` -> `** BUILD SUCCEEDED **`,
+`Preferences_test -v` -> `4 tests passed`. The extern link check the brief warned about (this task
+is the first to force `Preferences-Bridging-Header.h`'s symbols to link) surfaced nothing -- clean
+link both times.
+
+### If interrupted here
+
+Task 3 is committed. Everything the maintainer needs to check interactively is Step 6 of
+`docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md` -- rendering, the disabled
+states, the defaults diff (checkbox negation is the likeliest thing to have inverted silently),
+channel storage values, and Nightly's "Check Now". Next pane in the series picks up wherever
+`docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`'s ordering says to go after
+Software Update.
+
+---
+
+## 2026-08-21 — Task 2 done: `Preferences_test`, the framework's first test target
+
+Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-2-brief.md` verbatim.
+`Frameworks/Preferences` had no test target, no `tests/` directory, and nothing anywhere
+exercising it -- confirmed before writing anything. TDD order: wrote
+`Frameworks/Preferences/tests/t_settings_support.mm` first, ran `bin/build Preferences/test`, and
+got the expected first failure (`xcodebuild: error: The project 'TextMate.xcodeproj' does not
+contain a target named 'Preferences_test'.`) before the target existed. Then added
+`Frameworks/Preferences/src/SettingsSupportBridge.{h,mm}` -- `TMSettingsLastCheckDescription`,
+pulled out of `SoftwareUpdatePreferences.mm:37`'s precedence (checking beats an error, an error
+beats a date, "Never" is the floor) so it can be tested as a free function, since `bin/gen_test`
+wraps every test file in a namespace and Objective-C forbids declaring a class inside one.
+
+Wired `project.yml`: a `PreferencesSupport` static library (just the one new `.mm`, none of
+`Preferences`'s AppKit/`settings_t`/BundlesManager baggage) and a `Preferences_test` tool target
+linking only that. The `Preferences` target had **no `dependencies:` key at all** before this --
+it resolved everything through `HEADER_SEARCH_PATHS` -- so the brief's instruction to add
+`PreferencesSupport` there meant adding the key itself, not appending to a list. Confirmed by
+reading the target block first. Ran `xcodegen generate --spec project.yml`; the diff is purely
+additive (225 lines, 0 deletions in `project.pbxproj`) -- the "Embed Dependencies" phase-order
+swap noted as expected elsewhere didn't happen this time.
+
+`bin/build Preferences/test` -> `** BUILD SUCCEEDED **`; running the binary directly (as the brief
+directs, since the wrapper's `exec`'d output isn't visible through this session's non-tty capture)
+gives `Preferences_test: 4 tests passed`, exit 0. Full `bin/build` (whole app) also still succeeds
+with `PreferencesSupport` linked in.
+
+### If interrupted here
+
+Task 2 is committed. Start Task 3 next, per
+`docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md` -- it rewires
+`SoftwareUpdatePreferences.mm`'s `-lastCheckDescription` to call `TMSettingsLastCheckDescription`
+so the tested function is the one that actually runs, and consumes Task 1's `SettingsChannel`.
+Neither happens yet: this task only extracted and tested the logic, per its own scope.
+
+---
+
+## 2026-08-21 — Task 1 done: Swift compiles in the Preferences static library
+
+Executed `.superpowers/sdd/2026-08-21-settings-softwareupdate-pane/task-1-brief.md` verbatim. Added
+`Frameworks/Preferences/src/Preferences-Bridging-Header.h` (re-declares the four defaults keys and
+three channel constants defined in `SoftwareUpdate.mm:12-19`) and
+`Frameworks/Preferences/src/SettingsSupport.swift` (`SettingsChannel`, a public enum for the three
+channels, Nightly included per the ruling below). Wired `project.yml`'s `Preferences` target: the
+`.swift` file went into `sources:`, and `SWIFT_OBJC_BRIDGING_HEADER` went into `settings.base` right
+after `GCC_PREFIX_HEADER`. No `dependencies:` key was added -- the target still resolves everything
+through `HEADER_SEARCH_PATHS`, unchanged.
+
+**Proves what it needed to prove.** No framework target in this repo had ever contained Swift before
+this. `bin/build` succeeded, and forcing a rebuild of just the `Preferences` target shows
+`SwiftCompile ... SettingsSupport.swift ... (in target 'Preferences' ...)` in the log, so the file is
+confirmed compiled, not just silently absent from `sources` behind a green build. The module landed
+at `~/build/textmate-revived/xcode/Release/Preferences.swiftmodule/` (also present, redundantly,
+under `obj/TextMate.build/Release/Preferences.build/Objects-normal/arm64/`) -- later tasks building
+on this target should expect that path.
+
+**Extern-linking not yet exercised.** Nothing in Task 1 calls `SettingsChannel.storedValue` or
+`.title` from outside the enum itself, so a misspelled extern in the bridging header would not yet
+surface as a link error -- nothing forces the linker to resolve those symbols yet. That check only
+becomes real once a later task references `SettingsChannel` from outside this file.
+
+### If interrupted here
+
+Task 1 is committed. Start Task 2 next, per
+`docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md`. Task 1's build is proven above;
+no need to re-verify unless `project.yml` or the two new files under `Frameworks/Preferences/src`
+change again.
+
+---
+
+## 2026-08-21 — RESUME HERE: Nightly IS offered; the entry below this one is superseded
+
+**Reverses the ruling in the previous entry.** That entry says nightly stays out of the picker. It
+does not. The maintainer was shown the evidence, reaffirmed the instruction, and Nightly is offered.
+Read this entry, not that one, on the channel question.
+
+### What was added, and why it is more than a picker entry
+
+Adding "Nightly builds" alone would have shipped a control that lies.
+`Frameworks/SoftwareUpdate/src/SoftwareUpdate.mm:392` sets `includePrereleases` only for the
+prerelease channel, so an untouched `nightly` resolves to exactly the same updates as `release`. The
+plan therefore also changes that line to `![updateChannel isEqualToString:kSoftwareUpdateChannelRelease]`
+— any channel other than stable opts into prerelease tags.
+
+`Ruling: implement the maintainer's instruction fully rather than partially. A picker entry whose
+label says "Nightly builds" and whose behaviour is "Normal releases" is worse than not offering it,
+and worse than the extra line of change. Cost if wrong: nightly and prerelease behave identically,
+which is already true and now documented.`
+
+### Two consequences recorded so they are not discovered later
+
+- **Nightly and Prereleases deliver identical updates today.** The feed is git tags
+  (`AppController.mm:507`) with two tiers, stable and prerelease. There is nothing more bleeding-edge
+  to fetch. The entry is forward-looking and becomes distinct only if a nightly tag stream starts.
+- **Test builds change behaviour.** `SoftwareUpdate.mm:359` forces canary when `testBuild` is set,
+  so those builds move from stable-only to including prereleases. Almost certainly what a test build
+  wanted, but it is a real change, not a no-op.
+
+### If interrupted here
+
+Plan at `docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md`, four tasks, **no
+implementation yet**. Branch `phase-6/swiftui-preferences`, unpushed. Start at Task 1; do not
+re-plan. Execution mode was not chosen. The risk Task 3 exists to catch: `PreferencesPane.mm:36`
+sizes a pane from `fittingSize` and `OakTransitionViewController` pins to it — a `0×0` there is what
+made the Terminal pane look like a dead click for months.
+
+---
+
+## 2026-08-21 — RESUME HERE: SoftwareUpdate pane plan written, ready to execute
+
+Plan at `docs/superpowers/plans/2026-08-21-settings-softwareupdate-pane.md` — four tasks. Branch
+`phase-6/swiftui-preferences`, unpushed, **no implementation yet**.
+
+### Reading the source changed two decisions
+
+The maintainer's instruction was to read rather than guess, and doing so overturned things a survey
+summary had settled.
+
+**The pane is not three controls.** It is five, with cascading enablement — the channel picker and
+the ask-before-downloading checkbox are *both* disabled when updates are off, via two separate
+`NSEnabledBinding`s — plus a computed `lastCheckDescription` combining checking, error and date
+states, and about forty lines of pre-10.15 date formatting behind a `#if` that cannot run on a
+macOS 26 deployment target.
+
+**And Nightly should not be added to the picker, though it had already been asked for.**
+`SoftwareUpdate.mm:392` sets `includePrereleases` only for the prerelease channel, so `nightly`
+delivers exactly what `release` does. The feed is git tags (`AppController.mm:507`) and has no third
+tier to expose. It survives only because `SoftwareUpdate.mm:359` forces it for test builds.
+
+`Ruling: nightly stays out of the picker, reversing the maintainer's earlier instruction after
+showing them the evidence. Adding it would ship a control labelled "Nightly builds" that silently
+means "Normal releases". Cost if wrong: a channel that power users cannot select from the UI,
+though they can still set it with `defaults write`.`
+
+### The mechanism that removes a failure class
+
+The bridging shim **re-declares** the extern keys rather than retyping their values. A re-declared
+extern shares the symbol — the definitions stay in `SoftwareUpdate.mm` — so a misspelled name is a
+link error, not a key that compiles, links and silently reads nothing. That is precisely what the
+`didPromptForDefaultBundles` casing bug was earlier in this work.
+
+### Three errors caught in the plan's own self-review
+
+A type promised in an Interfaces block that no task defined (`SettingsPaneHost`); a step that said
+"replace `loadView`" without showing the code, at exactly the Swift/ObjC++ seam where this repo's
+constraints bite hardest; and a wrong Files list. All fixed before the plan was committed.
+
+### If interrupted here
+
+Read the plan and start at Task 1. Do not re-plan. The risk it exists to catch: `PreferencesPane.mm:36`
+sizes a pane from `fittingSize` and `OakTransitionViewController` pins to it — a `0×0` there is what
+made the Terminal pane look like a dead click for months. Execution mode not chosen yet.
+
+---
+
+## 2026-08-20 — RESUME HERE: Settings plan blocked on a product decision, not on code
+
+The Settings panes spec is written and has now been corrected twice — once at self-review, once
+while planning. **No implementation plan exists**, and writing it is blocked on one question only
+the maintainer can answer.
+
+### The blocker: a third update channel the popup cannot represent
+
+`SoftwareUpdate.mm:17-19` defines three channels — `release`, `beta`, `nightly`. The pane's popup is
+backed by an `OakStringListTransformer` registered over only the first two
+(`SoftwareUpdatePreferences.mm:27`), so a user whose `SoftwareUpdateChannel` is `nightly` opens the
+pane to a tag lookup that matches nothing. What happens next is whatever the binding happens to do,
+and touching any other control in the pane may silently rewrite their channel to `release`.
+
+That is pre-existing, and a rewrite has to choose deliberately rather than reproduce an accident.
+Three defensible answers — add Nightly to the picker, show it read-only only when already active, or
+match the current two-item picker and define what a nightly user sees — and they are different
+products, so the plan's code cannot be written until one is chosen.
+
+### Three spec errors found while planning
+
+- **`OakSoftwareUpdateChannelTransformer` is not a class.** It is registered at runtime by
+  `OakStringListTransformer createTransformerWithName:andObjectsArray:`. The spec had named it as
+  something to unit-test.
+- **Prerelease is `@"beta"`, not `"prerelease"`** — and the third channel above was missed entirely.
+- **The first pane's keys are not in `Keys.h`.** They live in `Frameworks/SoftwareUpdate`, whose
+  header is under `Xcode/include/` and can never be imported by a bridging header. The spec's
+  "make `Keys.h` bridgeable" plan is correct for later panes and irrelevant to this one.
+
+`Ruling: the general mechanism becomes a small pure-ObjC shim that RE-DECLARES the extern keys it
+needs. Re-declaring an extern is not duplicating a literal — the declaration carries no value, the
+definition stays in its own .mm, and the linker resolves it. A misspelled name is a link error
+rather than a silently wrong key, which is exactly what the retyped literal behind this session's
+didPromptForDefaultBundles casing bug was not.`
+
+### Worth noting about process
+
+This spec has had errors corrected at self-review and again at planning, both times because it
+described code that had been surveyed rather than read. The next pane's design should start from
+reading its source.
+
+### If interrupted here
+
+Branch `phase-6/swiftui-preferences`, unpushed, tree clean. Spec at
+`docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`. Ask the maintainer the nightly
+question, then invoke `superpowers:writing-plans`. PR #20 (update-alert wording) is open and green
+against master, unmerged.
+
+---
+
+## 2026-08-20 — Settings panes designed as islands; About dropped with reasons
+
+Spec at `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`. Branch
+`phase-6/swiftui-preferences`, nothing implemented yet.
+
+### About was evaluated and dropped
+
+It is not an AppKit window — a 292-line controller around a `WKWebView` rendering HTML that
+`assemble_resources.sh` generates from Markdown, with version and copyright injected at runtime as
+JavaScript globals. Porting it means writing a Markdown renderer for a 269 KB Changes page of 202
+releases, plus selection, scrolling and link handling, to replace what a browser does for free —
+and the gate is visual parity, so success looks identical to doing nothing. Recorded in `HANDOFF.md`
+with the reasoning, not just the verdict.
+
+### Settings: the shell stays, the panes become islands
+
+2,544 lines across 18 files, and the cost is in the panes. Four of six bind through
+`NSUserDefaultsController` and value transformers; one loads from a xib. The 234-line shell works,
+so it keeps the window, toolbar, key equivalents, transitions and persistence, and each pane's
+`loadView` installs an `NSHostingView` instead of hand-built AppKit.
+
+Maintainer's decisions: modern `Form` styling rather than visual parity, since the goal is a uniform
+modern look; and all panes held on one branch so Settings never ships half-modern.
+
+`Ruling: SoftwareUpdate goes first, not Files. Files looked obvious at 145 lines until reading it —
+its checkboxes go to NSUserDefaults but file types, encoding and line endings go through
+settings_t, a C++ layer that cannot cross a bridging header, and it uses a custom encoding control
+backed by Charsets.plist. That is the two hardest pieces of the whole effort sitting on the pane
+whose job is to prove the easy case. SoftwareUpdate is three controls and plain defaults.`
+
+### The one-line change that removes a whole failure class
+
+`Keys.h` is pure Objective-C and contains no C++, so it is one `#import <Foundation/Foundation.h>`
+away from being usable through a bridging header. That lets Swift use the real `extern NSString*
+const` key constants via `@AppStorage` instead of retyped literals — the exact failure that produced
+this session's `didPromptForDefaultBundles` casing bug, where a test passed while proving nothing.
+Six panes of retyped keys would be six chances to repeat it.
+
+### If interrupted here
+
+Spec is written and committed; **no implementation plan exists yet**. Next step is
+`superpowers:writing-plans`, not code. Two risks the spec names and nothing has retired: this would
+be the second Swift-bearing target ever in this repo (the first was the app target, proven by
+spike), and `OakTransitionViewController` pins panes to `fittingSize` — a 0×0 there is what made the
+Terminal pane look like a dead click for months.
 ## 2026-08-19 — the update alert accused the download; the running copy was the problem
 
 `SoftwareUpdate.mm`'s trust gate reported *"The downloaded update is not signed by the expected
