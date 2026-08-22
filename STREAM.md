@@ -4,6 +4,125 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — RESUME HERE: Projects pane ported to SwiftUI on its own branch
+
+Branch `phase-6/swiftui-projects-pane`, off master (which already has the SoftwareUpdate pane via
+PR #21). `ProjectsPreferences.mm` rewritten to install an `NSHostingView`; `Frameworks/Preferences/src/SettingsSupport.swift`
+gained the pane's SwiftUI content. `bin/build` and `bin/build Preferences/test` both green,
+10/10 tests (4 pre-existing + 6 new). Not yet committed as of this entry -- committing next.
+
+### The settings_t bridge, and a linker bug the design doc's "two functions" undersold
+
+`Frameworks/Preferences/src/SettingsFieldsBridge.h`/`.mm` (new, in the `PreferencesSupport` target
+so `Preferences_test` can link it): `TMSettingsExcludeKey/IncludeKey/BinaryKey` wrap the three
+`kSettings*Key` C++ constants, `TMSettingsGetString`/`TMSettingsSetString` wrap
+`settings_t::raw_get`/`set` exactly the way `PreferencesPane.mm`'s KVC fallback already does. Two
+problems, neither guessable from reading `PreferencesPane.mm` alone:
+
+1. **Unaudited `NSString*` returns import into Swift as `String?`, not `String!`.** Every call site
+   assigning one to a non-optional `String` failed to typecheck. Fixed with explicit `_Nonnull`/
+   `_Nullable` per parameter and return -- not `NS_ASSUME_NONNULL_BEGIN`/`END`, because the bare
+   `nullable`/`nonnull` contextual keyword produced `error: unknown type name 'nullable'` specifically
+   when this header is parsed standalone as the Swift bridging header (plain C, no prefix header).
+   The underscore-prefixed spelling has no such dependency and worked immediately.
+2. **The real bug, and the more interesting one: `Preferences_test` passing proved nothing about the
+   app linking.** `SettingsFieldsBridge.mm` is Objective-C++, so without `extern "C"` its definitions
+   get C++ name mangling (`__Z20TMSettingsExcludeKeyv`), while Swift's ClangImporter parses the
+   bridging header as plain C and looks for the unmangled `_TMSettingsExcludeKey`. `Preferences_test`
+   never calls these functions from Swift -- its tests are ObjC++ calling ObjC++, mangled name on both
+   sides, so it linked and passed 10/10 *before* this was fixed. Only `bin/build`'s full-app link
+   surfaced it, as nine "Undefined symbols" pointing at names that were sitting right there in
+   `nm`'s output on the mangled form. Fixed by wrapping the header's declarations in
+   `#ifdef __cplusplus extern "C" { ... } #endif`. **`SettingsSupportBridge.h`'s existing
+   `TMSettingsLastCheckDescription` has the identical latent defect** -- unexercised today because
+   its only caller is ObjC++, not Swift, but the same fix would be needed the day something calls it
+   from Swift. Left alone: out of scope, and it isn't broken for its actual caller.
+
+Net shape ended up 9 functions, not the design doc's anticipated 2: the extra 4
+(`TMFileBrowserPlacementTagForValue`/`ValueForTag`, `TMHTMLOutputPlacementTagForValue`/`ValueForTag`)
+reimplement `OakStringListTransformer`'s tag<->string mapping as pure, independently testable
+functions rather than a second copy of the same fallback rule living in Swift. Reasoning in
+`SettingsFieldsBridge.h`'s own comment.
+
+### The @AppStorage question the SoftwareUpdate pane's pattern doesn't answer
+
+`SoftwareUpdateModel` wraps `@AppStorage` properties inside a hand-written `ObservableObject` class.
+`@AppStorage` (like `@State`) is a `DynamicProperty` -- SwiftUI's runtime only calls its `update()`
+hook, the thing that makes a change actually invalidate a view, on stored properties of a
+`View`/`App`/`Scene`. Wrapped inside a plain `ObservableObject` instead, mutating it still persists to
+`UserDefaults` correctly but does not reliably fire `objectWillChange`, since `ObservableObject`'s
+synthesised publisher only auto-fires for `@Published`. `SoftwareUpdatePaneView` most likely still
+redraws in practice only because its *other* observed object, `SettingsPaneUpdateStatus`, republishes
+on every `NSUserDefaultsDidChangeNotification` (via the relative-date observer) -- which fires on
+*any* defaults write, including the toggle's own -- forcing a re-render that happens to re-read the
+model fresh. Projects has no such side channel and four plain toggles plus two popups that would have
+had this same exposure.
+
+Not verifiable by any check available here (no rendering, no synthesized clicks), and not something
+`bin/build`/tests can catch either way, so this was a judgment call rather than a repro: `ProjectsPaneView`
+puts `@AppStorage`/`@State` directly on the View's own stored properties instead of a
+`ProjectsSettingsModel` helper class, which sidesteps the question entirely rather than betting the
+port on an unverified assumption about a pattern this session did not originate. The one piece that
+genuinely needs a shared, externally-pushed model -- the file browser location list, populated from
+ObjC++ -- mirrors `SettingsPaneUpdateStatus` exactly, using real `@Published` properties, which do not
+have this exposure. Worth checking on the SoftwareUpdate pane too, but that pane is already merged and
+touching it wasn't this task.
+
+### The file browser location popup
+
+`SettingsFileBrowserLocationItem` (title, icon, url, isSeparator, isOther) is plain data ObjC++
+constructs and Swift only reads; `SettingsPaneFileBrowserLocation` is the pushed `@Published` model,
+built by `ProjectsPreferences.mm`'s `-updateFileBrowserLocations`, which reproduces
+`-updatePathPopUp`'s exact rules (custom-URL-first-plus-separator, three standing entries, trailing
+separator plus "Other…"). Selecting an item calls back into ObjC++ with the chosen item's url string
+(empty string is the "Other…" sentinel, since a real location's `absoluteString` is never empty),
+which opens `NSOpenPanel` as a sheet exactly as before and then rebuilds the whole list -- same
+"always fully rebuilt, never incrementally patched" invariant the AppKit version had.
+
+### fittingSize: 490 × 630, cross-checked against a live control
+
+No existing throwaway harness handles a pane with this much SwiftUI-side state, so this session built
+its own: `SettingsFormStyle.swift` + `SettingsSupport.swift` recompiled standalone via `swiftc`
+against a hand-written bridging-header stub (values are irrelevant to layout, only that the symbols
+resolve), driven by a small `main.swift` that seeds `SettingsPaneFileBrowserLocation` with five
+representative items and calls `SettingsPaneFactory.projectsView`. **490 × 630.** The same harness
+also built `SettingsPaneFactory.softwareUpdateView` as a control and got 490 × 251 against the
+490 × 252 recorded in this file's own 2026-08-21 entry below -- 1pt off, most likely font/build-machine
+drift rather than a harness defect, and close enough to trust the Projects measurement's methodology.
+Non-zero, non-trivial, in the same width class as the existing pane: not the 0×0 failure mode.
+
+### Tests: 6 new, 10 total, in `t_settings_fields.mm`
+
+Placement mappings (`TMFileBrowserPlacementTagForValue`/`ValueForTag`,
+`TMHTMLOutputPlacementTagForValue`/`ValueForTag`), including the unrecognised-value/nil fallback; the
+three key-name getters; and a real settings_t round trip through `test::jail_t` +
+`set_default_settings_path`/`set_global_settings_path` (the same fixture `t_save_settings.cc` uses),
+confirming an unset key reads back `""` rather than crashing and that set/get actually round-trips
+through the C++ layer rather than a value cached at the Swift call site.
+
+`Preferences_test`'s `project.yml` entry grew a full `settings`/`cf`/`text`/`io`/`ns`/`OakFoundation`/
+`plist`/`regexp`/`Onigmo`/`crash`/`scope` dependency closure plus the matching SDK frameworks and
+`-force_load libOnigmo.a` -- the same flattened list `settings_test` already carries, needed for the
+same reason: a static library's own dependencies are not transitively linked into whatever finally
+links it, so a standalone "tool" target has to name the whole chain itself. `PreferencesSupport`
+itself only needed the matching `HEADER_SEARCH_PATHS` (compiling, not linking, so no `dependencies:`
+addition), which is also why `SettingsSupportBridge.mm`'s pre-existing pure-ObjC file in the same
+target never needed this until now.
+
+### The dead `showFileExtensions` mapping
+
+Confirmed unused (`kUserDefaultsShowFileExtensionsKey` was in the old `defaultsProperties` dict but
+bound to no control) and not carried forward, per the task's explicit instruction.
+
+### If interrupted here
+
+Not yet committed. Everything above is implemented and green; remaining steps are writing
+`.superpowers/sdd/projects-pane/report.md` and committing. No manual/rendering QA has been done --
+cannot be, in this environment. The `@AppStorage`-in-`ObservableObject` question above is worth the
+maintainer's attention on the *merged* SoftwareUpdate pane, independent of anything here.
+
+---
+
 ## 2026-08-21 — RESUME HERE: Software Update pane ported; a crash caught by the whole-branch review
 
 Branch `phase-6/swiftui-preferences`, 13 commits, **unpushed and unmerged**. Build green, 4 tests

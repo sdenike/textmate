@@ -1,99 +1,44 @@
 #import "ProjectsPreferences.h"
+#import "Preferences-Swift.h"
 #import "Keys.h"
-#import <settings/settings.h>
-#import <OakAppKit/NSImage Additions.h>
-#import <OakAppKit/OakUIConstructionFunctions.h>
-#import <OakTabBarView/OakTabBarView.h>
-#import <OakFoundation/NSString Additions.h>
-#import <OakFoundation/OakStringListTransformer.h>
-#import <MenuBuilder/MenuBuilder.h>
 
 @interface ProjectsPreferences ()
 {
-	NSPopUpButton* fileBrowserPathPopUp;
+	SettingsPaneFileBrowserLocation* _fileBrowserLocation;
 }
 @end
 
 @implementation ProjectsPreferences
 - (id)init
 {
-	NSImage* icon = [NSImage imageNamed:@"Projects" inSameBundleAsClass:[self class]];
-	if(@available(macos 11.0, *))
-		icon = [NSImage imageWithSystemSymbolName:@"folder" accessibilityDescription:@"Projects"];
-	if(self = [super initWithNibName:nil label:@"Projects" image:icon])
-	{
-		[OakStringListTransformer createTransformerWithName:@"OakFileBrowserPlacementSettingsTransformer" andObjectsArray:@[ @"left", @"right" ]];
-		[OakStringListTransformer createTransformerWithName:@"OakHTMLOutputPlacementSettingsTransformer" andObjectsArray:@[ @"bottom", @"right", @"window" ]];
-
-		self.defaultsProperties = @{
-			@"foldersOnTop":                 kUserDefaultsFoldersOnTopKey,
-			@"showFileExtensions":           kUserDefaultsShowFileExtensionsKey,
-			@"disableTabBarCollapsing":      kUserDefaultsDisableTabBarCollapsingKey,
-			@"disableAutoResize":            kUserDefaultsDisableFileBrowserWindowResizeKey,
-			@"autoRevealFile":               kUserDefaultsAutoRevealFileKey,
-			@"fileBrowserPlacement":         kUserDefaultsFileBrowserPlacementKey,
-			@"htmlOutputPlacement":          kUserDefaultsHTMLOutputPlacementKey,
-
-			@"allowExpandingLinks":          kUserDefaultsAllowExpandingLinksKey,
-			@"fileBrowserSingleClickToOpen": kUserDefaultsFileBrowserSingleClickToOpenKey,
-			@"disableTabReordering":         kUserDefaultsDisableTabReorderingKey,
-			@"disableTabAutoClose":          kUserDefaultsDisableTabAutoCloseKey,
-		};
-
-		self.tmProperties = @{
-			@"excludePattern": [NSString stringWithCxxString:kSettingsExcludeKey],
-			@"includePattern": [NSString stringWithCxxString:kSettingsIncludeKey],
-			@"binaryPattern":  [NSString stringWithCxxString:kSettingsBinaryKey],
-		};
-	}
-	return self;
+	NSImage* icon = [NSImage imageWithSystemSymbolName:@"folder" accessibilityDescription:@"Projects"];
+	return [super initWithNibName:nil label:@"Projects" image:icon];
 }
 
-- (void)selectOtherFileBrowserPath:(id)sender
+- (SettingsFileBrowserLocationItem*)itemForURL:(NSURL*)aURL
 {
-	NSOpenPanel* openPanel = [NSOpenPanel openPanel];
-	[openPanel setCanChooseFiles:NO];
-	[openPanel setCanChooseDirectories:YES];
-	[openPanel beginSheetModalForWindow:[self view].window completionHandler:^(NSModalResponse result) {
-		if(result == NSModalResponseOK)
-			[NSUserDefaults.standardUserDefaults setObject:[[openPanel URL] absoluteString] forKey:kUserDefaultsInitialFileBrowserURLKey];
-		[self updatePathPopUp];
-	}];
-}
-
-- (void)takeFileBrowserPathFrom:(id)sender
-{
-	[NSUserDefaults.standardUserDefaults setObject:[[sender representedObject] absoluteString] forKey:kUserDefaultsInitialFileBrowserURLKey];
-	[self updatePathPopUp];
-}
-
-- (NSMenuItem*)menuItemForURL:(NSURL*)aURL
-{
-	NSMenuItem* res = [[NSMenuItem alloc] initWithTitle:[NSFileManager.defaultManager displayNameAtPath:aURL.path] action:@selector(takeFileBrowserPathFrom:) keyEquivalent:@""];
-	res.target = self;
-	res.representedObject = aURL;
-
 	NSImage* image;
 	NSError* error;
 	if([aURL getResourceValue:&image forKey:NSURLEffectiveIconKey error:&error])
 	{
 		image = [image copy];
 		image.size = NSMakeSize(16, 16);
-		res.image = image;
 	}
 	else
 	{
 		os_log_error(OS_LOG_DEFAULT, "No NSURLEffectiveIconKey for %{public}@: %{public}@", aURL, error);
+		image = nil;
 	}
 
-	return res;
+	NSString* title = [NSFileManager.defaultManager displayNameAtPath:aURL.path];
+	return [[SettingsFileBrowserLocationItem alloc] initWithTitle:title icon:image url:aURL.absoluteString isSeparator:NO isOther:NO];
 }
 
-- (void)updatePathPopUp
+// Reproduces the old -updatePathPopUp exactly (same standing entries, same
+// "custom URL first plus a separator" rule, same trailing "Other…"), just
+// building plain items for Swift instead of NSMenuItems for an NSPopUpButton.
+- (void)updateFileBrowserLocations
 {
-	NSMenu* menu = [fileBrowserPathPopUp menu];
-	[menu removeAllItems];
-
 	NSArray<NSURL*>* const defaultURLs = @[
 		[NSFileManager.defaultManager URLForDirectory:NSDesktopDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:NO error:nil],
 		NSFileManager.defaultManager.homeDirectoryForCurrentUser,
@@ -104,102 +49,63 @@
 	if(NSString* urlString = [NSUserDefaults.standardUserDefaults stringForKey:kUserDefaultsInitialFileBrowserURLKey])
 		url = [NSURL URLWithString:urlString];
 
+	NSMutableArray<SettingsFileBrowserLocationItem*>* items = [NSMutableArray array];
+	NSInteger selectedIndex = 0;
+
 	if(![defaultURLs containsObject:url])
 	{
-		[menu addItem:[self menuItemForURL:url]];
-		[menu addItem:[NSMenuItem separatorItem]];
+		[items addObject:[self itemForURL:url]];
+		[items addObject:[[SettingsFileBrowserLocationItem alloc] initWithTitle:@"" icon:nil url:@"" isSeparator:YES isOther:NO]];
 	}
 
 	for(NSURL* defaultURL in defaultURLs)
 	{
-		[menu addItem:[self menuItemForURL:defaultURL]];
 		if([defaultURL isEqual:url])
-			[fileBrowserPathPopUp selectItemAtIndex:[menu numberOfItems]-1];
+			selectedIndex = items.count;
+		[items addObject:[self itemForURL:defaultURL]];
 	}
 
-	[menu addItem:[NSMenuItem separatorItem]];
-	[menu addItemWithTitle:@"Other…" action:@selector(selectOtherFileBrowserPath:) keyEquivalent:@""];
+	[items addObject:[[SettingsFileBrowserLocationItem alloc] initWithTitle:@"" icon:nil url:@"" isSeparator:YES isOther:NO]];
+	[items addObject:[[SettingsFileBrowserLocationItem alloc] initWithTitle:@"Other…" icon:nil url:@"" isSeparator:NO isOther:YES]];
+
+	[_fileBrowserLocation updateWithItems:items selectedIndex:selectedIndex];
+}
+
+// The callback SettingsPaneFactory's Picker invokes with the chosen item's
+// url -- empty exactly for the synthetic "Other…" row, since a real
+// location's absoluteString is never empty.
+- (void)selectFileBrowserLocationURLString:(NSString*)urlString
+{
+	if(urlString.length == 0)
+	{
+		NSOpenPanel* openPanel = [NSOpenPanel openPanel];
+		openPanel.canChooseFiles       = NO;
+		openPanel.canChooseDirectories = YES;
+		__weak __typeof__(self) weakSelf = self;
+		[openPanel beginSheetModalForWindow:[self view].window completionHandler:^(NSModalResponse result) {
+			if(result == NSModalResponseOK)
+				[NSUserDefaults.standardUserDefaults setObject:[[openPanel URL] absoluteString] forKey:kUserDefaultsInitialFileBrowserURLKey];
+			[weakSelf updateFileBrowserLocations];
+		}];
+	}
+	else
+	{
+		[NSUserDefaults.standardUserDefaults setObject:urlString forKey:kUserDefaultsInitialFileBrowserURLKey];
+		[self updateFileBrowserLocations];
+	}
 }
 
 - (void)loadView
 {
-	NSPopUpButton* fileBrowserLocationPopUp            = OakCreatePopUpButton();
-	NSButton* foldersOnTopCheckBox                     = OakCreateCheckBox(@"Folders on top");
-	NSButton* showLinksAsExpandableCheckBox            = OakCreateCheckBox(@"Show links as expandable");
-	NSButton* openFilesOnSingleClickCheckBox           = OakCreateCheckBox(@"Open files on single click");
-	NSButton* keepCurrentDocumentSelectedCheckBox      = OakCreateCheckBox(@"Keep current document selected");
+	// Seeded before the factory runs, not after: SettingsPaneFactory measures
+	// fittingSize off the view it builds, and an empty location list would
+	// size that row for no content instead of the real first item.
+	_fileBrowserLocation = [[SettingsPaneFileBrowserLocation alloc] init];
+	[self updateFileBrowserLocations];
 
-	NSPopUpButton* fileBrowserPositionPopUp            = OakCreatePopUpButton();
-	NSButton* adjustWindowWhenToggleingDisplayCheckBox = OakCreateCheckBox(@"Adjust window when toggleing display");
-
-	NSButton* showForSingleDocumentCheckBox            = OakCreateCheckBox(@"Show for single document");
-	NSButton* reOrderWhenOpeningAFileCheckBox          = OakCreateCheckBox(@"Re-order when opening a file");
-	NSButton* automaticallyCloseUnusedTabsCheckBox     = OakCreateCheckBox(@"Automatically close unused tabs");
-
-	NSTextField* excludeFilesTextField                 = [NSTextField textFieldWithString:@""];
-	NSTextField* includeFilesTextField                 = [NSTextField textFieldWithString:@""];
-	NSTextField* nonTextFilesTextField                 = [NSTextField textFieldWithString:@""];
-
-	NSPopUpButton* showCommandOutputPopUp              = OakCreatePopUpButton();
-
-	MBMenu const fileBrowserPositionMenuItems = {
-		{ @"Left side",  .tag = 0 },
-		{ @"Right side", .tag = 1 },
-	};
-	MBCreateMenu(fileBrowserPositionMenuItems, fileBrowserPositionPopUp.menu);
-
-	MBMenu const showCommandOutputMenuItems = {
-		{ @"Below text view",    .tag = 0 },
-		{ @"Right of text view", .tag = 1 },
-		{ @"New window",         .tag = 2 },
-	};
-	MBCreateMenu(showCommandOutputMenuItems, showCommandOutputPopUp.menu);
-
-	NSGridView* gridView = [NSGridView gridViewWithViews:@[
-		@[ OakCreateLabel(@"File browser location:"),  fileBrowserLocationPopUp                 ],
-		@[ NSGridCell.emptyContentView,                foldersOnTopCheckBox                     ],
-		@[ NSGridCell.emptyContentView,                showLinksAsExpandableCheckBox            ],
-		@[ NSGridCell.emptyContentView,                openFilesOnSingleClickCheckBox           ],
-		@[ NSGridCell.emptyContentView,                keepCurrentDocumentSelectedCheckBox      ],
-		@[ ],
-		@[ OakCreateLabel(@"Show file browser on:"),   fileBrowserPositionPopUp                 ],
-		@[ NSGridCell.emptyContentView,                adjustWindowWhenToggleingDisplayCheckBox ],
-		@[ ],
-		@[ OakCreateLabel(@"Document tabs:"),          showForSingleDocumentCheckBox            ],
-		@[ NSGridCell.emptyContentView,                reOrderWhenOpeningAFileCheckBox          ],
-		@[ NSGridCell.emptyContentView,                automaticallyCloseUnusedTabsCheckBox     ],
-		@[ ],
-		@[ OakCreateLabel(@"Exclude files matching:"), excludeFilesTextField                    ],
-		@[ OakCreateLabel(@"Include files matching:"), includeFilesTextField                    ],
-		@[ OakCreateLabel(@"Non-text files:"),         nonTextFilesTextField                    ],
-		@[ ],
-		@[ OakCreateLabel(@"Show command output:"),    showCommandOutputPopUp                   ],
-	]];
-
-	for(NSView* popUpButton in @[ fileBrowserPositionPopUp, showCommandOutputPopUp ])
-		[popUpButton.widthAnchor constraintEqualToAnchor:fileBrowserLocationPopUp.widthAnchor].active = YES;
-
-	[excludeFilesTextField.widthAnchor constraintEqualToConstant:360].active = YES;
-	for(NSView* textField in @[ includeFilesTextField, nonTextFilesTextField ])
-		[textField.widthAnchor constraintEqualToAnchor:excludeFilesTextField.widthAnchor].active = YES;
-
-	self.view = OakSetupGridViewWithSeparators(gridView, { 5, 8, 12, 16 });
-
-	fileBrowserPathPopUp = fileBrowserLocationPopUp;
-	[self updatePathPopUp];
-
-	[foldersOnTopCheckBox                     bind:NSValueBinding       toObject:self withKeyPath:@"foldersOnTop"                 options:nil];
-	[showLinksAsExpandableCheckBox            bind:NSValueBinding       toObject:self withKeyPath:@"allowExpandingLinks"          options:nil];
-	[openFilesOnSingleClickCheckBox           bind:NSValueBinding       toObject:self withKeyPath:@"fileBrowserSingleClickToOpen" options:nil];
-	[keepCurrentDocumentSelectedCheckBox      bind:NSValueBinding       toObject:self withKeyPath:@"autoRevealFile"               options:nil];
-	[fileBrowserPositionPopUp                 bind:NSSelectedTagBinding toObject:self withKeyPath:@"fileBrowserPlacement"         options:@{ NSValueTransformerNameBindingOption: @"OakFileBrowserPlacementSettingsTransformer" }];
-	[adjustWindowWhenToggleingDisplayCheckBox bind:NSValueBinding       toObject:self withKeyPath:@"disableAutoResize"            options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
-	[showForSingleDocumentCheckBox            bind:NSValueBinding       toObject:self withKeyPath:@"disableTabBarCollapsing"      options:nil];
-	[reOrderWhenOpeningAFileCheckBox          bind:NSValueBinding       toObject:self withKeyPath:@"disableTabReordering"         options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
-	[automaticallyCloseUnusedTabsCheckBox     bind:NSValueBinding       toObject:self withKeyPath:@"disableTabAutoClose"          options:@{ NSValueTransformerNameBindingOption: NSNegateBooleanTransformerName }];
-	[excludeFilesTextField                    bind:NSValueBinding       toObject:self withKeyPath:@"excludePattern"               options:nil];
-	[includeFilesTextField                    bind:NSValueBinding       toObject:self withKeyPath:@"includePattern"               options:nil];
-	[nonTextFilesTextField                    bind:NSValueBinding       toObject:self withKeyPath:@"binaryPattern"                options:nil];
-	[showCommandOutputPopUp                   bind:NSSelectedTagBinding toObject:self withKeyPath:@"htmlOutputPlacement"          options:@{ NSValueTransformerNameBindingOption: @"OakHTMLOutputPlacementSettingsTransformer" }];
+	__weak __typeof__(self) weakSelf = self;
+	self.view = [SettingsPaneFactory projectsViewWithFileBrowserLocation:_fileBrowserLocation onSelectLocation:^(NSString* urlString){
+		[weakSelf selectFileBrowserLocationURLString:urlString];
+	}];
 }
 @end
