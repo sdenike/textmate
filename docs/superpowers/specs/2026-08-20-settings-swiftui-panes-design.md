@@ -133,7 +133,7 @@ which is the outcome this work exists to prevent.
 | Order | Pane | Lines | Why here |
 |---|---|---|---|
 | 1 | SoftwareUpdate | 154 | Pure defaults; proves the target, bridging, hosting and style layer |
-| 2 | Projects | 205 | Popups and an open panel; still plain defaults |
+| 2 | Projects | 205 | Popups, an open panel, **and the `settings_t` bridge** — see correction below |
 | 3 | Variables | 189 | An editable table — first real collection editing |
 | 4 | Files | 145 | Needs the `settings_t` bridge and an encoding picker |
 | 5 | Terminal | 372 | Privileged install, and the xib goes away with it |
@@ -141,6 +141,21 @@ which is the outcome this work exists to prevent.
 
 Each pane after the first is a bounded change with a short design in chat, not its own spec. Only the
 first establishes anything.
+
+**Corrected 2026-08-21, on reading `ProjectsPreferences.mm` rather than a survey of it.** The table
+above originally described Projects as "still plain defaults" and used that to justify sequencing it
+second. That is wrong. Projects declares a `tmProperties` map — `excludePattern`, `includePattern`
+and `binaryPattern` route to `kSettingsExcludeKey`, `kSettingsIncludeKey` and `kSettingsBinaryKey`
+through `settings_t`, the same C++ layer this document cites as the reason Files could not go first.
+
+The sequencing still holds, because the bridge is far smaller than assumed: `PreferencesPane.mm`
+reaches `settings_t` through exactly two calls, `settings_t::set(to_s(key), to_s(value))` and
+`settings_t::raw_get(to_s(key))`. Two free functions in the `Preferences` library, declared as plain
+C in the bridging shim, cover it — and Files then inherits the bridge rather than building it.
+
+What was actually wrong was the *reasoning*, not the order. Files remains unsuitable as a first pane
+for its other reason: `OakEncodingPopUpButton`, a custom control backed by `Charsets.plist` that has
+no SwiftUI equivalent.
 
 ## The gate
 
