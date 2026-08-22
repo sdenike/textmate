@@ -35,6 +35,8 @@ extern NSString* _Nonnull TMSettingsBinaryKey(void);
 // straight to a SwiftUI TextField, and nil there is a crash the first time
 // someone opens the pane having never set a pattern.
 extern NSString* _Nonnull TMSettingsGetString(NSString* _Nonnull key);
+// A no-op when that value is already stored -- see the comment on the
+// definition. Call it on commit, never per keystroke.
 extern void TMSettingsSetString(NSString* _Nonnull key, NSString* _Nullable value);
 
 // The tag <-> string mapping the AppKit pane got for free from
@@ -42,7 +44,7 @@ extern void TMSettingsSetString(NSString* _Nonnull key, NSString* _Nullable valu
 // functions: SwiftUI's Picker has no equivalent value-transformer mechanism,
 // and this keeps the fallback rule (unrecognised value -> first entry) in one
 // tested place instead of a second copy living in Swift.
-extern NSInteger TMFileBrowserPlacementTagForValue(NSString* _Nullable value); // "left"->0, else->1
+extern NSInteger TMFileBrowserPlacementTagForValue(NSString* _Nullable value); // "right"->1, else->0
 extern NSString* _Nonnull TMFileBrowserPlacementValueForTag(NSInteger tag);    // 0->"left", else->"right"
 
 extern NSInteger TMHTMLOutputPlacementTagForValue(NSString* _Nullable value); // "bottom"->0, "right"->1, else->2

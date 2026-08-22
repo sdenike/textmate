@@ -170,18 +170,50 @@ public final class SettingsPaneFileBrowserLocation: NSObject, ObservableObject {
 	}
 }
 
+// SwiftUI cannot ask which window is hosting a view, and the Projects pane
+// needs to know: it commits its text fields when that window closes. An empty
+// NSView placed in .background reports the answer and adds no layout of its
+// own. viewDidMoveToWindow rather than a poll, and a main-queue hop out of it
+// because it fires mid-layout, where writing SwiftUI state is not allowed.
+private final class HostWindowReporter: NSView {
+	var onWindow: ((NSWindow?) -> Void)?
+
+	override func viewDidMoveToWindow() {
+		super.viewDidMoveToWindow()
+		let hostWindow = window
+		Task { @MainActor in self.onWindow?(hostWindow) }
+	}
+}
+
+private struct HostWindowReader: NSViewRepresentable {
+	let onWindow: (NSWindow?) -> Void
+
+	func makeNSView(context: Context) -> HostWindowReporter {
+		let view = HostWindowReporter(frame: .zero)
+		view.onWindow = onWindow
+		return view
+	}
+
+	func updateNSView(_ nsView: HostWindowReporter, context: Context) {
+		nsView.onWindow = onWindow
+	}
+}
+
 struct ProjectsPaneView: View {
-	// Plain NSUserDefaults-backed values. Deliberately @AppStorage directly on
-	// this View rather than wrapped in a helper ObservableObject (contrast
-	// SoftwareUpdateModel): @AppStorage only gets SwiftUI's automatic
-	// re-render hook when it is a stored property of a View/App/Scene --
-	// wrapping it in a plain ObservableObject class does not reliably signal
-	// objectWillChange, since ObservableObject's synthesised publisher only
-	// fires for @Published. SoftwareUpdatePaneView's toggles are steered clear
-	// of this by a side effect (its `status` object republishes on every
-	// NSUserDefaultsDidChangeNotification, forcing a re-render that happens to
-	// re-read the model fresh); this pane has no equivalent side channel, so
-	// it does not lean on one.
+	// Plain NSUserDefaults-backed values, held directly on this View. Wrapping
+	// them in an ObservableObject the way SoftwareUpdateModel does would work
+	// equally well: measured 2026-08-21 against this machine's SDK, one
+	// @AppStorage property inside a plain ObservableObject fired
+	// objectWillChange 6 times for 3 writes, so a wrapped pane does re-render.
+	// (The comment that stood here claimed the opposite, and credited
+	// SoftwareUpdatePaneView with a NSUserDefaultsDidChangeNotification side
+	// channel it has never had -- SettingsPaneUpdateStatus, :73-87, observes
+	// nothing at all and is written to only by -pushUpdateStatus.) Both shapes
+	// work, so the rule is about what a value IS, not about redraws:
+	// @AppStorage on the View when a key maps straight onto a control, and a
+	// model object only when something must be transformed or pushed in from
+	// ObjC++ -- which is the whole reason SoftwareUpdateModel exists, an
+	// inverted key and two raw channel strings.
 	@AppStorage(kUserDefaultsFoldersOnTopKey)                  private var foldersOnTop = false
 	@AppStorage(kUserDefaultsAllowExpandingLinksKey)           private var allowExpandingLinks = false
 	@AppStorage(kUserDefaultsFileBrowserSingleClickToOpenKey)  private var fileBrowserSingleClickToOpen = false
@@ -194,11 +226,24 @@ struct ProjectsPaneView: View {
 	@AppStorage(kUserDefaultsHTMLOutputPlacementKey)           private var htmlOutputPlacementRaw = "window"
 
 	// settings_t-backed, not defaults-backed -- there is no @AppStorage
-	// equivalent, so these are seeded once from TMSettingsGetString and pushed
-	// back through TMSettingsSetString on every edit.
+	// equivalent, so these are seeded once from TMSettingsGetString and written
+	// back through TMSettingsSetString on COMMIT, never per keystroke. Measured
+	// 2026-08-21 with a standalone SwiftUI harness: typing the 9 characters of
+	// "*.{o,pyc}" into a TextField bound through a Binding.set called that
+	// setter 30 times -- SwiftUI re-runs it about three times per keystroke,
+	// not once. Every one of those would reach settings_t::set, which is two
+	// full read_file parses plus a NON-ATOMIC truncate-and-rewrite of the
+	// user's Global.tmProperties (settings.cc:444), so a crash inside any one
+	// of the 30 leaves that file empty -- font, theme, soft wrap and every
+	// other global setting gone, not just these three patterns. The AppKit pane
+	// never did this: it bound with NSValueBinding and WITHOUT
+	// NSContinuouslyUpdatesValueBindingOption, so it committed on end-editing.
 	@State private var excludePattern = TMSettingsGetString(TMSettingsExcludeKey())
 	@State private var includePattern = TMSettingsGetString(TMSettingsIncludeKey())
 	@State private var binaryPattern  = TMSettingsGetString(TMSettingsBinaryKey())
+
+	@FocusState private var focusedPattern: PatternField?
+	@State private var hostWindow: NSWindow?
 
 	@ObservedObject var fileBrowserLocation: SettingsPaneFileBrowserLocation
 	let onSelectLocation: (String) -> Void
@@ -231,16 +276,27 @@ struct ProjectsPaneView: View {
 				Toggle("Adjust window when toggleing display", isOn: adjustWindowOnToggleBinding)
 			}
 
-			Section {
+			// Header, not a bare group: every other group names its subject
+			// through a Picker or TextField label, and this one has no control
+			// to hang a label on -- the AppKit grid gave it an
+			// OakCreateLabel(@"Document tabs:") row, and without it the user
+			// reads "Show for single document" with no idea what "show".
+			Section("Document tabs:") {
 				Toggle("Show for single document", isOn: $disableTabBarCollapsing)
 				Toggle("Re-order when opening a file", isOn: reorderWhenOpeningAFileBinding)
 				Toggle("Automatically close unused tabs", isOn: automaticallyCloseUnusedTabsBinding)
 			}
 
 			Section {
-				TextField("Exclude files matching:", text: excludePatternBinding)
-				TextField("Include files matching:", text: includePatternBinding)
-				TextField("Non-text files:", text: binaryPatternBinding)
+				TextField("Exclude files matching:", text: $excludePattern)
+					.focused($focusedPattern, equals: .exclude)
+					.onSubmit { commitPattern(.exclude) }
+				TextField("Include files matching:", text: $includePattern)
+					.focused($focusedPattern, equals: .include)
+					.onSubmit { commitPattern(.include) }
+				TextField("Non-text files:", text: $binaryPattern)
+					.focused($focusedPattern, equals: .binary)
+					.onSubmit { commitPattern(.binary) }
 			}
 
 			Section {
@@ -249,6 +305,29 @@ struct ProjectsPaneView: View {
 					Text("Right of text view").tag(1)
 					Text("New window").tag(2)
 				}
+			}
+		}
+		// The other three commit triggers, all measured in the same harness as
+		// the keystroke count above. Return is handled by the .onSubmit on each
+		// field; this catches the caret leaving one, and a pane switch, which
+		// removes this view (Preferences.mm:48 swaps the subview out).
+		.onChange(of: focusedPattern) { previous, _ in
+			if let previous {
+				commitPattern(previous)
+			}
+		}
+		.onDisappear { commitAllPatterns() }
+		// Closing the Settings window fires NONE of the above: the window is a
+		// shared singleton, so the hosting view is never removed, onDisappear
+		// never runs and the focus never moves. Measured: type a pattern, close
+		// the window, and every other trigger stays silent -- the edit is lost.
+		// Hence willClose, and filtered to our own window, because an
+		// unfiltered observer commits a half-typed pattern every time any other
+		// window in the app closes, which is the original bug in miniature.
+		.background(HostWindowReader { hostWindow = $0 })
+		.onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
+			if notification.object as AnyObject === hostWindow {
+				commitAllPatterns()
 			}
 		}
 	}
@@ -292,16 +371,38 @@ struct ProjectsPaneView: View {
 		Binding(get: { !disableTabAutoClose }, set: { disableTabAutoClose = !$0 })
 	}
 
-	private var excludePatternBinding: Binding<String> {
-		Binding(get: { excludePattern }, set: { excludePattern = $0; TMSettingsSetString(TMSettingsExcludeKey(), $0) })
+	private enum PatternField: CaseIterable {
+		case exclude, include, binary
 	}
 
-	private var includePatternBinding: Binding<String> {
-		Binding(get: { includePattern }, set: { includePattern = $0; TMSettingsSetString(TMSettingsIncludeKey(), $0) })
+	private func patternKey(_ field: PatternField) -> String {
+		switch field {
+			case .exclude: return TMSettingsExcludeKey()
+			case .include: return TMSettingsIncludeKey()
+			case .binary:  return TMSettingsBinaryKey()
+		}
 	}
 
-	private var binaryPatternBinding: Binding<String> {
-		Binding(get: { binaryPattern }, set: { binaryPattern = $0; TMSettingsSetString(TMSettingsBinaryKey(), $0) })
+	private func patternValue(_ field: PatternField) -> String {
+		switch field {
+			case .exclude: return excludePattern
+			case .include: return includePattern
+			case .binary:  return binaryPattern
+		}
+	}
+
+	// TMSettingsSetString skips a value that is already stored, so the
+	// deliberately overlapping triggers cost a read rather than a rewrite:
+	// tabbing through fields nobody touched writes nothing, and two triggers
+	// firing for one edit still write once.
+	private func commitPattern(_ field: PatternField) {
+		TMSettingsSetString(patternKey(field), patternValue(field))
+	}
+
+	private func commitAllPatterns() {
+		for field in PatternField.allCases {
+			commitPattern(field)
+		}
 	}
 }
 

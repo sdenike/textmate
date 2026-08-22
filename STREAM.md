@@ -4,6 +4,76 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — the Projects pane wrote the settings file 30 times per pattern
+
+Review fix wave on the pane below. Two real defects, two wrong comments, one commit.
+
+**The pattern fields rewrote `Global.tmProperties` on every keystroke, and the premise was measured
+before it was fixed.** `TextField(text:)` was bound through a `Binding.set` that called
+`TMSettingsSetString`. A standalone SwiftUI harness — the real `SettingsSupport.swift` recompiled
+against a stub bridging header, hosted in a window, driven by inserting characters into the field
+editor — counted the setter calls: **typing the 9 characters of `*.{o,pyc}` called it 30 times**,
+not 9. SwiftUI re-runs a binding setter about three times per keystroke. Each call is
+`settings_t::set`: two full `read_file` parses plus a **non-atomic** truncate-and-rewrite
+(`settings.cc:444`), so each was a window in which a crash leaves the user's global settings file
+empty — font, theme, soft wrap, everything, not just these three patterns.
+
+Fixed by committing on end-editing, which is what the AppKit pane did (`NSValueBinding` *without*
+`NSContinuouslyUpdatesValueBindingOption`). Four triggers, each measured against the real view in
+the same harness: `.onSubmit` per field (Return), `@FocusState` leaving a field, `.onDisappear`
+(a pane switch — `Preferences.mm:48` swaps the subview out), and `NSWindow.willCloseNotification`.
+
+**The window-close trigger is not belt-and-braces; without it the edit is silently lost.** Measured:
+type a pattern, close the Settings window with the caret still in the field, and `.onDisappear`
+never fires and focus never moves — the window is a shared singleton, so the hosting view is never
+removed from it. Every other trigger stays silent and the edit disappears, which is worse than the
+bug being fixed. The observer is filtered to the pane's own window (via a one-view
+`NSViewRepresentable` that reports `viewDidMoveToWindow`); unfiltered, it commits a half-typed
+pattern every time *any* other window in the app closes — measured too, and the original bug in
+miniature.
+
+Final counts through the real view: 0 writes while typing, 1 on Return, 0 on a second Return with
+nothing changed, 1 on tabbing away, 0 on tabbing off an untouched field, 1 on window close.
+
+**The "already stored?" guard lives in the bridge, not in Swift.** `TMSettingsSetString` now returns
+early when `raw_get` already matches. That is what makes four overlapping triggers free, it is
+testable from `Preferences_test` where the Swift side is not, and the next three panes inherit it.
+
+**A test that has to prove a *non*-write.** The file's mtime is backdated to a fixed timestamp with
+`utimes`, then re-committing the stored value must leave it untouched and a real change must not.
+Folded into `test_settings_string_round_trip` rather than added as an 11th test: the default/global
+settings paths are process-global statics and the runner is parallel by default, so a second test
+setting them up raced the existing one — observed as a sporadic 1-of-11 failure on either side, and
+green under `--no-parallel`. `Preferences_test` is not in `bin/build`'s eight-framework
+`--no-parallel` list.
+
+**`fittingSize` 490 × 630 → 490 × 676**, and the delta is entirely the new section header: the same
+build with the header text removed measures 490 × 630 exactly, and the software-update control pane
+stayed at 490 × 251. `@FocusState`, the window-reader background view and the commit modifiers cost
+nothing.
+
+**Two comment fixes.** The "Document tabs:" group had lost its label — every other group names its
+subject through a Picker or TextField label, and the AppKit grid gave this one an
+`OakCreateLabel(@"Document tabs:")` row; it is now a `Section` header. And the claim that
+`@AppStorage` inside an `ObservableObject` gets no redraw hook is false: measured on this SDK, one
+such property fired `objectWillChange` **6 times for 3 writes**. The same comment credited
+`SettingsPaneUpdateStatus` with an `NSUserDefaultsDidChangeNotification` fallback it has never had —
+it observes nothing and is push-only. Both shapes work, so the rewritten comment makes the rule
+about what a value *is*: `@AppStorage` on the View when a key maps straight onto a control, a model
+object only when a value must be transformed or pushed in from ObjC++. Also
+`SettingsFieldsBridge.h:45`, which described the file-browser placement mapping backwards from its
+own implementation and its own test.
+
+### If interrupted here
+
+Branch `phase-6/swiftui-projects-pane`, unpushed, three commits ahead of master. `bin/build`
+succeeds, `Preferences_test` is 10/10 and stable across five parallel runs. **Rendering is still
+unverified** — nobody has looked at the pane with the section header in place, and the header is
+the only change that moves layout. Panes remaining: Variables (189), Files (145), Terminal (372),
+Bundles (903).
+
+---
+
 ## 2026-08-21 — the mangling bug was already on master, latent
 
 Two follow-ups to the Projects pane work below, both mine rather than the implementer's.
