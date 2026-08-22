@@ -4,6 +4,42 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-21 — the mangling bug was already on master, latent
+
+Two follow-ups to the Projects pane work below, both mine rather than the implementer's.
+
+**A latent linker defect in already-merged code, now fixed.** `SettingsSupportBridge.h` declared
+`TMSettingsLastCheckDescription` without an `extern "C"` guard, while its definition lives in an
+Objective-C++ `.mm`. `nm` on the shipped library showed
+`__Z30TMSettingsLastCheckDescriptionbP8NSStringS0_` — C++ mangled. It linked only because every
+caller was also Objective-C++ and mangled identically. The first Swift caller would have hit an
+undefined symbol.
+
+It surfaced because `SettingsFieldsBridge`'s functions *are* called from Swift and failed to link for
+exactly this reason. Worth noting what did not catch it: `Preferences_test` passed 10/10 throughout,
+because the tests call these functions from Objective-C++ too. Only a full `bin/build` exposed it.
+
+`Ruling: fixed on master's code rather than left for the next pane. It is two lines, mechanically
+verifiable (nm now shows _TMSettingsLastCheckDescription, unmangled), and a known landmine costs
+more than the fix. Cost if wrong: none — the guard is a no-op under a plain-C parse.`
+
+**A spec correction (`f5568c0f`).** The sequencing table called Projects "still plain defaults" and
+justified porting it second on that basis. Reading `ProjectsPreferences.mm` shows it declares a
+`tmProperties` map routing three pattern fields through `settings_t` — the same C++ layer the spec
+cites as the reason Files could not go first. The order still holds because the bridge is small, but
+the stated reasoning was wrong. Files remains unsuitable as a first pane for its *other* reason:
+`OakEncodingPopUpButton`, backed by `Charsets.plist`, with no SwiftUI equivalent.
+
+### If interrupted here
+
+Branch `phase-6/swiftui-projects-pane`, unpushed. The Projects pane is committed (`48ad06be`) and
+this fix follows it. **No review has run on either yet**, and no manual QA — the defaults diff
+matters more here than on the last pane, because three checkboxes are negated
+(`disableAutoResize`, `disableTabReordering`, `disableTabAutoClose`) against positively-phrased
+labels. Panes remaining after this: Variables (189), Files (145), Terminal (372), Bundles (903).
+
+---
+
 ## 2026-08-21 — RESUME HERE: Projects pane ported to SwiftUI on its own branch
 
 Branch `phase-6/swiftui-projects-pane`, off master (which already has the SoftwareUpdate pane via
