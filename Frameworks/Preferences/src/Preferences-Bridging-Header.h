@@ -13,6 +13,7 @@
 // link error rather than a wrong key that compiles and passes its tests.
 
 #import <Foundation/Foundation.h>
+#import "SettingsFieldsBridge.h"
 
 extern NSString* const kUserDefaultsDisableSoftwareUpdateKey;   // @"SoftwareUpdateDisablePolling"
 extern NSString* const kUserDefaultsAskBeforeUpdatingKey;       // @"SoftwareUpdateAskBeforeUpdating"
@@ -22,3 +23,17 @@ extern NSString* const kUserDefaultsLastSoftwareUpdateCheckKey; // @"SoftwareUpd
 extern NSString* const kSoftwareUpdateChannelRelease;           // @"release"
 extern NSString* const kSoftwareUpdateChannelPrerelease;        // @"beta"
 extern NSString* const kSoftwareUpdateChannelCanary;            // @"nightly"
+
+// The keys below are DEFINED in Frameworks/Preferences/src/Keys.mm, this
+// framework's own key file -- unlike the SoftwareUpdate keys above, no
+// cross-framework indirection is needed.
+extern NSString* const kUserDefaultsFoldersOnTopKey;                   // @"foldersOnTop"
+extern NSString* const kUserDefaultsAllowExpandingLinksKey;            // @"allowExpandingLinks"
+extern NSString* const kUserDefaultsFileBrowserSingleClickToOpenKey;   // @"fileBrowserSingleClickToOpen"
+extern NSString* const kUserDefaultsAutoRevealFileKey;                 // @"autoRevealFile"
+extern NSString* const kUserDefaultsFileBrowserPlacementKey;           // @"fileBrowserPlacement"
+extern NSString* const kUserDefaultsDisableFileBrowserWindowResizeKey; // @"disableFileBrowserWindowResize"
+extern NSString* const kUserDefaultsDisableTabBarCollapsingKey;        // @"disableTabBarCollapsing"
+extern NSString* const kUserDefaultsDisableTabReorderingKey;           // @"disableTabReordering"
+extern NSString* const kUserDefaultsDisableTabAutoCloseKey;            // @"disableTabAutoClose"
+extern NSString* const kUserDefaultsHTMLOutputPlacementKey;            // @"htmlOutputPlacement"

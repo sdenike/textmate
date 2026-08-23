@@ -1330,17 +1330,38 @@ targets:
     settings:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
+        HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope"
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libOnigmo.a"
     dependencies:
       - target: PreferencesSupport
+      - target: settings
+      - target: cf
+      - target: text
+      - target: io
+      - target: ns
+      - target: OakFoundation
+      - target: plist
+      - target: regexp
+      - target: Onigmo
+      - target: crash
+      - target: scope
+      - sdk: CoreFoundation.framework
+      - sdk: ApplicationServices.framework
+      - sdk: Carbon.framework
+      - sdk: Security.framework
+      - sdk: Cocoa.framework
       - sdk: Foundation.framework
+      - sdk: libiconv.tbd
   PreferencesSupport:
     type: library.static
     platform: macOS
     sources:
+      - path: "Frameworks/Preferences/src/SettingsFieldsBridge.mm"
       - path: "Frameworks/Preferences/src/SettingsSupportBridge.mm"
     settings:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
+        HEADER_SEARCH_PATHS: "$(inherited) $(SRCROOT)/Xcode/include/settings $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/scope"
   document:
     type: library.static
     platform: macOS
