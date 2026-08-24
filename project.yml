@@ -1358,6 +1358,7 @@ targets:
     sources:
       - path: "Frameworks/Preferences/src/SettingsFieldsBridge.mm"
       - path: "Frameworks/Preferences/src/SettingsSupportBridge.mm"
+      - path: "Frameworks/Preferences/src/SettingsVariablesBridge.mm"
     settings:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"

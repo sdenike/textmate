@@ -406,6 +406,246 @@ struct ProjectsPaneView: View {
 	}
 }
 
+// MARK: - Variables pane
+
+// One row of the table. The id is minted when the entry is created and outlives
+// every insert and delete above it -- Table's selection and @FocusState both
+// key off it, and a row index would not do: deleting row 0 would slide the
+// selection and the focus ring onto a different variable instead of moving with
+// the one they were on.
+struct SettingsVariable: Identifiable {
+	let id: Int
+	var enabled: Bool
+	var name: String
+	var value: String
+}
+
+// The Variables pane's state. Owned by VariablesPreferences.mm the same way
+// SettingsPaneFileBrowserLocation is owned by ProjectsPreferences, and for one
+// concrete reason: -commitEditing has to be able to flush a half-typed row from
+// Objective-C++, and it cannot reach a value living inside a SwiftUI View.
+//
+// @MainActor because it drives SwiftUI. Every caller is already main-thread --
+// -loadView, -commitEditing, and the view's own callbacks -- unlike
+// SettingsPaneUpdateStatus, whose KVO chain is not. Do not relax this to paper
+// over a call site that turns out not to be main-thread; the @objc thunk of a
+// @MainActor method SIGTRAPs off-main rather than misbehaving quietly.
+@objc(SettingsPaneVariables)
+@MainActor
+public final class SettingsPaneVariables: NSObject, ObservableObject {
+	// The defaults array verbatim -- [["enabled": NSNumber, "name": String,
+	// "value": String]] -- rather than a parallel Swift model. Every rule that
+	// decides what it becomes lives in SettingsVariablesBridge, where
+	// Preferences_test can reach it. This class only holds it and decides WHEN
+	// to persist.
+	@Published private var storage: [[String: Any]] = []
+	// Stable ids, one per entry, kept in step with storage by every mutation.
+	@Published private var ids: [Int] = []
+	@Published var selection: Int?
+	private var nextID = 0
+
+	@objc public override init() {
+		super.init()
+		storage = UserDefaults.standard.array(forKey: kUserDefaultsEnvironmentVariablesKey) as? [[String: Any]] ?? []
+		ids = storage.map { _ in mintID() }
+	}
+
+	var rows: [SettingsVariable] {
+		zip(ids, storage).map { id, entry in
+			SettingsVariable(id: id,
+			                 enabled: (entry[TMVariableKeyEnabled()] as? NSNumber)?.boolValue ?? false,
+			                 name:    entry[TMVariableKeyName()]  as? String ?? "",
+			                 value:   entry[TMVariableKeyValue()] as? String ?? "")
+		}
+	}
+
+	// -1 for "nothing selected", matching NSTableView.selectedRow, which is what
+	// the bridge functions expect.
+	private var selectedRow: Int {
+		guard let selection, let row = ids.firstIndex(of: selection) else { return -1 }
+		return row
+	}
+
+	private func mintID() -> Int {
+		defer { nextID += 1 }
+		return nextID
+	}
+
+	// Text edits land here per keystroke and stay in memory; -commit persists
+	// them. Same split as the Projects pane's pattern fields, for a weaker
+	// reason -- NSUserDefaults is atomic and cheap where settings_t::set is a
+	// non-atomic rewrite of the user's whole Global.tmProperties -- but the
+	// same observable behaviour, which is the point: the AppKit table bound
+	// through -tableView:setObjectValue:forTableColumn:row:, which NSTableView
+	// calls when editing ENDS, not while it is happening.
+	func setValue(_ value: Any, forKey key: String, id: Int) {
+		guard let row = ids.firstIndex(of: id) else { return }
+		storage = TMVariablesSetValue(storage, row, key, value)
+	}
+
+	// The checkbox has no editing session to end, so it persists on the click,
+	// exactly as the AppKit cell did.
+	func setEnabled(_ enabled: Bool, id: Int) {
+		setValue(NSNumber(value: enabled), forKey: TMVariableKeyEnabled(), id: id)
+		commit()
+	}
+
+	// Returns the new row's id so the caller can put the caret in its name
+	// field, which is what -addVariable: did with -editColumn:row:withEvent:select:.
+	@discardableResult func add() -> Int {
+		let index = TMVariablesInsertionIndex(selectedRow, storage.count)
+		storage = TMVariablesInsert(storage, index)
+		let id = mintID()
+		ids.insert(id, at: index)
+		commit()
+		selection = id
+		return id
+	}
+
+	func remove() {
+		let row = selectedRow
+		guard row != -1 else { return }
+		storage = TMVariablesRemove(storage, row)
+		ids.remove(at: row)
+		commit()
+		let next = TMVariablesSelectionAfterRemove(row, storage.count)
+		selection = next == -1 ? nil : ids[next]
+	}
+
+	// Skips the write when that array is already stored, which is what makes
+	// the deliberately overlapping commit triggers free: a pane switch fires
+	// both -commitEditing (Preferences.mm:35, before the swap) and .onDisappear
+	// (after it), and every needless write posts
+	// NSUserDefaultsDidChangeNotification to every @AppStorage in the app.
+	@objc public func commit() {
+		let stored = UserDefaults.standard.array(forKey: kUserDefaultsEnvironmentVariablesKey) as NSArray?
+		guard stored?.isEqual(to: storage) != true else { return }
+		UserDefaults.standard.set(storage, forKey: kUserDefaultsEnvironmentVariablesKey)
+	}
+}
+
+struct VariablesPaneView: View {
+	@ObservedObject var model: SettingsPaneVariables
+	@FocusState private var focusedCell: Cell?
+	@State private var hostWindow: NSWindow?
+
+	private enum Cell: Hashable {
+		case name(Int)
+		case value(Int)
+	}
+
+	var body: some View {
+		SettingsPane {
+			Section {
+				Table(model.rows, selection: $model.selection) {
+					// No title and a fixed 16 points, as NSTableColumnNoResizing
+					// with matching min and max width gave it.
+					TableColumn("") { row in
+						Toggle("", isOn: Binding(get: { row.enabled }, set: { model.setEnabled($0, id: row.id) }))
+							.labelsHidden()
+					}
+					.width(16)
+
+					// .plain so a cell looks like a cell until you click into
+					// it, the way NSTextFieldCell did. A bordered field per row
+					// turns the table into a wall of boxes.
+					TableColumn("Variable Name") { row in
+						TextField("", text: Binding(get: { row.name }, set: { model.setValue($0, forKey: TMVariableKeyName(), id: row.id) }))
+							.textFieldStyle(.plain)
+							.focused($focusedCell, equals: .name(row.id))
+							.onSubmit { model.commit() }
+					}
+					.width(min: 60, ideal: 140)
+
+					TableColumn("Value") { row in
+						TextField("", text: Binding(get: { row.value }, set: { model.setValue($0, forKey: TMVariableKeyValue(), id: row.id) }))
+							.textFieldStyle(.plain)
+							.focused($focusedCell, equals: .value(row.id))
+							.onSubmit { model.commit() }
+					}
+					.width(min: 60, ideal: 200)
+				}
+				// SettingsPane wraps its content in .scrollDisabled(true), and
+				// that is an ENVIRONMENT value (EnvironmentValues.isScrollEnabled),
+				// so it is inherited by every scrollable descendant -- which is
+				// this pane's one real conflict with the shared wrapper, since
+				// the other five panes are forms that must NOT scroll inside a
+				// fixed-size pane and this one contains a table that must.
+				//
+				// Measured on this SDK, 2026-08-24, and the result is NOT what
+				// the environment value implies: Table ignores it. Hosting the
+				// same table three ways -- inheriting the wrapper's disable,
+				// overriding it with .scrollDisabled(false), and with no
+				// wrapper at all -- produced a byte-identical AppKit hierarchy
+				// each time, ListCoreScrollView 460 x 988.5 over a 460 x 960
+				// SwiftUIOutlineTableView. The tell is real, not absent: the
+				// same probe on a plain ScrollView flips hasVerticalScroller
+				// false/true with the modifier, and the Form's OWN
+				// HostingScrollView flips with it too. Only the table's does
+				// not move.
+				//
+				// So this line changes nothing today and the table is not
+				// clipped either way. Kept because it is one line, it says
+				// which behaviour this pane depends on, and the day Table does
+				// start reading isScrollEnabled the failure would be a table
+				// that silently stops scrolling past its visible rows.
+				.scrollDisabled(false)
+				// A Table contributes NO intrinsic size in either direction,
+				// and PreferencesPane.mm:35 sizes the pane from fittingSize --
+				// so without this the pane is whatever the surrounding chrome
+				// happens to measure. Measured on this SDK, 2026-08-24: with no
+				// frame at all the hosting view fits at 154 x 399, i.e. a
+				// 114-point-wide content column holding a table whose own
+				// columns already want 402. The height was obvious; the WIDTH
+				// is the one that would have shipped, because a too-narrow pane
+				// still looks like a pane. These two numbers are chosen to land
+				// the whole pane on the 622 x 454 the AppKit view declared.
+				.frame(minWidth: 582, minHeight: 372)
+
+				HStack(spacing: 4) {
+					Button(action: addVariable) { Image(systemName: "plus") }
+						.help("Add variable")
+					Button(action: model.remove) { Image(systemName: "minus") }
+						.help("Remove variable")
+						// The old pane bound the remove button's enabled state
+						// to a canRemove property that was true only with a row
+						// selected.
+						.disabled(model.selection == nil)
+					Spacer()
+				}
+			}
+		}
+		// The same four commit triggers as the Projects pane's pattern fields,
+		// for the same reasons: .onSubmit on each field is Return, this catches
+		// the caret leaving a cell, .onDisappear catches a pane switch
+		// (Preferences.mm:48 swaps the subview out) and willClose catches the
+		// window being closed with the caret still in a field -- which fires
+		// none of the others, because the Settings window is a shared singleton
+		// whose hosting view is never removed. VariablesPreferences
+		// -commitEditing is a fifth, and the only one that runs BEFORE a pane
+		// switch is allowed to proceed.
+		.onChange(of: focusedCell) { previous, _ in
+			if previous != nil {
+				model.commit()
+			}
+		}
+		.onDisappear { model.commit() }
+		.background(HostWindowReader { hostWindow = $0 })
+		.onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
+			if notification.object as AnyObject === hostWindow {
+				model.commit()
+			}
+		}
+	}
+
+	private func addVariable() {
+		let id = model.add()
+		// The new row does not exist in the Table until SwiftUI has run an
+		// update pass, and focus assigned before that is dropped on the floor.
+		Task { @MainActor in focusedCell = .name(id) }
+	}
+}
+
 @objc(SettingsPaneFactory)
 public final class SettingsPaneFactory: NSObject {
 	// `public`, not merely @objc: an internal @objc class is absent from the
@@ -429,6 +669,16 @@ public final class SettingsPaneFactory: NSObject {
 		// Same fittingSize discipline as softwareUpdateView: fileBrowserLocation
 		// is seeded by the caller (ProjectsPreferences -loadView) before this
 		// runs, so the Picker measures its real first item, not an empty menu.
+		view.frame = NSRect(origin: .zero, size: view.fittingSize)
+		return view
+	}
+	@MainActor
+	@objc public static func variablesView(variables: SettingsPaneVariables) -> NSView {
+		let view = NSHostingView(rootView: VariablesPaneView(model: variables))
+		// Same fittingSize discipline as the two panes above, but load-bearing
+		// in a way they are not: a Table contributes no intrinsic height, so
+		// this measures the .frame(minHeight:) the view declares. Drop that and
+		// this is the 0x0 that PreferencesPane.mm:35 pins the pane to.
 		view.frame = NSRect(origin: .zero, size: view.fittingSize)
 		return view
 	}

@@ -14,6 +14,7 @@
 
 #import <Foundation/Foundation.h>
 #import "SettingsFieldsBridge.h"
+#import "SettingsVariablesBridge.h"
 
 extern NSString* const kUserDefaultsDisableSoftwareUpdateKey;   // @"SoftwareUpdateDisablePolling"
 extern NSString* const kUserDefaultsAskBeforeUpdatingKey;       // @"SoftwareUpdateAskBeforeUpdating"
@@ -37,3 +38,4 @@ extern NSString* const kUserDefaultsDisableTabBarCollapsingKey;        // @"disa
 extern NSString* const kUserDefaultsDisableTabReorderingKey;           // @"disableTabReordering"
 extern NSString* const kUserDefaultsDisableTabAutoCloseKey;            // @"disableTabAutoClose"
 extern NSString* const kUserDefaultsHTMLOutputPlacementKey;            // @"htmlOutputPlacement"
+extern NSString* const kUserDefaultsEnvironmentVariablesKey;           // @"environmentVariables"

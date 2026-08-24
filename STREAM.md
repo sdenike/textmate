@@ -4,6 +4,72 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-24 — the Variables pane became a SwiftUI Table, and the harness caught a 154-point-wide pane
+
+Third Settings pane ported into the unchanged AppKit shell, after Software Update and Projects.
+This one is a table editor rather than a settings form, so it is the first that had to answer
+questions the other two did not.
+
+**`Table` worked; no fallback to a hand-laid-out `List` was needed.** Three columns
+(`TableColumn("").width(16)` for the checkbox, name and value at `width(min:ideal:)`), column
+headers and user-resizable columns all come free, matching what `NSTableColumnNoResizing` /
+`UserResizingMask` / `AutoresizingMask` gave the AppKit version. Rows are a small `Identifiable`
+struct whose id is minted once and outlives every insert and delete above it — a row index would
+slide the selection and the focus ring onto a different variable when row 0 is deleted.
+
+**Every editing rule lives in `SettingsVariablesBridge.{h,mm}`, not in Swift**, because
+`bin/gen_test` cannot reach Swift at all. Eight pure functions over the array of dictionaries, ten
+new tests (`t_settings_variables.mm`, suite now 20). The one worth naming is
+`TMVariablesSetValue`: editing the name or value of an *unchecked* variable silently ticks it back
+on. Undocumented, surprising, and deliberate — parity with the AppKit pane, which did it inside
+`-tableView:setObjectValue:forTableColumn:row:`. It is a tested function precisely so nobody
+"fixes" it by accident.
+
+**A standalone SwiftUI harness caught a defect that would have shipped.** The real
+`SettingsSupport.swift` recompiled against the real bridging header with stubbed keys, hosted,
+measured, rendered offscreen — the same technique the Projects pane's keystroke count used. With
+no explicit frame the hosting view's `fittingSize` was **154 × 399**: a `Table` contributes no
+intrinsic size in *either* direction, and `PreferencesPane.mm:35` pins the pane to `fittingSize`.
+The height was obvious. The width is the one that would have shipped, because a 154-point-wide
+pane still looks like a pane rather than the dead click the Terminal pane looked like. With
+`.frame(minWidth: 582, minHeight: 372)` it measures **622 × 454**, byte-identical to the fixed
+`NSMakeRect(0, 0, 622, 454)` the AppKit view declared.
+
+**`SettingsPane`'s `.scrollDisabled(true)` does not reach a `Table`, measured rather than
+assumed.** `isScrollEnabled` is an environment value, so the obvious reading is that the shared
+wrapper silently disables the table's own scroller. It does not. The same table hosted three ways
+— inheriting the wrapper's disable, overriding with `.scrollDisabled(false)`, and with no wrapper
+at all — produced an identical AppKit hierarchy every time (`ListCoreScrollView` 460 × 988.5 over
+a 460 × 960 `SwiftUIOutlineTableView`). The probe is not blind: a plain `ScrollView` flips
+`hasVerticalScroller` false/true with the modifier, and the `Form`'s *own* `HostingScrollView`
+flips with it too. Only the table's does not move. The explicit `.scrollDisabled(false)` is kept
+anyway — one line, it names the behaviour this pane depends on, and if `Table` ever starts reading
+the value the failure mode is a table that quietly stops scrolling.
+
+**Commit-on-edit reuses the Projects pane's shape for a weaker reason.** Text edits sit in memory
+and reach `NSUserDefaults` on Return, on the caret leaving a cell, on `.onDisappear`, on the
+window closing, and on `-commitEditing` — which is the only one that runs *before*
+`Preferences.mm:35` lets a pane switch proceed, and the reason `VariablesPreferences` still
+overrides it. The AppKit table committed when editing *ended* (`NSTableView` calls
+`-setObjectValue:` then, not per keystroke), so this is parity, not the safety measure it is for
+Projects, where `settings_t::set` is a non-atomic rewrite of the user's whole
+`Global.tmProperties`. `-commit` skips the write when the array already matches, so the
+overlapping triggers cost a read; verified in the harness that the comparison actually holds
+between a Swift-built `[[String: Any]]` and what `UserDefaults` hands back. Add, delete and the
+checkbox persist immediately, exactly as before.
+
+Verified in the harness, not by launching the app: load, add-at-selection, the delete clamp at
+both ends, delete-the-only-row, the re-enable rule through the Swift binding path, text edits
+absent from defaults until `commit()`, and an offscreen render showing headers, checkbox states,
+plain-styled cells and a disabled − button with no selection.
+
+**If interrupted here:** the pane is done, built (`bin/build`) and tested (20/20). Not verified:
+anything needing real interaction — clicking a row to select it, dragging a column divider,
+whether the caret actually lands in the new row's name field after +, and whether Escape during
+an edit reverts. Next pane in the phase is Files, Bundles or Terminal.
+
+---
+
 ## 2026-08-21 — the Projects pane wrote the settings file 30 times per pattern
 
 Review fix wave on the pane below. Two real defects, two wrong comments, one commit.
