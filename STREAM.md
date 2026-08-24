@@ -4,6 +4,139 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-24 (later) — the Variables pane grew with its rows, and the re-enable rule fired per keystroke
+
+Fix wave over the port below. Six review findings; four fixed, one reduced to a corrected comment,
+one measured to be impossible with a supported API and documented instead.
+
+**The pane's height tracked the row count and nothing scrolled.** `.frame(minWidth:minHeight:)` was
+a *minimum*, and a `Table` lays out at full content height, so `fittingSize` grew with the data —
+622 x 454 at 9 rows, 622 x 594 at 20, 622 x 1074 at 40 — and `OakTransitionViewController.mm:72-74`
+sizes the *window* to that, clamping to the screen. Past roughly 20 variables on a laptop the + and
+- buttons clipped off the bottom with nothing scrolling to reach them, and
+`default_environment()` (`Keys.mm:6`) already ships 9. An exact `.frame(width: 582, height: 372)`
+fixes it: fittingSize is **622 x 453.5 at 4, 9, 20 and 40 rows**, and the table's own
+`ListCoreScrollView` becomes 582 x 372 over its full 960-point document, scrolling internally the
+way `hasVerticalScroller = YES` did for the AppKit pane.
+
+**`SettingsFormStyle.swift` was not touched, deliberately.** The review noted that flipping the
+shared wrapper's `.scrollDisabled(true)` gives the Form's own `HostingScrollView` a scroller and so
+rescues an over-tall pane. True, but the wrong lever: a pane that never overflows has nothing to
+scroll, and that modifier is there so the Software Update and Projects panes grow `fittingSize`
+instead of clipping. The `.scrollDisabled(false)` on the table stays with a corrected comment — it
+still changes nothing today, and it is still worth one line as a statement of what this pane needs.
+
+**Editing a disabled variable re-enabled it per keystroke, and Escape could not take it back.**
+`TMVariablesSetValue` applied the rule; the SwiftUI binding calls it on every character; the next
+focus change persisted the result. One character into a disabled `PATH` override, Escape, and the
+override was back on. The rule moved to a new `TMVariablesEnableEdited(baseline, current)` applied
+at commit, which ticks on only rows whose name or value differs from the last committed array —
+`NSTableView` called `-setObjectValue:` when editing *ended*, so this is the parity that was
+intended. Counts must match, which they do not across an insert or delete, so `-add`/`-remove` flush
+pending edits through `-commit` first and then write the structural change through `-persist`.
+
+**Escape can be intercepted in a SwiftUI Table cell**, measured rather than assumed: `.onExitCommand`
+fires on both a synthesised `cancelOperation:` and a real Escape `NSEvent`. `TextField` does *not*
+revert on its own — the binding already holds the typed text — so `-revert` puts the row back from
+the committed baseline via a new `TMVariablesRevert`. Order matters and cost a probe: reverting and
+dropping focus in the same turn does **not** work, because ending the editing session makes
+`TextField` write the field editor's text back over the revert. Reverting and leaving focus alone
+does, and the field editor redraws with the restored text.
+
+**Merely visiting the pane could destroy the user's variables.** `as? [[String: Any]] ?? []` failed
+whole on a value of the wrong shape — a dictionary, or an array with one bad element — and
+`.onDisappear` wrote the empty result back. Two halves fix it: `-load` falls back to element-wise
+parsing, and `-persist` compares against what this pane loaded rather than re-reading defaults, so a
+pane nobody edited writes nothing at all. Verified against three malformed values; all three survive
+untouched, and a real edit still writes.
+
+**Scroll-into-view after a delete is a documented gap, not an oversight.** `ScrollViewReader`'s
+`proxy.scrollTo(id)` drives a `Table` only when the table is *not* inside a `Form` — clip origin
+-28 -> 497 over a 960-point document — and is a silent no-op in all four placements inside one.
+Every one of those also costs 20 points of pane width, because a grouped `Form` stops insetting a
+Section child that is a `ScrollViewReader`: 622 -> 642. `.scrollPosition(id:)` is layout-neutral and
+does not move a `Table` at all. `-scrollRowToVisible:` and `-scrollToVisible:` on the
+`SwiftUIOutlineTableView` reached by walking the AppKit tree are no-ops too; only driving its clip
+view by hand works, which means reimplementing AppKit's clamping against a private view. Not worth
+it for a row the user just clicked, which is on screen already.
+
+Suite 20 -> 24. `bin/build` and `bin/build Preferences/test` both green; renders at 9 and 40 rows
+both 622 x 454 with the buttons visible, and the 40-row one shows a row clipped at the table's
+bottom edge, which is the internal scrolling.
+
+*If interrupted here:* the wave is complete and committed. Click-to-select is still unverified —
+hit-testing a row body headless returns the cell's `TableCellHostingView`, and nothing here changed
+the selection wiring, so it is the maintainer's check in the running app. If selection never
+happens, Remove stays disabled and + always appends.
+
+---
+
+## 2026-08-24 — the Variables pane became a SwiftUI Table, and the harness caught a 154-point-wide pane
+
+Third Settings pane ported into the unchanged AppKit shell, after Software Update and Projects.
+This one is a table editor rather than a settings form, so it is the first that had to answer
+questions the other two did not.
+
+**`Table` worked; no fallback to a hand-laid-out `List` was needed.** Three columns
+(`TableColumn("").width(16)` for the checkbox, name and value at `width(min:ideal:)`), column
+headers and user-resizable columns all come free, matching what `NSTableColumnNoResizing` /
+`UserResizingMask` / `AutoresizingMask` gave the AppKit version. Rows are a small `Identifiable`
+struct whose id is minted once and outlives every insert and delete above it — a row index would
+slide the selection and the focus ring onto a different variable when row 0 is deleted.
+
+**Every editing rule lives in `SettingsVariablesBridge.{h,mm}`, not in Swift**, because
+`bin/gen_test` cannot reach Swift at all. Eight pure functions over the array of dictionaries, ten
+new tests (`t_settings_variables.mm`, suite now 20). The one worth naming is
+`TMVariablesSetValue`: editing the name or value of an *unchecked* variable silently ticks it back
+on. Undocumented, surprising, and deliberate — parity with the AppKit pane, which did it inside
+`-tableView:setObjectValue:forTableColumn:row:`. It is a tested function precisely so nobody
+"fixes" it by accident.
+
+**A standalone SwiftUI harness caught a defect that would have shipped.** The real
+`SettingsSupport.swift` recompiled against the real bridging header with stubbed keys, hosted,
+measured, rendered offscreen — the same technique the Projects pane's keystroke count used. With
+no explicit frame the hosting view's `fittingSize` was **154 × 399**: a `Table` contributes no
+intrinsic size in *either* direction, and `PreferencesPane.mm:35` pins the pane to `fittingSize`.
+The height was obvious. The width is the one that would have shipped, because a 154-point-wide
+pane still looks like a pane rather than the dead click the Terminal pane looked like. With
+`.frame(minWidth: 582, minHeight: 372)` it measures **622 × 454**, byte-identical to the fixed
+`NSMakeRect(0, 0, 622, 454)` the AppKit view declared.
+
+**`SettingsPane`'s `.scrollDisabled(true)` does not reach a `Table`, measured rather than
+assumed.** `isScrollEnabled` is an environment value, so the obvious reading is that the shared
+wrapper silently disables the table's own scroller. It does not. The same table hosted three ways
+— inheriting the wrapper's disable, overriding with `.scrollDisabled(false)`, and with no wrapper
+at all — produced an identical AppKit hierarchy every time (`ListCoreScrollView` 460 × 988.5 over
+a 460 × 960 `SwiftUIOutlineTableView`). The probe is not blind: a plain `ScrollView` flips
+`hasVerticalScroller` false/true with the modifier, and the `Form`'s *own* `HostingScrollView`
+flips with it too. Only the table's does not move. The explicit `.scrollDisabled(false)` is kept
+anyway — one line, it names the behaviour this pane depends on, and if `Table` ever starts reading
+the value the failure mode is a table that quietly stops scrolling.
+
+**Commit-on-edit reuses the Projects pane's shape for a weaker reason.** Text edits sit in memory
+and reach `NSUserDefaults` on Return, on the caret leaving a cell, on `.onDisappear`, on the
+window closing, and on `-commitEditing` — which is the only one that runs *before*
+`Preferences.mm:35` lets a pane switch proceed, and the reason `VariablesPreferences` still
+overrides it. The AppKit table committed when editing *ended* (`NSTableView` calls
+`-setObjectValue:` then, not per keystroke), so this is parity, not the safety measure it is for
+Projects, where `settings_t::set` is a non-atomic rewrite of the user's whole
+`Global.tmProperties`. `-commit` skips the write when the array already matches, so the
+overlapping triggers cost a read; verified in the harness that the comparison actually holds
+between a Swift-built `[[String: Any]]` and what `UserDefaults` hands back. Add, delete and the
+checkbox persist immediately, exactly as before.
+
+Verified in the harness, not by launching the app: load, add-at-selection, the delete clamp at
+both ends, delete-the-only-row, the re-enable rule through the Swift binding path, text edits
+absent from defaults until `commit()`, and an offscreen render showing headers, checkbox states,
+plain-styled cells and a disabled − button with no selection.
+
+**If interrupted here:** the pane is done, built (`bin/build`) and tested (20/20). Not verified:
+anything needing real interaction — clicking a row to select it, dragging a column divider,
+whether the caret actually lands in the new row's name field after +, and whether Escape during
+an edit reverts. Next pane in the phase is Files, Bundles or Terminal.
+
+---
+
 ## 2026-08-21 — the Projects pane wrote the settings file 30 times per pattern
 
 Review fix wave on the pane below. Two real defects, two wrong comments, one commit.

@@ -1,5 +1,4 @@
-#import "Preferences.h"
+#import "PreferencesPane.h"
 
-@interface VariablesPreferences : NSViewController <PreferencesPaneProtocol>
-@property (nonatomic, readonly) NSImage* toolbarItemImage;
+@interface VariablesPreferences : PreferencesPane
 @end

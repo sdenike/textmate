@@ -263,6 +263,7 @@
 		3A7C2DC83798794E48F1B2E5 /* libxdiff.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C369F6CE14AAE80C750749E /* libxdiff.a */; };
 		3AAB339064D5149A61699ACC /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7E66CC54D77D20A7F989E8DE /* CoreFoundation.framework */; };
 		3AF9D40BE8F69EAB45F2E4A7 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E5CBDDB3F25B242778D24F9 /* WebKit.framework */; };
+		3B1B3C12C5174AE422F900A6 /* SettingsVariablesBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = 1A9DEA155D2E42088FFF8734 /* SettingsVariablesBridge.mm */; };
 		3B4BE3F607FBA73A9068FCA2 /* libscm.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 86BFB3707452CA3B39117AE6 /* libscm.a */; };
 		3BABE272B28D2602616D1BB8 /* reggnu.c in Sources */ = {isa = PBXBuildFile; fileRef = 22281BABB89AE5CF30A599F5 /* reggnu.c */; };
 		3BE8A473DBECD07AA73DF57E /* OakPopOutAnimation.mm in Sources */ = {isa = PBXBuildFile; fileRef = E71054D6CD8A5F17A1AFF84C /* OakPopOutAnimation.mm */; };
@@ -5231,6 +5232,7 @@
 		1A4B4750CD61FA0A4A90122D /* BundleSpec.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = BundleSpec.mm; sourceTree = "<group>"; };
 		1A7D14E43EF7DC8074B0BCC5 /* popup.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = popup.mm; sourceTree = "<group>"; };
 		1A96C35E172E98E9D8E01A89 /* KVDBFunctions.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = KVDBFunctions.m; sourceTree = "<group>"; };
+		1A9DEA155D2E42088FFF8734 /* SettingsVariablesBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SettingsVariablesBridge.mm; sourceTree = "<group>"; };
 		1B00D512BAA49A879B565CCC /* gutter_diff.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = gutter_diff.cc; sourceTree = "<group>"; };
 		1C369F6CE14AAE80C750749E /* libxdiff.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libxdiff.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		1C8DA89DA9550A2CBD146C6B /* PrivilegedTool */ = {isa = PBXFileReference; includeInIndex = 0; path = PrivilegedTool; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -7037,6 +7039,7 @@
 				9A629C4F6000F3AEB413AD2A /* SettingsFormStyle.swift */,
 				77E5A9F337A4DF6309A498F6 /* SettingsSupport.swift */,
 				E76EEECEC32CABEE6089DE13 /* SettingsSupportBridge.mm */,
+				1A9DEA155D2E42088FFF8734 /* SettingsVariablesBridge.mm */,
 				552158142570056B4898175F /* SoftwareUpdatePreferences.mm */,
 				E010D6C0758DDA8DB0B291B0 /* TerminalPreferences.mm */,
 				D25BE24D216758BF7BBB70BC /* VariablesPreferences.mm */,
@@ -12165,6 +12168,7 @@
 			files = (
 				D6BDDB2A328DDA0334B35BC6 /* SettingsFieldsBridge.mm in Sources */,
 				E5960BA67047624E3F965414 /* SettingsSupportBridge.mm in Sources */,
+				3B1B3C12C5174AE422F900A6 /* SettingsVariablesBridge.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
