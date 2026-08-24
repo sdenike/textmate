@@ -50,12 +50,34 @@ extern NSArray<NSDictionary<NSString*, id>*>* _Nonnull TMVariablesRemove(NSArray
 // -1 (nothing to select) when the list is now empty or shorter than that.
 extern NSInteger TMVariablesSelectionAfterRemove(NSInteger row, NSInteger count);
 
+// Sets one key of one row and nothing else. Deliberately dumb: the SwiftUI
+// pane calls it per keystroke, and a rule applied per keystroke is a rule
+// applied to text the user has not committed and may still cancel.
+extern NSArray<NSDictionary<NSString*, id>*>* _Nonnull TMVariablesSetValue(NSArray<NSDictionary<NSString*, id>*>* _Nonnull variables, NSInteger row, NSString* _Nonnull key, id _Nonnull value);
+
 // Editing the name or value of a DISABLED variable silently re-enables it.
 // Undocumented, surprising, and the shipped behaviour of the AppKit pane
 // (VariablesPreferences.mm -tableView:setObjectValue:forTableColumn:row: as of
 // 2026-08-24) -- kept deliberately, which is why it is a tested function rather
 // than an inline `if` somewhere in a view.
-extern NSArray<NSDictionary<NSString*, id>*>* _Nonnull TMVariablesSetValue(NSArray<NSDictionary<NSString*, id>*>* _Nonnull variables, NSInteger row, NSString* _Nonnull key, id _Nonnull value);
+//
+// Applied on COMMIT, against the last committed array, rather than inside
+// TMVariablesSetValue: NSTableView called -setObjectValue: when editing ENDED,
+// so one keystroke into a disabled row followed by Escape left the row alone.
+// Folding the rule into the per-keystroke setter re-enabled it on that first
+// character and the next focus change persisted it -- a PATH override the user
+// cancelled coming back on.
+//
+// Counts must match; they do not during an insert or a delete, and those flush
+// the pending edits through here first and then write the structural change
+// directly. Mismatched counts return `current` untouched rather than guessing
+// which rows correspond.
+extern NSArray<NSDictionary<NSString*, id>*>* _Nonnull TMVariablesEnableEdited(NSArray<NSDictionary<NSString*, id>*>* _Nonnull baseline, NSArray<NSDictionary<NSString*, id>*>* _Nonnull current);
+
+// One row back to how it was last committed -- what Escape does. The whole
+// entry, not just the text: the checkbox commits on the click, so the baseline
+// already holds its current state.
+extern NSArray<NSDictionary<NSString*, id>*>* _Nonnull TMVariablesRevert(NSArray<NSDictionary<NSString*, id>*>* _Nonnull current, NSArray<NSDictionary<NSString*, id>*>* _Nonnull baseline, NSInteger row);
 
 #ifdef __cplusplus
 }

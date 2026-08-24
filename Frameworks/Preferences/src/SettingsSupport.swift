@@ -443,11 +443,33 @@ public final class SettingsPaneVariables: NSObject, ObservableObject {
 	@Published private var ids: [Int] = []
 	@Published var selection: Int?
 	private var nextID = 0
+	// What is in NSUserDefaults, as this pane last saw it. Two jobs: it is the
+	// baseline the re-enable rule compares against, and it is what -persist
+	// compares against so a pane that was merely VISITED writes nothing at all.
+	private var committed: [[String: Any]] = []
 
 	@objc public override init() {
 		super.init()
-		storage = UserDefaults.standard.array(forKey: kUserDefaultsEnvironmentVariablesKey) as? [[String: Any]] ?? []
+		storage = Self.load()
+		committed = storage
 		ids = storage.map { _ in mintID() }
+	}
+
+	// `as? [[String: Any]] ?? []` was wrong in a way that ate data: a value of
+	// the wrong shape -- a dictionary, or an array with one non-dictionary
+	// element -- failed the whole cast, and .onDisappear then wrote the empty
+	// result back. Opening the pane and leaving destroyed the key.
+	//
+	// Two halves fix it and both are needed. Here: fall back to element-wise
+	// parsing so a single bad entry costs that entry rather than the array. In
+	// -persist: write only when this pane actually changed something, so
+	// whatever could not be parsed stays on disk untouched until the user
+	// edits, which is what the AppKit pane did -- it only ever wrote from
+	// -tableView:setObjectValue: and the two buttons.
+	private static func load() -> [[String: Any]] {
+		let raw = UserDefaults.standard.object(forKey: kUserDefaultsEnvironmentVariablesKey)
+		if let entries = raw as? [[String: Any]] { return entries }
+		return (raw as? [Any])?.compactMap { $0 as? [String: Any] } ?? []
 	}
 
 	var rows: [SettingsVariable] {
@@ -478,13 +500,31 @@ public final class SettingsPaneVariables: NSObject, ObservableObject {
 	// same observable behaviour, which is the point: the AppKit table bound
 	// through -tableView:setObjectValue:forTableColumn:row:, which NSTableView
 	// calls when editing ENDS, not while it is happening.
+	//
+	// Deliberately does NOT apply the re-enable rule; -commit does. See
+	// TMVariablesEnableEdited's header comment for why that split matters.
 	func setValue(_ value: Any, forKey key: String, id: Int) {
 		guard let row = ids.firstIndex(of: id) else { return }
 		storage = TMVariablesSetValue(storage, row, key, value)
 	}
 
+	// Escape. AppKit's field editor aborted the edit and left the row alone;
+	// SwiftUI's TextField has already written the binding by the time
+	// .onExitCommand runs, so the pane has to put the row back itself.
+	//
+	// Measured on this SDK: reverting and dropping focus in the same turn does
+	// NOT work -- ending the editing session makes TextField write the field
+	// editor's text back over the revert. Reverting and leaving focus where it
+	// is does, and the field editor redraws with the restored text.
+	func revert(id: Int) {
+		guard let row = ids.firstIndex(of: id) else { return }
+		storage = TMVariablesRevert(storage, committed, row)
+	}
+
 	// The checkbox has no editing session to end, so it persists on the click,
-	// exactly as the AppKit cell did.
+	// exactly as the AppKit cell did. Through -commit rather than -persist so a
+	// half-typed row elsewhere in the table is not written past its rule: the
+	// rule keys off name and value, so it cannot undo the click itself.
 	func setEnabled(_ enabled: Bool, id: Int) {
 		setValue(NSNumber(value: enabled), forKey: TMVariableKeyEnabled(), id: id)
 		commit()
@@ -492,35 +532,55 @@ public final class SettingsPaneVariables: NSObject, ObservableObject {
 
 	// Returns the new row's id so the caller can put the caret in its name
 	// field, which is what -addVariable: did with -editColumn:row:withEvent:select:.
+	//
+	// -commit BEFORE the insert, -persist after: the re-enable rule compares
+	// row for row and cannot do that across a count change, so pending edits
+	// are flushed while the counts still match.
 	@discardableResult func add() -> Int {
+		commit()
 		let index = TMVariablesInsertionIndex(selectedRow, storage.count)
 		storage = TMVariablesInsert(storage, index)
 		let id = mintID()
 		ids.insert(id, at: index)
-		commit()
+		persist()
 		selection = id
 		return id
 	}
 
+	// The old pane also called -scrollRowToVisible: on the re-selected row.
+	// There is no supported way to do that here, measured rather than assumed;
+	// see the note above `body`.
 	func remove() {
 		let row = selectedRow
 		guard row != -1 else { return }
+		commit()
 		storage = TMVariablesRemove(storage, row)
 		ids.remove(at: row)
-		commit()
+		persist()
 		let next = TMVariablesSelectionAfterRemove(row, storage.count)
 		selection = next == -1 ? nil : ids[next]
 	}
 
-	// Skips the write when that array is already stored, which is what makes
-	// the deliberately overlapping commit triggers free: a pane switch fires
-	// both -commitEditing (Preferences.mm:35, before the swap) and .onDisappear
-	// (after it), and every needless write posts
-	// NSUserDefaultsDidChangeNotification to every @AppStorage in the app.
+	// End of an editing session: apply the re-enable rule against what was last
+	// committed, then write. Every trigger the view has -- Return, focus
+	// leaving a cell, .onDisappear, willClose -- and -commitEditing come here.
 	@objc public func commit() {
-		let stored = UserDefaults.standard.array(forKey: kUserDefaultsEnvironmentVariablesKey) as NSArray?
-		guard stored?.isEqual(to: storage) != true else { return }
+		storage = TMVariablesEnableEdited(committed, storage)
+		persist()
+	}
+
+	// Compares against `committed` rather than re-reading NSUserDefaults, which
+	// is what stops a merely-visited pane writing: at load the two are equal by
+	// construction even when the stored value was malformed and -load could
+	// only salvage part of it. It also keeps the deliberately overlapping
+	// commit triggers free -- a pane switch fires both -commitEditing
+	// (Preferences.mm:35, before the swap) and .onDisappear (after it), and
+	// every needless write posts NSUserDefaultsDidChangeNotification to every
+	// @AppStorage in the app.
+	private func persist() {
+		guard !(committed as NSArray).isEqual(to: storage) else { return }
 		UserDefaults.standard.set(storage, forKey: kUserDefaultsEnvironmentVariablesKey)
+		committed = storage
 	}
 }
 
@@ -534,6 +594,21 @@ struct VariablesPaneView: View {
 		case value(Int)
 	}
 
+	// NOT scrolling the re-selected row into view after a delete, the way
+	// -delete: did with -scrollRowToVisible:, is a known and deliberate gap.
+	// Measured on this SDK, 2026-08-24: ScrollViewReader's proxy.scrollTo(id)
+	// drives a Table when the table is NOT inside a Form -- clip origin -28 ->
+	// 497 over a 960-point document -- and is a silent no-op in all four
+	// placements inside one (wrapping the Section's contents, wrapping the
+	// framed table, inside the frame, and hiding the reader in a VStack). Every
+	// one of those also costs 20 points of pane width, because a grouped Form
+	// stops insetting a Section child that is a ScrollViewReader: 622 -> 642.
+	// .scrollPosition(id:) is layout-neutral and does not move a Table at all.
+	// -scrollRowToVisible: and -scrollToVisible: on the SwiftUIOutlineTableView
+	// found by walking the AppKit tree are no-ops too; only driving its clip
+	// view by hand works, which means reimplementing AppKit's clamping against
+	// a private view. Not worth it for a row the user just clicked and which is
+	// therefore on screen already.
 	var body: some View {
 		SettingsPane {
 			Section {
@@ -554,6 +629,7 @@ struct VariablesPaneView: View {
 							.textFieldStyle(.plain)
 							.focused($focusedCell, equals: .name(row.id))
 							.onSubmit { model.commit() }
+							.onExitCommand { model.revert(id: row.id) }
 					}
 					.width(min: 60, ideal: 140)
 
@@ -562,50 +638,56 @@ struct VariablesPaneView: View {
 							.textFieldStyle(.plain)
 							.focused($focusedCell, equals: .value(row.id))
 							.onSubmit { model.commit() }
+							.onExitCommand { model.revert(id: row.id) }
 					}
 					.width(min: 60, ideal: 200)
 				}
-				// SettingsPane wraps its content in .scrollDisabled(true), and
-				// that is an ENVIRONMENT value (EnvironmentValues.isScrollEnabled),
-				// so it is inherited by every scrollable descendant -- which is
-				// this pane's one real conflict with the shared wrapper, since
-				// the other five panes are forms that must NOT scroll inside a
-				// fixed-size pane and this one contains a table that must.
+				// SettingsPane wraps its content in .scrollDisabled(true),
+				// and that is an ENVIRONMENT value
+				// (EnvironmentValues.isScrollEnabled), inherited by every
+				// scrollable descendant. Measured on this SDK, 2026-08-24:
+				// Table does not read it -- the same table inheriting the
+				// disable, overriding it here, and with no wrapper at all
+				// built an identical AppKit hierarchy every time. The probe
+				// is not blind; a plain ScrollView flips hasVerticalScroller
+				// with the modifier and so does the Form's own
+				// HostingScrollView.
 				//
-				// Measured on this SDK, 2026-08-24, and the result is NOT what
-				// the environment value implies: Table ignores it. Hosting the
-				// same table three ways -- inheriting the wrapper's disable,
-				// overriding it with .scrollDisabled(false), and with no
-				// wrapper at all -- produced a byte-identical AppKit hierarchy
-				// each time, ListCoreScrollView 460 x 988.5 over a 460 x 960
-				// SwiftUIOutlineTableView. The tell is real, not absent: the
-				// same probe on a plain ScrollView flips hasVerticalScroller
-				// false/true with the modifier, and the Form's OWN
-				// HostingScrollView flips with it too. Only the table's does
-				// not move.
-				//
-				// So this line changes nothing today and the table is not
-				// clipped either way. Kept because it is one line, it says
-				// which behaviour this pane depends on, and the day Table does
-				// start reading isScrollEnabled the failure would be a table
-				// that silently stops scrolling past its visible rows.
+				// So this line changes nothing today. Kept because it is one
+				// line and it names the behaviour this pane depends on: the
+				// day Table starts reading isScrollEnabled, the failure would
+				// be a table that silently stops scrolling past its visible
+				// rows. It is NOT what keeps the pane a fixed height -- the
+				// exact frame below is, and the Form's own scroller staying
+				// disabled is right, because a pane that never overflows has
+				// nothing to scroll.
 				.scrollDisabled(false)
-				// A Table contributes NO intrinsic size in either direction,
-				// and PreferencesPane.mm:35 sizes the pane from fittingSize --
-				// so without this the pane is whatever the surrounding chrome
-				// happens to measure. Measured on this SDK, 2026-08-24: with no
-				// frame at all the hosting view fits at 154 x 399, i.e. a
-				// 114-point-wide content column holding a table whose own
-				// columns already want 402. The height was obvious; the WIDTH
-				// is the one that would have shipped, because a too-narrow pane
-				// still looks like a pane. These two numbers are chosen to land
-				// the whole pane on the 622 x 454 the AppKit view declared.
-				.frame(minWidth: 582, minHeight: 372)
+				// EXACT, not minimum. A Table lays out at full content
+				// height and contributes no intrinsic size in either
+				// direction, so with .frame(minHeight:) the pane's
+				// fittingSize tracked the row count -- measured 622 x 454 at
+				// 9 rows, 622 x 474 at 15, 622 x 594 at 20, 622 x 1074 at 40
+				// -- and OakTransitionViewController.mm:72-74 sizes the
+				// WINDOW to that, clamped to the screen at :77-85. Past
+				// ~20 variables on a laptop the + and - buttons clipped off
+				// the bottom with nothing scrolling to reach them:
+				// default_environment() (Keys.mm:6) already ships 9.
+				//
+				// Pinned, the table's own ListCoreScrollView becomes 582 x
+				// 372 over its full-height document and scrolls internally,
+				// which is what NSScrollView.hasVerticalScroller = YES gave
+				// the AppKit pane at a fixed NSMakeRect(0, 0, 622, 454).
+				//
+				// The width matters as much and for a different reason: with
+				// no frame at all the hosting view fits at 154 x 399, a
+				// 114-point content column holding a table whose columns want
+				// 402, and a too-narrow pane still looks like a pane.
+				.frame(width: 582, height: 372)
 
 				HStack(spacing: 4) {
 					Button(action: addVariable) { Image(systemName: "plus") }
 						.help("Add variable")
-					Button(action: model.remove) { Image(systemName: "minus") }
+					Button(action: { model.remove() }) { Image(systemName: "minus") }
 						.help("Remove variable")
 						// The old pane bound the remove button's enabled state
 						// to a canRemove property that was true only with a row
@@ -655,10 +737,13 @@ public final class SettingsPaneFactory: NSObject {
 	@objc public static func softwareUpdateView(checkNow: @escaping () -> Void, status: SettingsPaneUpdateStatus) -> NSView {
 		let model = SoftwareUpdateModel()
 		let view = NSHostingView(rootView: SoftwareUpdatePaneView(model: model, status: status, checkNow: checkNow))
-		// PreferencesPane.mm:36 sizes a pane from its fittingSize, and
-		// OakTransitionViewController pins to it. A 0x0 here is what made the
-		// Terminal pane look like a dead click for months. status is seeded by
-		// the caller before this runs, so this measures real text, not "".
+		// A pane is sized from its fittingSize and then pinned to that:
+		// OakTransitionViewController.mm:42 falls back to it for a zero frame,
+		// and :72-74 sizes the window from the frame. (PreferencesPane.mm is a
+		// grid-view helper and has nothing to do with it.) A 0x0 here is what
+		// made the Terminal pane look like a dead click for months. status is
+		// seeded by the caller before this runs, so this measures real text,
+		// not "".
 		view.frame = NSRect(origin: .zero, size: view.fittingSize)
 		return view
 	}
@@ -677,8 +762,10 @@ public final class SettingsPaneFactory: NSObject {
 		let view = NSHostingView(rootView: VariablesPaneView(model: variables))
 		// Same fittingSize discipline as the two panes above, but load-bearing
 		// in a way they are not: a Table contributes no intrinsic height, so
-		// this measures the .frame(minHeight:) the view declares. Drop that and
-		// this is the 0x0 that PreferencesPane.mm:35 pins the pane to.
+		// this measures the exact .frame(width:height:) the view declares --
+		// and, because that frame is exact rather than a minimum, it is the
+		// same number at any row count. Drop the frame and this is the 0x0 that
+		// OakTransitionViewController.mm:42 pins the pane to.
 		view.frame = NSRect(origin: .zero, size: view.fittingSize)
 		return view
 	}

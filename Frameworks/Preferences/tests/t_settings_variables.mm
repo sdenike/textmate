@@ -96,34 +96,21 @@ void test_set_value_replaces_only_that_row ()
 	OAK_ASSERT([res[2][TMVariableKeyValue()] isEqualToString:@"value 2"]);
 }
 
-// The surprising one. Type in the name or value of an unchecked row and it
-// ticks back on.
-void test_editing_a_disabled_variable_re_enables_it ()
+// Per-keystroke setter: sets the key and nothing else. The re-enable rule used
+// to live in here, which meant one character into a disabled row ticked it back
+// on before the user had committed anything -- and Escape could not take it
+// back. It is TMVariablesEnableEdited's job now.
+void test_set_value_does_not_re_enable ()
 {
 	NSArray* disabled = @[ @{ @"enabled": @NO, @"name": @"OFF", @"value": @"off" } ];
 
 	NSArray* byName = TMVariablesSetValue(disabled, 0, TMVariableKeyName(), @"ON");
-	OAK_ASSERT_EQ([byName[0][TMVariableKeyEnabled()] boolValue], true);
+	OAK_ASSERT_EQ([byName[0][TMVariableKeyEnabled()] boolValue], false);
 	OAK_ASSERT([byName[0][TMVariableKeyName()] isEqualToString:@"ON"]);
-
-	NSArray* byValue = TMVariablesSetValue(disabled, 0, TMVariableKeyValue(), @"on");
-	OAK_ASSERT_EQ([byValue[0][TMVariableKeyEnabled()] boolValue], true);
 
 	// The input is not mutated -- these functions return a new array, and the
 	// pane keeps the old one until it assigns the result.
 	OAK_ASSERT_EQ([disabled[0][TMVariableKeyEnabled()] boolValue], false);
-}
-
-// ...but unticking the checkbox itself must stick, which is the whole point of
-// the key check inside the rule.
-void test_unticking_the_checkbox_is_not_undone ()
-{
-	NSArray* res = TMVariablesSetValue(variables(1), 0, TMVariableKeyEnabled(), @NO);
-	OAK_ASSERT_EQ([res[0][TMVariableKeyEnabled()] boolValue], false);
-
-	// And an already-enabled row edited by name stays enabled.
-	NSArray* stillOn = TMVariablesSetValue(variables(1), 0, TMVariableKeyName(), @"RENAMED");
-	OAK_ASSERT_EQ([stillOn[0][TMVariableKeyEnabled()] boolValue], true);
 }
 
 void test_set_value_out_of_range_is_a_no_op ()
@@ -131,4 +118,90 @@ void test_set_value_out_of_range_is_a_no_op ()
 	OAK_ASSERT_EQ(TMVariablesSetValue(variables(2), 2, TMVariableKeyName(), @"x").count, 2);
 	OAK_ASSERT([TMVariablesSetValue(variables(2), 2, TMVariableKeyName(), @"x")[1][TMVariableKeyName()] isEqualToString:@"NAME_1"]);
 	OAK_ASSERT_EQ(TMVariablesSetValue(@[], 0, TMVariableKeyName(), @"x").count, 0);
+}
+
+// The surprising one, now applied on commit: a row whose name or value differs
+// from what was last committed ticks back on.
+void test_editing_a_disabled_variable_re_enables_it_on_commit ()
+{
+	NSArray* baseline = @[ @{ @"enabled": @NO, @"name": @"OFF", @"value": @"off" } ];
+
+	NSArray* byName = TMVariablesEnableEdited(baseline, TMVariablesSetValue(baseline, 0, TMVariableKeyName(), @"ON"));
+	OAK_ASSERT_EQ([byName[0][TMVariableKeyEnabled()] boolValue], true);
+	OAK_ASSERT([byName[0][TMVariableKeyName()] isEqualToString:@"ON"]);
+
+	NSArray* byValue = TMVariablesEnableEdited(baseline, TMVariablesSetValue(baseline, 0, TMVariableKeyValue(), @"on"));
+	OAK_ASSERT_EQ([byValue[0][TMVariableKeyEnabled()] boolValue], true);
+
+	OAK_ASSERT_EQ([baseline[0][TMVariableKeyEnabled()] boolValue], false);
+}
+
+// The whole point of moving the rule off the keystroke: a cancelled edit is
+// indistinguishable from no edit by the time commit runs, so the row stays off.
+void test_a_reverted_edit_does_not_re_enable ()
+{
+	NSArray* baseline = @[ @{ @"enabled": @NO, @"name": @"PATH", @"value": @"/bin" } ];
+	NSArray* typed    = TMVariablesSetValue(baseline, 0, TMVariableKeyName(), @"PATHX");
+	NSArray* escaped  = TMVariablesRevert(typed, baseline, 0);
+
+	OAK_ASSERT_EQ([TMVariablesEnableEdited(baseline, escaped)[0][TMVariableKeyEnabled()] boolValue], false);
+	OAK_ASSERT([escaped[0][TMVariableKeyName()] isEqualToString:@"PATH"]);
+}
+
+// Unticking the checkbox must stick, which is why the rule keys off name and
+// value rather than "anything changed".
+void test_unticking_the_checkbox_is_not_undone ()
+{
+	NSArray* baseline = variables(1);
+	NSArray* off      = TMVariablesSetValue(baseline, 0, TMVariableKeyEnabled(), @NO);
+	OAK_ASSERT_EQ([TMVariablesEnableEdited(baseline, off)[0][TMVariableKeyEnabled()] boolValue], false);
+
+	// And an already-enabled row edited by name stays enabled.
+	NSArray* renamed = TMVariablesSetValue(baseline, 0, TMVariableKeyName(), @"RENAMED");
+	OAK_ASSERT_EQ([TMVariablesEnableEdited(baseline, renamed)[0][TMVariableKeyEnabled()] boolValue], true);
+}
+
+void test_enable_edited_leaves_untouched_rows_and_mismatched_counts_alone ()
+{
+	NSArray* baseline = @[ @{ @"enabled": @NO, @"name": @"A", @"value": @"a" },
+	                       @{ @"enabled": @NO, @"name": @"B", @"value": @"b" } ];
+
+	// Only the edited row ticks on.
+	NSArray* res = TMVariablesEnableEdited(baseline, TMVariablesSetValue(baseline, 1, TMVariableKeyValue(), @"edited"));
+	OAK_ASSERT_EQ([res[0][TMVariableKeyEnabled()] boolValue], false);
+	OAK_ASSERT_EQ([res[1][TMVariableKeyEnabled()] boolValue], true);
+
+	// Nothing edited at all: the identical array back, nothing ticked on.
+	NSArray* same = TMVariablesEnableEdited(baseline, baseline);
+	OAK_ASSERT_EQ([same[0][TMVariableKeyEnabled()] boolValue], false);
+	OAK_ASSERT_EQ(same.count, 2);
+
+	// An insert or a delete makes the rows uncomparable; the pane flushes
+	// through here first and then writes the structural change directly, so
+	// this returns `current` rather than guessing.
+	NSArray* grown = TMVariablesInsert(baseline, 2);
+	OAK_ASSERT_EQ(TMVariablesEnableEdited(baseline, grown).count, 3);
+	OAK_ASSERT_EQ([TMVariablesEnableEdited(baseline, grown)[0][TMVariableKeyEnabled()] boolValue], false);
+
+	// A row missing the keys entirely reads as unedited against itself rather
+	// than as changed -- nil == nil, which -isEqual: does not give you.
+	NSArray* empty = @[ @{ @"enabled": @NO } ];
+	OAK_ASSERT_EQ([TMVariablesEnableEdited(empty, empty)[0][TMVariableKeyEnabled()] boolValue], false);
+}
+
+void test_revert_restores_one_row_and_clamps ()
+{
+	NSArray* baseline = variables(3);
+	NSArray* edited   = TMVariablesSetValue(TMVariablesSetValue(baseline, 1, TMVariableKeyName(), @"X"), 2, TMVariableKeyName(), @"Y");
+
+	NSArray* res = TMVariablesRevert(edited, baseline, 1);
+	OAK_ASSERT([res[1][TMVariableKeyName()] isEqualToString:@"NAME_1"]);
+	// The OTHER edited row is untouched: Escape cancels one cell's session.
+	OAK_ASSERT([res[2][TMVariableKeyName()] isEqualToString:@"Y"]);
+
+	OAK_ASSERT([TMVariablesRevert(edited, baseline, 3)[1][TMVariableKeyName()]  isEqualToString:@"X"]);
+	OAK_ASSERT([TMVariablesRevert(edited, baseline, -1)[1][TMVariableKeyName()] isEqualToString:@"X"]);
+	// A row that does not exist in the baseline -- a just-added row Escaped
+	// before its first commit -- is left as it is rather than trapping.
+	OAK_ASSERT_EQ(TMVariablesRevert(edited, @[], 1).count, 3);
 }

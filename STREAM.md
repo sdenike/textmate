@@ -4,6 +4,73 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-24 (later) — the Variables pane grew with its rows, and the re-enable rule fired per keystroke
+
+Fix wave over the port below. Six review findings; four fixed, one reduced to a corrected comment,
+one measured to be impossible with a supported API and documented instead.
+
+**The pane's height tracked the row count and nothing scrolled.** `.frame(minWidth:minHeight:)` was
+a *minimum*, and a `Table` lays out at full content height, so `fittingSize` grew with the data —
+622 x 454 at 9 rows, 622 x 594 at 20, 622 x 1074 at 40 — and `OakTransitionViewController.mm:72-74`
+sizes the *window* to that, clamping to the screen. Past roughly 20 variables on a laptop the + and
+- buttons clipped off the bottom with nothing scrolling to reach them, and
+`default_environment()` (`Keys.mm:6`) already ships 9. An exact `.frame(width: 582, height: 372)`
+fixes it: fittingSize is **622 x 453.5 at 4, 9, 20 and 40 rows**, and the table's own
+`ListCoreScrollView` becomes 582 x 372 over its full 960-point document, scrolling internally the
+way `hasVerticalScroller = YES` did for the AppKit pane.
+
+**`SettingsFormStyle.swift` was not touched, deliberately.** The review noted that flipping the
+shared wrapper's `.scrollDisabled(true)` gives the Form's own `HostingScrollView` a scroller and so
+rescues an over-tall pane. True, but the wrong lever: a pane that never overflows has nothing to
+scroll, and that modifier is there so the Software Update and Projects panes grow `fittingSize`
+instead of clipping. The `.scrollDisabled(false)` on the table stays with a corrected comment — it
+still changes nothing today, and it is still worth one line as a statement of what this pane needs.
+
+**Editing a disabled variable re-enabled it per keystroke, and Escape could not take it back.**
+`TMVariablesSetValue` applied the rule; the SwiftUI binding calls it on every character; the next
+focus change persisted the result. One character into a disabled `PATH` override, Escape, and the
+override was back on. The rule moved to a new `TMVariablesEnableEdited(baseline, current)` applied
+at commit, which ticks on only rows whose name or value differs from the last committed array —
+`NSTableView` called `-setObjectValue:` when editing *ended*, so this is the parity that was
+intended. Counts must match, which they do not across an insert or delete, so `-add`/`-remove` flush
+pending edits through `-commit` first and then write the structural change through `-persist`.
+
+**Escape can be intercepted in a SwiftUI Table cell**, measured rather than assumed: `.onExitCommand`
+fires on both a synthesised `cancelOperation:` and a real Escape `NSEvent`. `TextField` does *not*
+revert on its own — the binding already holds the typed text — so `-revert` puts the row back from
+the committed baseline via a new `TMVariablesRevert`. Order matters and cost a probe: reverting and
+dropping focus in the same turn does **not** work, because ending the editing session makes
+`TextField` write the field editor's text back over the revert. Reverting and leaving focus alone
+does, and the field editor redraws with the restored text.
+
+**Merely visiting the pane could destroy the user's variables.** `as? [[String: Any]] ?? []` failed
+whole on a value of the wrong shape — a dictionary, or an array with one bad element — and
+`.onDisappear` wrote the empty result back. Two halves fix it: `-load` falls back to element-wise
+parsing, and `-persist` compares against what this pane loaded rather than re-reading defaults, so a
+pane nobody edited writes nothing at all. Verified against three malformed values; all three survive
+untouched, and a real edit still writes.
+
+**Scroll-into-view after a delete is a documented gap, not an oversight.** `ScrollViewReader`'s
+`proxy.scrollTo(id)` drives a `Table` only when the table is *not* inside a `Form` — clip origin
+-28 -> 497 over a 960-point document — and is a silent no-op in all four placements inside one.
+Every one of those also costs 20 points of pane width, because a grouped `Form` stops insetting a
+Section child that is a `ScrollViewReader`: 622 -> 642. `.scrollPosition(id:)` is layout-neutral and
+does not move a `Table` at all. `-scrollRowToVisible:` and `-scrollToVisible:` on the
+`SwiftUIOutlineTableView` reached by walking the AppKit tree are no-ops too; only driving its clip
+view by hand works, which means reimplementing AppKit's clamping against a private view. Not worth
+it for a row the user just clicked, which is on screen already.
+
+Suite 20 -> 24. `bin/build` and `bin/build Preferences/test` both green; renders at 9 and 40 rows
+both 622 x 454 with the buttons visible, and the 40-row one shows a row clipped at the table's
+bottom edge, which is the internal scrolling.
+
+*If interrupted here:* the wave is complete and committed. Click-to-select is still unverified —
+hit-testing a row body headless returns the cell's `TableCellHostingView`, and nothing here changed
+the selection wiring, so it is the maintainer's check in the running app. If selection never
+happens, Remove stays disabled and + always appends.
+
+---
+
 ## 2026-08-24 — the Variables pane became a SwiftUI Table, and the harness caught a 154-point-wide pane
 
 Third Settings pane ported into the unchanged AppKit shell, after Software Update and Projects.
