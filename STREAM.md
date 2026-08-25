@@ -4,6 +4,43 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-25 (later) — the encoding row's 237-point box, closed with one `.fixedSize()`
+
+Answers the open question the entry below left: yes, the 237-point-wide hosted control looked
+wrong beside the three SwiftUI popups (107/144/164 in this session's measurements). An offscreen
+render of `FilesPaneView` (real `FilesPane.swift` + `SettingsFormStyle.swift`, compiled standalone
+outside the Xcode project with stand-ins only for the settings/bundles bridging functions) walked
+the real hosting hierarchy and found the mechanism: macOS SwiftUI backs a `Form`'s `.menu`-style
+`Picker` with a real `NSPopUpButton` internally (`SwiftUIPopupButton` / `AppKitPopUpButton`,
+private classes, confirmed by class dump rather than assumed), sized to exactly its content. The
+hosted `EncodingPopUpButton`'s `NSViewRepresentable` box, with no `.fixedSize()`, instead filled
+the width `LabeledContent` offered — 237pt against a 206pt intrinsic size — leaving the button's
+own title left-anchored with dead space before its chevron.
+
+All four rows' boxes already shared one trailing edge (x=460 in the harness) before this change;
+what did not line up was each control's own content within its box. `.fixedSize()` on
+`EncodingPopUpButton(encoding:)` is the whole fix: the box now shrinks to its content (205pt,
+matching the 206pt intrinsic size within rounding) with its trailing edge still pinned at x=460,
+so there is no slack left for the title to drift from the chevron. Measured before and after in
+the same harness: `fittingSize` unchanged (490 x 413 both times) — every ancestor frame from the
+row's `_NSGraphicsView` up to the hosting view itself was byte-identical, since Form's row width
+comes from the label column and fixed system margins, not from the trailing content's width.
+
+**Did not get an independent re-measurement from the live, fully-built app.** Tried: launched a
+second, throwaway instance of the freshly built binary (the user's own `/Applications/TextMate.app`
+was left running and untouched) and reached for `lldb -p <pid>` to call `-showWindow:` directly and
+avoid any GUI/Accessibility automation — `attach failed: Not allowed to attach to process`, which
+this non-interactive environment cannot clear (it needs a one-time Developer Tools grant in System
+Settings). Fell back to the harness's structural evidence above, which already isolates the one
+thing that matters — that the row/pane geometry does not couple to the popup's width — using the
+real, unmodified layout source.
+
+**If interrupted here:** committed. `bin/build` and `bin/build Preferences/test` (27/27) both pass.
+Not verified: the live app's exact fittingSize (blocked as above — re-attempt only if `lldb` attach
+is ever granted in this environment, or just eyeball it in a running TextMate).
+
+---
+
 ## 2026-08-25 — the Files pane went SwiftUI, keeping the encoding control it would have had to rebuild
 
 Fourth pane ported inside the unchanged AppKit shell, and the first in its own file:

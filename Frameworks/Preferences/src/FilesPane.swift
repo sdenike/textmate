@@ -138,7 +138,18 @@ struct FilesPaneView: View {
 				}
 
 				LabeledContent("Encoding:") {
+					// Without .fixedSize(), NSViewRepresentable fills the width
+					// LabeledContent offers instead of hugging the button's own
+					// intrinsic size (measured 206pt) -- unlike a native Picker,
+					// whose control already sizes to its content. That left the
+					// button 237pt wide with its title stuck to the left edge and
+					// a visible gap before the chevron, while the other three
+					// rows' values sit flush against theirs. Confirmed by an
+					// offscreen render: with this, the button's box shrinks to its
+					// content width and its trailing edge lines up with the other
+					// three rows' at x=460; fittingSize is unchanged.
 					EncodingPopUpButton(encoding: encodingBinding)
+						.fixedSize()
 				}
 
 				Picker("Line endings:", selection: lineEndingsBinding) {
