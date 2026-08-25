@@ -21,9 +21,9 @@ maintainer and enforced throughout:
 | | |
 |---|---|
 | Released | **v3.0.0-revived.26** — Setup Assistant, PR #19 |
-| Unreleased | none |
+| Unreleased | **4 SwiftUI Settings panes on `master`** — Software Update, Projects, Variables, Files (Files on a branch) |
 | Phases complete | 0-5, 7 |
-| Phase 6 | remainder in progress — QuickLook done, onboarding island done, Preferences/About/update-sheet islands not written |
+| Phase 6 | remainder in progress — QuickLook and onboarding done; 4 of 6 Settings panes ported; About dropped deliberately |
 | Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |
 | Build | `TextMate.xcodeproj`, generated from `project.yml` by XcodeGen |
 | Bundle | 26,012 KB — **1,916 KB smaller than the `undead` baseline** |
@@ -43,7 +43,11 @@ were never started:
 | Back/forward navigation | **already done — since 2018** | none |
 | **QuickLook extension** | **done and verified** — previews render syntax highlighted | — |
 | SwiftUI islands: onboarding | **done** — Setup Assistant, first launch and `Help → Setup Assistant…` | — |
-| SwiftUI islands: Preferences, About, update sheet | not done | large |
+| SwiftUI islands: Settings panes | **4 of 6 done** — Software Update, Projects, Variables, Files | — |
+| SwiftUI islands: Settings — Terminal | not done — privileged `mate` install, the last xib | medium |
+| SwiftUI islands: Settings — Bundles | not done — 903 lines; **AppKit is a legitimate outcome** | large |
+| SwiftUI islands: About | **dropped deliberately** — a `WKWebView`, not AppKit | — |
+| SwiftUI islands: update sheet | not done | medium |
 | `NSSplitViewController` sidebar | not started | large — defer |
 | `NSRulerView` gutter | not done | large — **do not do** |
 
@@ -172,50 +176,37 @@ been made against `/Applications/TextMate.app`, an older installed release, not 
 
 ## Next
 
-Nothing is in flight. `master` is at the v3.0.0-revived.26 merge and the tree is clean. One PR is
-open: [#20](https://github.com/sdenike/textmate/pull/20), rewording the software-update alert so it
-names the unsigned *running copy* rather than accusing the download. It carries no `CHANGELOG.md`
-change, so merging it publishes nothing.
+`master` is at v3.0.0-revived.26 plus four ported Settings panes, none released. One branch is open:
+`phase-6/swiftui-files-pane`.
 
-### Phase 6 remainder — three SwiftUI islands
+### Phase 6 remainder — two Settings panes, the update sheet
 
-The spec's own words (`docs/superpowers/specs/2026-08-12-textmate-revived-design.md:236`):
+**Four of six Settings panes are ported.** The pattern is proven and documented in `CLAUDE.md`'s
+*Settings panes as SwiftUI islands* section — read that before porting another; it records six traps
+that each cost a build cycle or a shipped defect, including one (`extern "C"`) that `Preferences_test`
+provably cannot catch.
 
-> SwiftUI islands for Preferences, About, onboarding, update sheet, using #1467's `OakSwiftUI`
-> bridge. *Gate:* visual parity pass, no regressions in the responder chain or key equivalents.
+Order and reasoning live in `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`.
 
-**Onboarding shipped in v3.0.0-revived.26.** Design at
-`docs/superpowers/specs/2026-08-18-setup-assistant-design.md`, plan at
-`docs/superpowers/plans/2026-08-18-setup-assistant.md`, both complete. It is the working reference
-for every remaining island: `SetupAssistantCore` shows how app-level logic becomes reachable from
-`TextMate_test`, and `CLAUDE.md`'s Swift section records the interop contract that governs the rest.
+**Terminal (372 lines)** — the last xib in this framework, and privileged `mate` installation through
+Authorization Services. Sequenced late deliberately: a second route to a privileged filesystem write
+earns its risk only once the pattern is proven, which it now is.
 
-**Preferences, About and the update sheet remain**, and they are a different proposition from
-onboarding. Roughly 1,945 lines of working AppKit between them, each with behaviour a rewrite has to
-match exactly — including the key equivalents and responder chain the gate names. Onboarding was
-cheap to get wrong because it had no predecessor; these are not. Expect each to need its own spec and
-plan rather than one sweep across all three.
+**Bundles (903 lines)** — not really a preferences pane. An `NSArrayController`-backed table with
+network installs, four modal sheets and an eight-item contextual menu. **Treat "it stays AppKit" as
+the default answer** unless a port demonstrably beats it. The Variables pane is the evidence: porting
+a 189-line table cost three fix rounds and permanently lost scroll-into-view on delete, because
+`ScrollViewReader` is a silent no-op driving a `Table` inside a `Form`. Bundles is that at five times
+the scale, on a pane where a defect means failed bundle installs.
 
-**About was evaluated and dropped, 2026-08-19.** It is not an AppKit window — it is a `WKWebView`
-in a 292-line controller, rendering HTML that `assemble_resources.sh` generates from Markdown at
-build time, with version and copyright injected at runtime as JavaScript globals
-(`AboutWindowController.mm:84-94`). Porting it to SwiftUI would mean writing a Markdown renderer
-good enough for the Changes page — 269 KB, 202 releases of nested lists, headings, links and code —
-plus re-implementing text selection, scrolling and link handling, all to replace what a browser
-already does. The gate for these islands is *visual parity*, so the best available outcome is that
-it looks identical. The other islands are hand-built AppKit, where SwiftUI genuinely buys less code;
-About is a different category and the trade does not hold.
-
-There is a worthwhile change to About that is **not** a port: Changes shows 202 releases, most of
-them upstream TextMate's rather than this fork's. Trimming it to recent history with a link to the
-Releases page is small, self-contained, and belongs to no phase.
+**The update sheet** remains unported and unexamined.
 
 Settled, do not reopen:
 
-- **About** — see above. A `WKWebView`, not AppKit; porting buys nothing the gate can reward.
+- **About** — a `WKWebView` rendering generated HTML, not AppKit. Porting means writing a Markdown
+  renderer for a 269 KB Changes page to arrive at a window that looks identical. See below.
 - **Scope bar** and **back/forward navigation** — present since 2014 and 2018.
-- **`NSRulerView` gutter** — recommended **against**: deletes ~600 lines of better-fitted code for a
-  system class that does not model multi-column icons.
+- **`NSRulerView` gutter** — recommended against: deletes ~600 lines of better-fitted code.
 - **`NSSplitViewController` sidebar** — large, no forcing function. Defer.
 
 ### Phase 8 — extract shared modules

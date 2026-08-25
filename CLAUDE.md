@@ -353,6 +353,60 @@ and the SwiftUI view itself stay out of that library and in the `TextMate` app t
 sources instead — they need AppKit/SwiftUI, which a lightweight test tool has no reason to carry —
 so the window controller's C++ theme extraction is verified by hand rather than by this suite.
 
+### Settings panes as SwiftUI islands (Phase 6)
+
+`Frameworks/Preferences` keeps its **AppKit shell** — `Preferences.mm` owns the window, toolbar,
+pane switching, key equivalents and persistence, and is deliberately untouched. Each *pane* is
+ported individually: its `loadView` installs an `NSHostingView` and the SwiftUI content lives in
+Swift. Four are done — Software Update, Projects, Variables, Files. Terminal and Bundles are not.
+
+The design is `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`. Read it before
+porting another pane; it records why About was dropped entirely and why the order is what it is.
+
+**Six things here are non-obvious and each has already cost a build cycle or a shipped defect.**
+
+- **Every ObjC++ bridge function needs `extern "C"`** (`#ifdef __cplusplus` … `}`). Without it the
+  definition gets a C++-mangled symbol while Swift's plain-C parse of the bridging header expects an
+  unmangled one — nine undefined symbols at link. **`Preferences_test` cannot catch this**: its tests
+  call the same functions from ObjC++, which mangles identically. Only a full `bin/build` exposes it.
+  `SettingsSupportBridge.h` carried this defect latent on master for two panes.
+- **Audit nullability explicitly with `_Nonnull`/`_Nullable`.** An unaudited `NSString*` imports into
+  Swift as `String?`, not `String!`. The bare `nullable`/`nonnull` contextual keywords **fail to
+  parse** in the bridging header's plain-C compile — `unknown type name 'nullable'` — so the
+  underscore spellings are mandatory here.
+- **The pane is sized from `fittingSize`** (`OakTransitionViewController.mm:42`), which sizes the
+  *window* and clamps to the screen. A SwiftUI `Table` has **no intrinsic size in either direction**:
+  the Variables pane measured 154×399 without an explicit frame, and with a `minHeight` its height
+  tracked the row count — 9 rows 454, 40 rows 1074 — clamping the window and putting the add/remove
+  buttons off-screen. Give a table pane a fixed `.frame(width:height:)` and let it scroll internally.
+  Measure `fittingSize` at several row counts and confirm it is constant.
+- **`settings_t::set` is expensive and non-atomic.** It does two full `read_file` parses then
+  `fopen(global_settings_path(), "w")` — a truncate-and-rewrite. A SwiftUI `TextField` fires its
+  binding setter **per keystroke** (measured: 30 calls for 9 characters), so binding one straight to
+  `settings_t` rewrites the user's global settings on every character, and a crash inside any one
+  leaves it empty. Commit on Return, focus loss **and window close** — Settings is a shared singleton
+  window whose view is never removed, so without a `willCloseNotification` hook the edit is lost.
+- **`SettingsPane`** (`SettingsFormStyle.swift`) is the shared wrapper; use it rather than `Form`
+  directly, so "uniform and modern" stays one decision. Its `.scrollDisabled(true)` is right for a
+  form — a tall form should grow `fittingSize` rather than clip — and does **not** reach a `Table`'s
+  own scroller.
+- **Hosting an AppKit control is sometimes correct.** `OakEncodingPopUpButton` stays and is hosted
+  via `NSViewRepresentable`: its API is one property, but it reads `Charsets.plist` and maintains a
+  user-customisable subset, so rebuilding it means rebuilding `CustomizeEncodings.xib` too. It
+  reports `intrinsicContentSize` 206×24, so no zero-size trap — but a hosted control does not inherit
+  `LabeledContent`'s trailing alignment and needs placing explicitly.
+
+**Negated checkboxes are the recurring trap.** Several panes bind a positively-phrased label to a
+`disable…` key through `NSNegateBooleanTransformerName` — Projects and Files have three each. A lost
+negation silently inverts the setting while the checkbox looks correct, and no test in this tree can
+catch it. Verify by `defaults export`, toggling every control, exporting again and diffing.
+
+**`Preferences_test` exists now** (it did not before Phase 6) and is wired into
+`.github/workflows/build-and-test.yml`'s hand-maintained `TESTS` list — **new `<name>_test` targets
+must be added there by hand**, as that file's own comment says. Testable logic lives in
+`PreferencesSupport`, a small `library.static`, because the full `Preferences` library drags AppKit,
+`settings_t` and a dozen frameworks into a test tool that needs none of them.
+
 ## Tests
 
 CxxTest-style, but home-grown: `bin/gen_test` reads each `tests/t_*.{cc,mm}` file, finds top-level `void test_*()` functions, and emits a single runner with `main()`. Assertions are `OAK_ASSERT`, `OAK_ASSERT_EQ`, `OAK_ASSERT_NE`. Filesystem fixtures use `test::jail_t` from `Frameworks/test`.
