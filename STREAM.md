@@ -4,6 +4,57 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-25 — RESUME HERE: four of six Settings panes ported; Files on a branch
+
+`master` holds v3.0.0-revived.26 plus three ported Settings panes (Software Update, Projects,
+Variables), **none released**. Files is on `phase-6/swiftui-files-pane`, unpushed at time of writing.
+`bin/build` green, `Preferences_test` 27 passing. `/Applications/TextMate.app` was replaced with a
+local ad-hoc build via `bin/deploy-local`.
+
+### The pattern is settled and now lives in CLAUDE.md
+
+Read *Settings panes as SwiftUI islands* there before porting another. It records six traps, each of
+which already cost a build cycle or shipped a defect — most importantly that **`Preferences_test`
+cannot catch a missing `extern "C"`**, because its tests call the same bridge functions from ObjC++
+and mangle identically. Only a full `bin/build` exposes it, and that defect sat latent on master for
+two panes.
+
+### What each pane cost, because the trend matters
+
+Software Update and Projects were clean wins. **Variables was not**: `NSTableView` gave scrolling,
+click-selection, column resizing, Escape-to-revert and scroll-into-view for free, and `Table` cost a
+measured defect in four of those five — three fix rounds to reach parity, and scroll-into-view is
+**permanently lost** (`ScrollViewReader` is a silent no-op driving a `Table` inside a `Form`).
+
+`Ruling: Bundles should default to staying AppKit. It is 903 lines of NSArrayController-backed table
+with network installs, four modal sheets and an eight-item context menu — Variables' problems at five
+times the scale, on a pane where a defect means failed bundle installs. Port it only if it
+demonstrably beats what is there. Cost if wrong: Settings stays permanently mixed, which is the same
+trade already accepted for About.`
+
+### Files: hosting an AppKit control was the right call
+
+`OakEncodingPopUpButton` stays and is hosted via `NSViewRepresentable`. Its API is one property, but
+it reads `Charsets.plist` and maintains a user-customisable subset, so rebuilding it means rebuilding
+`CustomizeEncodings.xib` too. It reports `intrinsicContentSize` 206×24 — no zero-size trap.
+
+It did need `.fixedSize()`: SwiftUI backs a `Form`'s menu `Picker` with an internal `NSPopUpButton`
+sized to content, while an `NSViewRepresentable` fills whatever width it is offered — so the Encoding
+row's value floated left of its chevron while the other three sat flush. Caught by the maintainer
+looking at the running app, not by any measurement here. All four rows now share trailing edge 460.
+
+### If interrupted here
+
+Push `phase-6/swiftui-files-pane`, open a PR, merge when CI is green. Then the release decision:
+**cutting a version heading in `CHANGELOG.md` publishes a signed, notarized build**. Four panes are
+unreleased. The original decision was to hold all six and ship together so Settings never reaches
+users half-modern — Terminal and Bundles are still AppKit, so shipping now breaks that.
+
+Remaining: Terminal (372 lines, privileged `mate` install, the last xib), Bundles (see ruling above),
+and the update sheet.
+
+---
+
 ## 2026-08-25 (later) — the encoding row's 237-point box, closed with one `.fixedSize()`
 
 Answers the open question the entry below left: yes, the 237-point-wide hosted control looked
