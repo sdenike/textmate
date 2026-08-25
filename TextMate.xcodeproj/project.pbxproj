@@ -252,6 +252,7 @@
 		36E5FEC48BA98D8A6C0ACB3B /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C05530F9E0175FD5842AE9E4 /* Carbon.framework */; };
 		3761D285D5013BFBB78DC9CD /* NSMenuItem Additions.mm in Sources */ = {isa = PBXBuildFile; fileRef = 9093C32AF7074AD4193DB092 /* NSMenuItem Additions.mm */; };
 		37FB49F9EBA650FB20FEB642 /* InstallBundleItems.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5BC18BA7E56523305E1158E9 /* InstallBundleItems.mm */; };
+		3824B2F0C870E7C0E6B44923 /* FilesPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26964143C80973F5EC4F60E4 /* FilesPane.swift */; };
 		38530006E95F5F04E9C9D7FB /* libio.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 10B874173E1C9917097A3BF4 /* libio.a */; };
 		3888D692DF6D3F428178F0DE /* libcrash.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A364573F8340083ACF50E59E /* libcrash.a */; };
 		38E6F7D5C968C1DE4A6C385B /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C05530F9E0175FD5842AE9E4 /* Carbon.framework */; };
@@ -5133,11 +5134,9 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstSubfolderSpec = 7;
 			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
-				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5146,9 +5145,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 7;
+			dstSubfolderSpec = 6;
 			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
+				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
+				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5157,11 +5158,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 6;
+			dstSubfolderSpec = 13;
 			files = (
-				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
-				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
-				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5249,6 +5250,7 @@
 		22281BABB89AE5CF30A599F5 /* reggnu.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = reggnu.c; sourceTree = "<group>"; };
 		23D9E7A7B0DEF5C202614523 /* indent.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = indent.cc; sourceTree = "<group>"; };
 		25A1897AC9B4712448EED5C1 /* parsing.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = parsing.cc; sourceTree = "<group>"; };
+		26964143C80973F5EC4F60E4 /* FilesPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesPane.swift; sourceTree = "<group>"; };
 		26DAC826FBB89CA089CFB68B /* indent.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = indent.cc; sourceTree = "<group>"; };
 		28D54652862B6AA3808CE409 /* TMDIncrementalPopUpMenu.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TMDIncrementalPopUpMenu.mm; sourceTree = "<group>"; };
 		29B5391557900703B7FC4E5B /* parse.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = parse.cc; sourceTree = "<group>"; };
@@ -7030,6 +7032,7 @@
 			isa = PBXGroup;
 			children = (
 				749E3C463630985999821AAB /* BundlesPreferences.mm */,
+				26964143C80973F5EC4F60E4 /* FilesPane.swift */,
 				E59BFED6E26133C5D0D5B386 /* FilesPreferences.mm */,
 				C56389568D8ECB1CBF6E8470 /* Keys.mm */,
 				30E570F4D97F24C50926CF54 /* Preferences.mm */,
@@ -12291,6 +12294,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F01D519ACF1F97E442DF9C29 /* BundlesPreferences.mm in Sources */,
+				3824B2F0C870E7C0E6B44923 /* FilesPane.swift in Sources */,
 				4CD9A3858D1A2B05D68832B3 /* FilesPreferences.mm in Sources */,
 				CE1CF531C92B9167CC03CF4E /* Keys.mm in Sources */,
 				0D4597798F6836808511B40F /* Preferences.mm in Sources */,

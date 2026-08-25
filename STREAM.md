@@ -4,6 +4,64 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-25 — the Files pane went SwiftUI, keeping the encoding control it would have had to rebuild
+
+Fourth pane ported inside the unchanged AppKit shell, and the first in its own file:
+`Frameworks/Preferences/src/FilesPane.swift`, because `SettingsSupport.swift` already carries three
+panes in 772 lines. `FilesPreferences.mm` is down from 145 lines to a shell that queries
+`bundles::query` and hands the result across. **fittingSize 490 x 421** as pinned by the factory,
+re-measuring 490 x 413 once hosted in a window — the same ~32-point settling the shipped Projects
+pane shows through the identical harness (490 x 676 pinned, 644 hosted), so it is the measurement
+technique, not this pane. Stable at 0, 1, 8 and 60 grammars.
+
+**`OakEncodingPopUpButton` is hosted, not rebuilt, and it sizes.** The Variables pane shipped a
+154-point-wide bug because `Table` contributes no intrinsic size; a hosted AppKit control could
+fail the same way and does not — `intrinsicContentSize` is **206 x 24**, laid out at 237 x 24
+inside the `Form`'s trailing column. Its `encoding` binding round-trips both ways in the harness:
+seeded from `settings_t` (MACROMAN, shown as "Western – Mac OS Roman"), and a selection reaches
+`settings_t` (SHIFT_JIS). Rebuilding the control in SwiftUI would have meant rebuilding the
+`Charsets.plist` reading, the user's `availableEncodings` subset and the "Customize List…" window
+behind it.
+
+Swift reaches it through **three plain-C functions in the bridging header**, not the class: its
+header is a bare `@interface … : NSPopUpButton` that takes AppKit from `GCC_PREFIX_HEADER` and does
+not parse standalone. The control has no target/action of its own — its menu items target the
+button — so the Coordinator observes `encoding` by KVO, which is the same mechanism the Cocoa
+binding used. The Coordinator is `@unchecked Sendable`: `observeValue` overrides a nonisolated
+method, so the class cannot be `@MainActor`, and without it `MainActor.assumeIsolated` refuses to
+take `self`.
+
+**The three negated checkboxes were verified by rendering, not by reading the code.** With the
+`disable…` keys false all three switches render on; with them true, off. Three panes have now
+shipped this trap and none has shipped it inverted.
+
+**`SettingsFieldsBridge` gained the scoped pair `kSettingsFileTypeKey` needs.** One key, two scope
+selectors — `attr.untitled` and `attr.file.unknown-type` — which `settings_t` has always supported
+through `raw_get`'s section and `set`'s fileType arguments, and which the unscoped pair passes ""
+for. nil is *not* "" there: it stores `NULL_STR`, which is how the unknown-document menu's "Prompt
+for type" entry (a nil `representedObject` in AppKit) is expressed, and it reads back as "".
+`TMFileTypeItemsSorted` holds the three menu rules the AppKit pane had inline — drop hidden
+grammars, drop scope-less ones, order by `text::less_t` — because `bin/gen_test` cannot reach
+Swift and this framework must not link `bundles`. Three new tests, suite 24 -> 27.
+
+The line-endings values are the **backslash-escaped** two- and four-character forms, not real
+control characters: a test asserts the round trip through `settings_t` rather than reasoning about
+`quote_string`. `OakSavePanel.mm:90` defaulting to a real `"\n"` is not a contradiction — that
+reads the *expanded* settings, one layer above `raw_get`.
+
+Popups commit on selection, which is safe where the Projects pane's text fields were not: a
+Picker's setter fires once per choice, and `settings_t::set` is still two parses plus a non-atomic
+rewrite of the user's whole `Global.tmProperties`.
+
+**If interrupted here:** the pane is done, `bin/build` and `bin/build Preferences/test` (27/27)
+both pass, committed. Not verified: anything needing real interaction — actually opening either
+file-type popup, the "Customize List…" sheet behind the encoding control, and whether the hosted
+control's 237-point width looks right beside the three SwiftUI popups (107, 144, 149) now that
+nothing constrains them to a common width the way the AppKit grid did. Next pane in the plan is
+Terminal.
+
+---
+
 ## 2026-08-24 (later) — the Variables pane grew with its rows, and the re-enable rule fired per keystroke
 
 Fix wave over the port below. Six review findings; four fixed, one reduced to a corrected comment,

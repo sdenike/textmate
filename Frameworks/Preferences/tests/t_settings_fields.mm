@@ -98,4 +98,81 @@ void test_settings_string_round_trip ()
 	OAK_ASSERT_EQ(stat(globalPath.c_str(), &sb), 0);
 	OAK_ASSERT(sb.st_mtimespec.tv_sec != 1000000);
 	OAK_ASSERT([TMSettingsGetString(TMSettingsExcludeKey()) isEqualToString:@"*.pyc"]);
+
+	// The escaped line-endings forms survive settings_t verbatim: they are
+	// written into Global.tmProperties quoted and must come back as the same
+	// two and four characters, or the Files pane's popup selects nothing.
+	TMSettingsSetString(TMSettingsLineEndingsKey(), TMLineEndingsValueForTag(2));
+	OAK_ASSERT([TMSettingsGetString(TMSettingsLineEndingsKey()) isEqualToString:@"\\r\\n"]);
+	OAK_ASSERT_EQ(TMLineEndingsTagForValue(TMSettingsGetString(TMSettingsLineEndingsKey())), 2);
+
+	// One key, three scopes, three independent values -- the Files pane edits
+	// the untitled and unknown-type ones side by side, and a scope leaking
+	// into the global section would retype every file the user opens.
+	OAK_ASSERT([TMSettingsGetScopedString(TMSettingsFileTypeKey(), @"attr.untitled") isEqualToString:@""]);
+
+	TMSettingsSetScopedString(TMSettingsFileTypeKey(), @"text.plain", @"attr.untitled");
+	TMSettingsSetScopedString(TMSettingsFileTypeKey(), @"source.ruby", @"attr.file.unknown-type");
+	OAK_ASSERT([TMSettingsGetScopedString(TMSettingsFileTypeKey(), @"attr.untitled") isEqualToString:@"text.plain"]);
+	OAK_ASSERT([TMSettingsGetScopedString(TMSettingsFileTypeKey(), @"attr.file.unknown-type") isEqualToString:@"source.ruby"]);
+	OAK_ASSERT([TMSettingsGetString(TMSettingsFileTypeKey()) isEqualToString:@""]);
+
+	// nil is the "Prompt for type" entry: stored as NULL_STR, read back as "".
+	TMSettingsSetScopedString(TMSettingsFileTypeKey(), nil, @"attr.file.unknown-type");
+	OAK_ASSERT([TMSettingsGetScopedString(TMSettingsFileTypeKey(), @"attr.file.unknown-type") isEqualToString:@""]);
+	OAK_ASSERT([TMSettingsGetScopedString(TMSettingsFileTypeKey(), @"attr.untitled") isEqualToString:@"text.plain"]);
+
+	// And the same no-redundant-write rule as the unscoped setter, compared
+	// within the scope rather than against the global section.
+	OAK_ASSERT_EQ(utimes(globalPath.c_str(), backdated), 0);
+	TMSettingsSetScopedString(TMSettingsFileTypeKey(), @"text.plain", @"attr.untitled");
+	OAK_ASSERT_EQ(stat(globalPath.c_str(), &sb), 0);
+	OAK_ASSERT(sb.st_mtimespec.tv_sec == 1000000);
+
+	TMSettingsSetScopedString(TMSettingsFileTypeKey(), @"source.c", @"attr.untitled");
+	OAK_ASSERT_EQ(stat(globalPath.c_str(), &sb), 0);
+	OAK_ASSERT(sb.st_mtimespec.tv_sec != 1000000);
+}
+
+void test_line_endings_tag_for_value ()
+{
+	// The escaped forms, not real control characters -- see the header.
+	OAK_ASSERT_EQ(TMLineEndingsTagForValue(@"\\n"),   0);
+	OAK_ASSERT_EQ(TMLineEndingsTagForValue(@"\\r"),   1);
+	OAK_ASSERT_EQ(TMLineEndingsTagForValue(@"\\r\\n"), 2);
+	// A real newline is NOT the stored form, and must not be mistaken for one.
+	OAK_ASSERT_EQ(TMLineEndingsTagForValue(@"\n"),    0);
+	OAK_ASSERT_EQ(TMLineEndingsTagForValue(@"bogus"), 0);
+	OAK_ASSERT_EQ(TMLineEndingsTagForValue(nil),      0);
+}
+
+void test_line_endings_value_for_tag ()
+{
+	OAK_ASSERT([TMLineEndingsValueForTag(0) isEqualToString:@"\\n"]);
+	OAK_ASSERT([TMLineEndingsValueForTag(1) isEqualToString:@"\\r"]);
+	OAK_ASSERT([TMLineEndingsValueForTag(2) isEqualToString:@"\\r\\n"]);
+	OAK_ASSERT([TMLineEndingsValueForTag(9) isEqualToString:@"\\n"]);
+}
+
+void test_file_type_items_sorted ()
+{
+	NSArray<TMFileTypeItem*>* candidates = @[
+		[[TMFileTypeItem alloc] initWithName:@"Ruby"       scope:@"source.ruby"  hidden:NO ],
+		[[TMFileTypeItem alloc] initWithName:@"Hidden"     scope:@"source.hide"  hidden:YES],
+		[[TMFileTypeItem alloc] initWithName:@"C"          scope:@"source.c"     hidden:NO ],
+		// No kFieldGrammarScope: stringWithCxxString: hands NULL_STR back as
+		// nil, and a menu entry that selects nothing is worse than no entry.
+		[[TMFileTypeItem alloc] initWithName:@"Scopeless"  scope:nil             hidden:NO ],
+		[[TMFileTypeItem alloc] initWithName:@"apache"     scope:@"source.conf"  hidden:NO ],
+	];
+
+	NSArray<TMFileTypeItem*>* items = TMFileTypeItemsSorted(candidates);
+	OAK_ASSERT_EQ(items.count, 3);
+	// text::less_t, so "apache" sorts with the capitals rather than after them.
+	OAK_ASSERT([items[0].name isEqualToString:@"apache"]);
+	OAK_ASSERT([items[1].name isEqualToString:@"C"]);
+	OAK_ASSERT([items[2].name isEqualToString:@"Ruby"]);
+	OAK_ASSERT([items[2].scope isEqualToString:@"source.ruby"]);
+
+	OAK_ASSERT_EQ(TMFileTypeItemsSorted(@[ ]).count, 0);
 }

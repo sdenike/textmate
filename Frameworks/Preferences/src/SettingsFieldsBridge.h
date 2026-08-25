@@ -30,6 +30,9 @@ extern "C" {
 extern NSString* _Nonnull TMSettingsExcludeKey(void);
 extern NSString* _Nonnull TMSettingsIncludeKey(void);
 extern NSString* _Nonnull TMSettingsBinaryKey(void);
+extern NSString* _Nonnull TMSettingsEncodingKey(void);
+extern NSString* _Nonnull TMSettingsLineEndingsKey(void);
+extern NSString* _Nonnull TMSettingsFileTypeKey(void);
 
 // Never returns nil, even for a key that was never set -- callers bind it
 // straight to a SwiftUI TextField, and nil there is a crash the first time
@@ -49,6 +52,54 @@ extern NSString* _Nonnull TMFileBrowserPlacementValueForTag(NSInteger tag);    /
 
 extern NSInteger TMHTMLOutputPlacementTagForValue(NSString* _Nullable value); // "bottom"->0, "right"->1, else->2
 extern NSString* _Nonnull TMHTMLOutputPlacementValueForTag(NSInteger tag);    // 0->"bottom", 1->"right", else->"window"
+
+// The values are the BACKSLASH-escaped two- and four-character forms, not real
+// control characters: settings_t writes them into Global.tmProperties quoted
+// and hands them back the same way, and only settings_for_path's expansion
+// turns them into a real newline for OakDocument. The AppKit pane's
+// OakLineEndingsSettingsTransformer was built from @[ @"\\n", @"\\r",
+// @"\\r\\n" ] for the same reason; the round trip is asserted in
+// t_settings_fields.mm rather than reasoned about.
+extern NSInteger TMLineEndingsTagForValue(NSString* _Nullable value); // "\\r"->1, "\\r\\n"->2, else->0
+extern NSString* _Nonnull TMLineEndingsValueForTag(NSInteger tag);    // 0->"\\n", 1->"\\r", 2->"\\r\\n"
+
+// Scoped variants. kSettingsFileTypeKey holds a DIFFERENT value per scope
+// selector -- "attr.untitled" for a new document, "attr.file.unknown-type" for
+// one whose type could not be determined -- and the Files pane edits both from
+// one pane. settings_t has always supported this (raw_get's section argument,
+// set's fileType argument); the unscoped pair above passes "", the global
+// section.
+extern NSString* _Nonnull TMSettingsGetScopedString(NSString* _Nonnull key, NSString* _Nonnull scope);
+// value may be nil, and nil is NOT "" here: it stores NULL_STR, which reads
+// back as "" and is how the unknown-document popup's "Prompt for type" entry
+// (a menu item with a nil representedObject in the AppKit pane) is expressed.
+extern void TMSettingsSetScopedString(NSString* _Nonnull key, NSString* _Nullable value, NSString* _Nonnull scope);
+
+#ifdef __cplusplus
+}
+#endif
+
+// One grammar as the Files pane's two file-type popups need it. Objective-C,
+// not Swift, because bin/gen_test cannot reach Swift and TMFileTypeItemsSorted
+// below is the tested half of the menu-building the AppKit pane did inline.
+// scope is nil exactly when the grammar has no kFieldGrammarScope (NULL_STR).
+@interface TMFileTypeItem : NSObject
+@property (nonatomic, readonly) NSString* _Nonnull name;
+@property (nonatomic, readonly) NSString* _Nullable scope;
+@property (nonatomic, readonly) BOOL hidden;
+- (instancetype _Nonnull)initWithName:(NSString* _Nonnull)name scope:(NSString* _Nullable)scope hidden:(BOOL)hidden;
+@end
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Drops hidden grammars and scope-less ones, and orders what is left by name
+// through text::less_t -- the three rules the AppKit pane spread across a
+// std::multimap and two `continue`s. FilesPreferences.mm supplies the
+// candidates straight from bundles::query; this framework must not link
+// bundles.
+extern NSArray<TMFileTypeItem*>* _Nonnull TMFileTypeItemsSorted(NSArray<TMFileTypeItem*>* _Nonnull candidates);
 
 #ifdef __cplusplus
 }
