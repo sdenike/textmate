@@ -62,14 +62,15 @@ an earlier draft claimed "nothing moves a menu item" while the Setup Assistant a
 
 ### If interrupted here
 
-PR #24 (Files pane) is **open with CI re-running** after the cancelled test job —
-https://github.com/sdenike/textmate/pull/24. Merge when green. `gh` in this repo defaults to
-**upstream `textmate/textmate`**; pass `-R sdenike/textmate` or PR numbers will not resolve.
+**Both PRs merged.** #25 (the `scm_test` fix) and #24 (Files pane + docs) are on `master`; no open
+PRs, no open branches. Post-fix test jobs ran 9m11s and 9m20s against two 30-minute kills before it.
 
-The `scm_test` fix is done and merged (#25); this branch is rebased on it. **Still unanswered by
-the maintainer — ship or hold?** Cutting a `CHANGELOG.md` heading for `.27` publishes a signed
-release; the standing decision was to hold all six panes and ship together, and Terminal and Bundles
-are still AppKit.
+`gh` in this repo defaults to **upstream `textmate/textmate`**, not this fork — pass
+`-R sdenike/textmate` or PR numbers silently fail to resolve. That cost a round trip here.
+
+**Still unanswered by the maintainer — ship or hold?** Four panes sit unreleased on `master`.
+Cutting a `CHANGELOG.md` heading for `.27` publishes a signed release; the standing decision was to
+hold all six and ship together, and Terminal and Bundles are still AppKit. Held on that basis.
 
 ---
 

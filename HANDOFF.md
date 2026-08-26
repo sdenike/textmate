@@ -21,7 +21,7 @@ maintainer and enforced throughout:
 | | |
 |---|---|
 | Released | **v3.0.0-revived.26** — Setup Assistant, PR #19 |
-| Unreleased | **4 SwiftUI Settings panes on `master`** — Software Update, Projects, Variables, Files (Files on a branch) |
+| Unreleased | **4 SwiftUI Settings panes on `master`** — Software Update, Projects, Variables, Files |
 | Phases complete | 0-5, 7 |
 | Phase 6 | remainder in progress — QuickLook and onboarding done; 4 of 6 Settings panes ported; About dropped deliberately |
 | Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |
@@ -176,8 +176,14 @@ been made against `/Applications/TextMate.app`, an older installed release, not 
 
 ## Next
 
-`master` is at v3.0.0-revived.26 plus four ported Settings panes, none released. One branch is open:
-`phase-6/swiftui-files-pane`.
+`master` is at v3.0.0-revived.26 plus four ported Settings panes, **none released**. Nothing is in
+flight — no open PRs, no open branches.
+
+**The release decision is unmade and is the maintainer's.** Cutting a `CHANGELOG.md` version heading
+publishes a signed, notarized build and updates the Homebrew cask. The standing decision was to hold
+all six panes and ship together so Settings never reaches users half-modern, and Terminal and Bundles
+are still AppKit — so the four panes are held on `master` rather than shipped. Flip it by adding the
+heading; nothing else is needed.
 
 ### Phase 6 remainder — two Settings panes, the update sheet
 
