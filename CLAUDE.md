@@ -16,6 +16,14 @@ This is `sdenike/textmate` (remote `origin`), a fork of `textmate/textmate` targ
 Apple Silicon. `textmatelives` is a *separate remote* this fork merges from — not this repository.
 Links in shipped docs must point at `sdenike/textmate`.
 
+**`gh` resolves to upstream `textmate/textmate` in this clone, not to the fork.** It picks its
+default repo by its own remote precedence rather than by `origin`, so `gh pr view 24` fails with
+*"Could not resolve to a PullRequest with the number of 24"* -- upstream's numbering is in the
+1400s and ours is not -- and `gh pr list` returns upstream's PRs. Nothing warns you, and the error
+reads as a missing PR rather than a wrong repository. Worse, a number that happens to exist
+upstream resolves to the wrong PR silently. **Pass `-R sdenike/textmate` on every `gh` invocation**
+that touches PRs, runs, or releases.
+
 Hard constraints declared by the maintainer:
 - arm64 only — do not add x86_64 fallbacks
 - System Ruby 2.6.10 only — no bundled Rubies, no downloads, no 1.8 compatibility code
