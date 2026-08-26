@@ -31,8 +31,20 @@ namespace
 			CFRunLoopStop(runLoop);
 		});
 
-		while(!done)
-			CFRunLoopRun();
+		// CFRunLoopRun() and CFRunLoopRunInMode() both return immediately
+		// when the runloop has no input sources, so neither a bare spin
+		// nor a plain deadline alone is enough — an idle runloop just
+		// re-enters and returns until the deadline expires, busy-spinning
+		// the whole time. Pump in short bursts and back off with a short
+		// sleep whenever a burst finds nothing to do, so a stalled
+		// callback fails the test after 10 seconds instead of hanging CI.
+		CFAbsoluteTime const deadline = CFAbsoluteTimeGetCurrent() + 10;
+		while(!done && CFAbsoluteTimeGetCurrent() < deadline)
+		{
+			if(CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true) == kCFRunLoopRunFinished)
+				usleep(10000);
+		}
+		OAK_ASSERT(done);
 
 		return out;
 	}
