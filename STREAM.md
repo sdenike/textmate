@@ -4,6 +4,221 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-25 — RESUME HERE: docs squared up; two defects found while squaring them
+
+Wrap-up pass over `README.md` and `CLAUDE.md` on `phase-6/swiftui-files-pane`. Checking the claims
+before writing them turned up two things neither doc knew.
+
+### CLAUDE.md's Liquid Glass section was describing a plan, not the tree
+
+It still said the glass constructors **"have no callers yet"** and that increments 2-6 would adopt
+them across the 12 `NSVisualEffectView` sites. Adoption actually finished at `6c7a46cb`: there is now
+**zero** `NSVisualEffect` anywhere under `Frameworks/` or `Applications/`, and 10 files use glass.
+
+It also documented three entry points when there are five. The missing one is the one that matters:
+**`OakWrapInGlass(bar, style)`**, used by 8 of the 10 sites, which moves a bar's controls into a
+holder that becomes the glass's `contentView` and **returns the holder**. Add controls to the return
+value, never to `bar` — the SDK guarantees placement only for `contentView`.
+
+And the survey surfaced a genuine gap: **`OakCreateGlassContainer` has no production caller.** No
+adjacent glass surfaces are merged, including the file browser's header and actions bars — the exact
+case the header's own comment cites as why the container exists. A seam between two stacked bars is
+unbuilt, not broken.
+
+### `scm_test`'s CI hang is an unbounded wait, not a flake
+
+`t_gutter_diff_integration.cc:35` is `while(!done) CFRunLoopRun();`. `CFRunLoopRun` returns
+*immediately* when the runloop has no input sources, so that is a busy-spin with nothing bounding it
+and nothing failing it. Locally the binary finishes in **under 10 seconds** (82 of 84 — the 2 are the
+documented `hg`/`svn` skips). CI has now burned the full `timeout-minutes: 30` twice and been killed
+with `Terminate orphan process`, the second time on PR #24, whose diff touches nothing in `scm`.
+
+`Ruling: fix the helper rather than keep re-running the job. That this helper is the hang is a strong
+candidate, not proven — the runner prints results only at the end, so a killed job names no test. But
+the wait is unbounded, a survey found no other unbounded wait in scm, and a test that spins forever
+cannot report what went wrong. Cost if wrong: a small correct test fix, and the next hang names a
+test. Note CFRunLoopRunInMode also returns kCFRunLoopRunFinished immediately with no sources, so a
+deadline alone still burns CPU — the loop must check the return value.`
+
+**Fixed and merged as #25.** 50 ms pumped bursts against a 10 s deadline, `usleep(10000)` on
+`kCFRunLoopRunFinished`, then `OAK_ASSERT(done)`. Verified by disabling `compute` so the callback
+could never fire: the suite failed in ~11 s instead of hanging, and reverting restored 82/84.
+
+The evidence got stronger right after: **#25's test job passed in 9m11s while #24's, on the same
+suite without the fix, was still running at 22 minutes** and had to be re-run. Still circumstantial
+— but two clean runs against two 30-minute kills is the best signal available without a runner that
+reports progress.
+
+Worth knowing separately: `scm_test`'s runner is a `.cc` runner and runs **parallel**. It is not one
+of the eight forced to `--no-parallel`, so the three affected tests' deadlines overlap rather than
+summing to 30 s.
+
+### README gained a paragraph on interface work
+
+It described the plumbing (Xcode build, Ruby 2.6.10, WKWebView, Quick Look extension, fork identity)
+and nothing a user would see. Now says: glass materials, SwiftUI Settings panes behind the same
+AppKit window, and the Setup Assistant on first launch and under Help. Verified before writing —
+an earlier draft claimed "nothing moves a menu item" while the Setup Assistant adds one to Help.
+
+### If interrupted here
+
+PR #24 (Files pane) is **open with CI re-running** after the cancelled test job —
+https://github.com/sdenike/textmate/pull/24. Merge when green. `gh` in this repo defaults to
+**upstream `textmate/textmate`**; pass `-R sdenike/textmate` or PR numbers will not resolve.
+
+The `scm_test` fix is done and merged (#25); this branch is rebased on it. **Still unanswered by
+the maintainer — ship or hold?** Cutting a `CHANGELOG.md` heading for `.27` publishes a signed
+release; the standing decision was to hold all six panes and ship together, and Terminal and Bundles
+are still AppKit.
+
+---
+
+## 2026-08-25 — four of six Settings panes ported; Files on a branch
+
+`master` holds v3.0.0-revived.26 plus three ported Settings panes (Software Update, Projects,
+Variables), **none released**. Files is on `phase-6/swiftui-files-pane`, unpushed at time of writing.
+`bin/build` green, `Preferences_test` 27 passing. `/Applications/TextMate.app` was replaced with a
+local ad-hoc build via `bin/deploy-local`.
+
+### The pattern is settled and now lives in CLAUDE.md
+
+Read *Settings panes as SwiftUI islands* there before porting another. It records six traps, each of
+which already cost a build cycle or shipped a defect — most importantly that **`Preferences_test`
+cannot catch a missing `extern "C"`**, because its tests call the same bridge functions from ObjC++
+and mangle identically. Only a full `bin/build` exposes it, and that defect sat latent on master for
+two panes.
+
+### What each pane cost, because the trend matters
+
+Software Update and Projects were clean wins. **Variables was not**: `NSTableView` gave scrolling,
+click-selection, column resizing, Escape-to-revert and scroll-into-view for free, and `Table` cost a
+measured defect in four of those five — three fix rounds to reach parity, and scroll-into-view is
+**permanently lost** (`ScrollViewReader` is a silent no-op driving a `Table` inside a `Form`).
+
+`Ruling: Bundles should default to staying AppKit. It is 903 lines of NSArrayController-backed table
+with network installs, four modal sheets and an eight-item context menu — Variables' problems at five
+times the scale, on a pane where a defect means failed bundle installs. Port it only if it
+demonstrably beats what is there. Cost if wrong: Settings stays permanently mixed, which is the same
+trade already accepted for About.`
+
+### Files: hosting an AppKit control was the right call
+
+`OakEncodingPopUpButton` stays and is hosted via `NSViewRepresentable`. Its API is one property, but
+it reads `Charsets.plist` and maintains a user-customisable subset, so rebuilding it means rebuilding
+`CustomizeEncodings.xib` too. It reports `intrinsicContentSize` 206×24 — no zero-size trap.
+
+It did need `.fixedSize()`: SwiftUI backs a `Form`'s menu `Picker` with an internal `NSPopUpButton`
+sized to content, while an `NSViewRepresentable` fills whatever width it is offered — so the Encoding
+row's value floated left of its chevron while the other three sat flush. Caught by the maintainer
+looking at the running app, not by any measurement here. All four rows now share trailing edge 460.
+
+### If interrupted here
+
+Push `phase-6/swiftui-files-pane`, open a PR, merge when CI is green. Then the release decision:
+**cutting a version heading in `CHANGELOG.md` publishes a signed, notarized build**. Four panes are
+unreleased. The original decision was to hold all six and ship together so Settings never reaches
+users half-modern — Terminal and Bundles are still AppKit, so shipping now breaks that.
+
+Remaining: Terminal (372 lines, privileged `mate` install, the last xib), Bundles (see ruling above),
+and the update sheet.
+
+---
+
+## 2026-08-25 (later) — the encoding row's 237-point box, closed with one `.fixedSize()`
+
+Answers the open question the entry below left: yes, the 237-point-wide hosted control looked
+wrong beside the three SwiftUI popups (107/144/164 in this session's measurements). An offscreen
+render of `FilesPaneView` (real `FilesPane.swift` + `SettingsFormStyle.swift`, compiled standalone
+outside the Xcode project with stand-ins only for the settings/bundles bridging functions) walked
+the real hosting hierarchy and found the mechanism: macOS SwiftUI backs a `Form`'s `.menu`-style
+`Picker` with a real `NSPopUpButton` internally (`SwiftUIPopupButton` / `AppKitPopUpButton`,
+private classes, confirmed by class dump rather than assumed), sized to exactly its content. The
+hosted `EncodingPopUpButton`'s `NSViewRepresentable` box, with no `.fixedSize()`, instead filled
+the width `LabeledContent` offered — 237pt against a 206pt intrinsic size — leaving the button's
+own title left-anchored with dead space before its chevron.
+
+All four rows' boxes already shared one trailing edge (x=460 in the harness) before this change;
+what did not line up was each control's own content within its box. `.fixedSize()` on
+`EncodingPopUpButton(encoding:)` is the whole fix: the box now shrinks to its content (205pt,
+matching the 206pt intrinsic size within rounding) with its trailing edge still pinned at x=460,
+so there is no slack left for the title to drift from the chevron. Measured before and after in
+the same harness: `fittingSize` unchanged (490 x 413 both times) — every ancestor frame from the
+row's `_NSGraphicsView` up to the hosting view itself was byte-identical, since Form's row width
+comes from the label column and fixed system margins, not from the trailing content's width.
+
+**Did not get an independent re-measurement from the live, fully-built app.** Tried: launched a
+second, throwaway instance of the freshly built binary (the user's own `/Applications/TextMate.app`
+was left running and untouched) and reached for `lldb -p <pid>` to call `-showWindow:` directly and
+avoid any GUI/Accessibility automation — `attach failed: Not allowed to attach to process`, which
+this non-interactive environment cannot clear (it needs a one-time Developer Tools grant in System
+Settings). Fell back to the harness's structural evidence above, which already isolates the one
+thing that matters — that the row/pane geometry does not couple to the popup's width — using the
+real, unmodified layout source.
+
+**If interrupted here:** committed. `bin/build` and `bin/build Preferences/test` (27/27) both pass.
+Not verified: the live app's exact fittingSize (blocked as above — re-attempt only if `lldb` attach
+is ever granted in this environment, or just eyeball it in a running TextMate).
+
+---
+
+## 2026-08-25 — the Files pane went SwiftUI, keeping the encoding control it would have had to rebuild
+
+Fourth pane ported inside the unchanged AppKit shell, and the first in its own file:
+`Frameworks/Preferences/src/FilesPane.swift`, because `SettingsSupport.swift` already carries three
+panes in 772 lines. `FilesPreferences.mm` is down from 145 lines to a shell that queries
+`bundles::query` and hands the result across. **fittingSize 490 x 421** as pinned by the factory,
+re-measuring 490 x 413 once hosted in a window — the same ~32-point settling the shipped Projects
+pane shows through the identical harness (490 x 676 pinned, 644 hosted), so it is the measurement
+technique, not this pane. Stable at 0, 1, 8 and 60 grammars.
+
+**`OakEncodingPopUpButton` is hosted, not rebuilt, and it sizes.** The Variables pane shipped a
+154-point-wide bug because `Table` contributes no intrinsic size; a hosted AppKit control could
+fail the same way and does not — `intrinsicContentSize` is **206 x 24**, laid out at 237 x 24
+inside the `Form`'s trailing column. Its `encoding` binding round-trips both ways in the harness:
+seeded from `settings_t` (MACROMAN, shown as "Western – Mac OS Roman"), and a selection reaches
+`settings_t` (SHIFT_JIS). Rebuilding the control in SwiftUI would have meant rebuilding the
+`Charsets.plist` reading, the user's `availableEncodings` subset and the "Customize List…" window
+behind it.
+
+Swift reaches it through **three plain-C functions in the bridging header**, not the class: its
+header is a bare `@interface … : NSPopUpButton` that takes AppKit from `GCC_PREFIX_HEADER` and does
+not parse standalone. The control has no target/action of its own — its menu items target the
+button — so the Coordinator observes `encoding` by KVO, which is the same mechanism the Cocoa
+binding used. The Coordinator is `@unchecked Sendable`: `observeValue` overrides a nonisolated
+method, so the class cannot be `@MainActor`, and without it `MainActor.assumeIsolated` refuses to
+take `self`.
+
+**The three negated checkboxes were verified by rendering, not by reading the code.** With the
+`disable…` keys false all three switches render on; with them true, off. Three panes have now
+shipped this trap and none has shipped it inverted.
+
+**`SettingsFieldsBridge` gained the scoped pair `kSettingsFileTypeKey` needs.** One key, two scope
+selectors — `attr.untitled` and `attr.file.unknown-type` — which `settings_t` has always supported
+through `raw_get`'s section and `set`'s fileType arguments, and which the unscoped pair passes ""
+for. nil is *not* "" there: it stores `NULL_STR`, which is how the unknown-document menu's "Prompt
+for type" entry (a nil `representedObject` in AppKit) is expressed, and it reads back as "".
+`TMFileTypeItemsSorted` holds the three menu rules the AppKit pane had inline — drop hidden
+grammars, drop scope-less ones, order by `text::less_t` — because `bin/gen_test` cannot reach
+Swift and this framework must not link `bundles`. Three new tests, suite 24 -> 27.
+
+The line-endings values are the **backslash-escaped** two- and four-character forms, not real
+control characters: a test asserts the round trip through `settings_t` rather than reasoning about
+`quote_string`. `OakSavePanel.mm:90` defaulting to a real `"\n"` is not a contradiction — that
+reads the *expanded* settings, one layer above `raw_get`.
+
+Popups commit on selection, which is safe where the Projects pane's text fields were not: a
+Picker's setter fires once per choice, and `settings_t::set` is still two parses plus a non-atomic
+rewrite of the user's whole `Global.tmProperties`.
+
+**If interrupted here:** the pane is done, `bin/build` and `bin/build Preferences/test` (27/27)
+both pass, committed. Not verified: anything needing real interaction — actually opening either
+file-type popup, the "Customize List…" sheet behind the encoding control, and whether the hosted
+control's 237-point width looks right beside the three SwiftUI popups (107, 144, 149) now that
+nothing constrains them to a common width the way the AppKit grid did. Next pane in the plan is
+Terminal.
+
+---
+
 ## 2026-08-24 (later) — the Variables pane grew with its rows, and the re-enable rule fired per keystroke
 
 Fix wave over the port below. Six review findings; four fixed, one reduced to a corrected comment,

@@ -155,18 +155,43 @@ The two largest layers worth knowing:
 ### Liquid Glass (Phase 6)
 
 `Frameworks/OakAppKit/src/OakUIConstructionFunctions` — the shared UI-construction header, imported
-by 46 files — gained three constructors on 2026-08-14:
+by 46 files — gained the glass vocabulary on 2026-08-14:
 
 ```objc
 NSGlassEffectContainerView* OakCreateGlassContainer (CGFloat spacing = 0);
 NSGlassEffectView*          OakCreateGlassBackground (NSGlassEffectViewStyle style, NSColor* tint = nil);
 struct OakGlassMetrics { CGFloat cornerRadius; NSEdgeInsets contentInsets; };
 OakGlassMetrics             OakGlassChromeMetrics ();
+NSView*                     OakWrapInGlass (NSView* bar, NSGlassEffectViewStyle style);
 ```
 
-**They have no callers yet.** Increments 2-6 of the phase adopt them across the 12 existing
-`NSVisualEffectView` sites; the foundation landed first so those sites inherit one contract instead
-of twelve guesses. Design: `docs/superpowers/specs/2026-08-14-liquid-glass-design.md`.
+**Adoption is complete: `NSVisualEffect` no longer appears anywhere in the tree.** All 12 sites
+moved across, finishing at `6c7a46cb`. Design:
+`docs/superpowers/specs/2026-08-14-liquid-glass-design.md`.
+
+**`OakWrapInGlass` is the one to reach for**, and 8 of the 10 adoption sites use it — the file
+browser's header and actions bars, the HTML output and editor status bars, the pasteboard chooser,
+the filter-list chooser, the choice menu, and the Bundles prefs footer. It exists because a bar
+cannot simply gain a glass subview and keep adding controls to itself: `NSGlassEffectView` guarantees
+placement only for `contentView`, and the SDK header is explicit that "arbitrary subviews aren't
+guaranteed specific behavior with regard to z-order in relation to the content view or glass effect".
+So it moves the controls into a holder that becomes the glass's `contentView`, pins the glass to the
+bar's four edges, and **returns the holder**. Add controls to the return value, never to `bar`.
+
+The remaining two call `OakCreateGlassBackground` directly because they are single controls rather
+than bars: `OakToolTip` and `OakKeyEquivalentView`.
+
+**Two of the five entry points have no production caller, and one of those is a real gap.**
+`OakGlassChromeMetrics` is called only by `OakCreateGlassBackground` itself (and tests) — fine, that
+is the contract working. `OakCreateGlassContainer` is called only by tests, which means **no adjacent
+glass surfaces are currently merged** — including the file browser's header and actions bars, the
+exact case the header's own comment cites as the motivating example. Merging needs a container with
+non-zero `spacing` whose `contentView` holds both glass views. If a seam shows between two stacked
+bars, this is why; it is unbuilt, not broken.
+
+`OakGlassChromeMetrics()` currently returns `cornerRadius = 12` and `contentInsets = {8, 12, 8, 12}`.
+`OakKeyEquivalentView` deliberately overrides the radius to 8 — at 22 points tall, anything from 11
+up clamps to a full capsule.
 
 Three facts about the SDK that the constructors encode, each of which is easy to get wrong:
 
@@ -353,6 +378,60 @@ and the SwiftUI view itself stay out of that library and in the `TextMate` app t
 sources instead — they need AppKit/SwiftUI, which a lightweight test tool has no reason to carry —
 so the window controller's C++ theme extraction is verified by hand rather than by this suite.
 
+### Settings panes as SwiftUI islands (Phase 6)
+
+`Frameworks/Preferences` keeps its **AppKit shell** — `Preferences.mm` owns the window, toolbar,
+pane switching, key equivalents and persistence, and is deliberately untouched. Each *pane* is
+ported individually: its `loadView` installs an `NSHostingView` and the SwiftUI content lives in
+Swift. Four are done — Software Update, Projects, Variables, Files. Terminal and Bundles are not.
+
+The design is `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`. Read it before
+porting another pane; it records why About was dropped entirely and why the order is what it is.
+
+**Six things here are non-obvious and each has already cost a build cycle or a shipped defect.**
+
+- **Every ObjC++ bridge function needs `extern "C"`** (`#ifdef __cplusplus` … `}`). Without it the
+  definition gets a C++-mangled symbol while Swift's plain-C parse of the bridging header expects an
+  unmangled one — nine undefined symbols at link. **`Preferences_test` cannot catch this**: its tests
+  call the same functions from ObjC++, which mangles identically. Only a full `bin/build` exposes it.
+  `SettingsSupportBridge.h` carried this defect latent on master for two panes.
+- **Audit nullability explicitly with `_Nonnull`/`_Nullable`.** An unaudited `NSString*` imports into
+  Swift as `String?`, not `String!`. The bare `nullable`/`nonnull` contextual keywords **fail to
+  parse** in the bridging header's plain-C compile — `unknown type name 'nullable'` — so the
+  underscore spellings are mandatory here.
+- **The pane is sized from `fittingSize`** (`OakTransitionViewController.mm:42`), which sizes the
+  *window* and clamps to the screen. A SwiftUI `Table` has **no intrinsic size in either direction**:
+  the Variables pane measured 154×399 without an explicit frame, and with a `minHeight` its height
+  tracked the row count — 9 rows 454, 40 rows 1074 — clamping the window and putting the add/remove
+  buttons off-screen. Give a table pane a fixed `.frame(width:height:)` and let it scroll internally.
+  Measure `fittingSize` at several row counts and confirm it is constant.
+- **`settings_t::set` is expensive and non-atomic.** It does two full `read_file` parses then
+  `fopen(global_settings_path(), "w")` — a truncate-and-rewrite. A SwiftUI `TextField` fires its
+  binding setter **per keystroke** (measured: 30 calls for 9 characters), so binding one straight to
+  `settings_t` rewrites the user's global settings on every character, and a crash inside any one
+  leaves it empty. Commit on Return, focus loss **and window close** — Settings is a shared singleton
+  window whose view is never removed, so without a `willCloseNotification` hook the edit is lost.
+- **`SettingsPane`** (`SettingsFormStyle.swift`) is the shared wrapper; use it rather than `Form`
+  directly, so "uniform and modern" stays one decision. Its `.scrollDisabled(true)` is right for a
+  form — a tall form should grow `fittingSize` rather than clip — and does **not** reach a `Table`'s
+  own scroller.
+- **Hosting an AppKit control is sometimes correct.** `OakEncodingPopUpButton` stays and is hosted
+  via `NSViewRepresentable`: its API is one property, but it reads `Charsets.plist` and maintains a
+  user-customisable subset, so rebuilding it means rebuilding `CustomizeEncodings.xib` too. It
+  reports `intrinsicContentSize` 206×24, so no zero-size trap — but a hosted control does not inherit
+  `LabeledContent`'s trailing alignment and needs placing explicitly.
+
+**Negated checkboxes are the recurring trap.** Several panes bind a positively-phrased label to a
+`disable…` key through `NSNegateBooleanTransformerName` — Projects and Files have three each. A lost
+negation silently inverts the setting while the checkbox looks correct, and no test in this tree can
+catch it. Verify by `defaults export`, toggling every control, exporting again and diffing.
+
+**`Preferences_test` exists now** (it did not before Phase 6) and is wired into
+`.github/workflows/build-and-test.yml`'s hand-maintained `TESTS` list — **new `<name>_test` targets
+must be added there by hand**, as that file's own comment says. Testable logic lives in
+`PreferencesSupport`, a small `library.static`, because the full `Preferences` library drags AppKit,
+`settings_t` and a dozen frameworks into a test tool that needs none of them.
+
 ## Tests
 
 CxxTest-style, but home-grown: `bin/gen_test` reads each `tests/t_*.{cc,mm}` file, finds top-level `void test_*()` functions, and emits a single runner with `main()`. Assertions are `OAK_ASSERT`, `OAK_ASSERT_EQ`, `OAK_ASSERT_NE`. Filesystem fixtures use `test::jail_t` from `Frameworks/test`.
@@ -418,6 +497,47 @@ assertion *fails*, `to_s` throws `NSInvalidArgumentException`, and the generated
 failed, so the assertion actively destroys the information it exists to give you. That warning is
 the tell. `OAK_ASSERT_EQ` is fine on numbers, `BOOL`, `std::string` and anything else with a real
 `to_s`.
+
+**`scm_test` hung CI twice, and the cause was a test helper waiting on nothing.** Fixed
+2026-08-25 in `Frameworks/scm/tests/t_gutter_diff_integration.cc`; the shape is worth knowing
+because it is easy to write again.
+
+The helper waited for `compute`'s completion with `while(!done) CFRunLoopRun();`. **`CFRunLoopRun`
+returns immediately when the runloop has no input sources**, so that is not a wait — it is a
+busy-spin with nothing bounding it and nothing failing it. The binary finishes locally in under 10
+seconds (82 of 84, the 2 being the documented `hg`/`svn` skips), but CI twice burned the full
+`timeout-minutes: 30` and was killed with `Terminate orphan process: pid (...) (scm_test)` roughly
+23 minutes after the last line of build output, with **no test results at all** — the runner prints
+only at the end, so a killed job names no test. The second was on a branch whose diff touches
+nothing under `Frameworks/scm/`.
+
+**A deadline alone does not fix it.** `CFRunLoopRunInMode` returns `kCFRunLoopRunFinished`
+immediately in the same situation, so a deadline-only loop still pegs a core until it expires. The
+loop has to check that return value and back off:
+
+```cpp
+CFAbsoluteTime const deadline = CFAbsoluteTimeGetCurrent() + 10;
+while(!done && CFAbsoluteTimeGetCurrent() < deadline)
+{
+    if(CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true) == kCFRunLoopRunFinished)
+        usleep(10000);
+}
+OAK_ASSERT(done);
+```
+
+The assertion carries as much weight as the deadline. Without it the helper returns a
+default-constructed `result_t` on timeout and the failure surfaces as confusing value mismatches
+downstream instead of naming the real problem. `scm::wait_for_status` (`scm.cc:459`) already had
+this shape, defaulting to 30 s at `scm.h:58`.
+
+Verified by disabling `compute` so the callback could never fire: the suite failed in ~11 s rather
+than hanging. Note that `scm_test`'s runner is a `.cc` runner and therefore runs **parallel** — it
+is not one of the eight forced to `--no-parallel` — so three affected tests' deadlines overlap
+rather than summing.
+
+A survey of `dispatch_sync`, `dispatch_semaphore_wait`, `CFRunLoop*`, `sleep`, `waitpid` and the ten
+`io::exec` git/hg/svn shell-outs found no other unbounded wait in `scm`. If a hang recurs anyway, it
+will now at least name a test.
 
 ## Performance (Phase 7)
 

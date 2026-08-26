@@ -1296,6 +1296,7 @@ targets:
     platform: macOS
     sources:
       - path: "Frameworks/Preferences/src/BundlesPreferences.mm"
+      - path: "Frameworks/Preferences/src/FilesPane.swift"
       - path: "Frameworks/Preferences/src/FilesPreferences.mm"
       - path: "Frameworks/Preferences/src/Keys.mm"
       - path: "Frameworks/Preferences/src/Preferences.mm"

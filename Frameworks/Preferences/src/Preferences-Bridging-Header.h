@@ -12,7 +12,10 @@
 // extern shares the symbol rather than copying the value, so a name typo is a
 // link error rather than a wrong key that compiles and passes its tests.
 
-#import <Foundation/Foundation.h>
+// Cocoa, not just Foundation, for the encoding shim's NSPopUpButton below --
+// a system umbrella header, which is fine here; a header out of
+// Xcode/include/ is not.
+#import <Cocoa/Cocoa.h>
 #import "SettingsFieldsBridge.h"
 #import "SettingsVariablesBridge.h"
 
@@ -39,3 +42,27 @@ extern NSString* const kUserDefaultsDisableTabReorderingKey;           // @"disa
 extern NSString* const kUserDefaultsDisableTabAutoCloseKey;            // @"disableTabAutoClose"
 extern NSString* const kUserDefaultsHTMLOutputPlacementKey;            // @"htmlOutputPlacement"
 extern NSString* const kUserDefaultsEnvironmentVariablesKey;           // @"environmentVariables"
+extern NSString* const kUserDefaultsDisableSessionRestoreKey;            // @"disableSessionRestore"
+extern NSString* const kUserDefaultsDisableNewDocumentAtStartupKey;      // @"disableNewDocumentAtStartup"
+extern NSString* const kUserDefaultsDisableNewDocumentAtReactivationKey; // @"disableNewDocumentAtReactivation"
+
+// The Files pane keeps OakEncodingPopUpButton rather than rebuilding it in
+// SwiftUI: the control reads Charsets.plist and maintains the user's own
+// subset of it in the availableEncodings default, with a "Customize List…"
+// window behind it, none of which is worth reimplementing to gain a Picker.
+// Three functions rather than the class itself, because
+// OakAppKit/OakEncodingPopUpButton.h takes its NSPopUpButton from
+// GCC_PREFIX_HEADER and does not parse standalone here -- this is the narrow
+// pure-ObjC shim CLAUDE.md prescribes. Defined in FilesPreferences.mm, its
+// only caller's neighbour, since OakAppKit is linked by Preferences and not by
+// PreferencesSupport. Swift observes changes by KVO on "encoding"; the control
+// has no target/action of its own (its menu items target the button).
+#ifdef __cplusplus
+extern "C" {
+#endif
+extern NSPopUpButton* _Nonnull TMCreateEncodingPopUpButton(void);
+extern NSString* _Nullable TMEncodingPopUpButtonGetEncoding(NSPopUpButton* _Nonnull button);
+extern void TMEncodingPopUpButtonSetEncoding(NSPopUpButton* _Nonnull button, NSString* _Nullable encoding);
+#ifdef __cplusplus
+}
+#endif
