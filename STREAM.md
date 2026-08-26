@@ -4,7 +4,63 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
-## 2026-08-25 — RESUME HERE: four of six Settings panes ported; Files on a branch
+## 2026-08-25 — RESUME HERE: docs squared up; two defects found while squaring them
+
+Wrap-up pass over `README.md` and `CLAUDE.md` on `phase-6/swiftui-files-pane`. Checking the claims
+before writing them turned up two things neither doc knew.
+
+### CLAUDE.md's Liquid Glass section was describing a plan, not the tree
+
+It still said the glass constructors **"have no callers yet"** and that increments 2-6 would adopt
+them across the 12 `NSVisualEffectView` sites. Adoption actually finished at `6c7a46cb`: there is now
+**zero** `NSVisualEffect` anywhere under `Frameworks/` or `Applications/`, and 10 files use glass.
+
+It also documented three entry points when there are five. The missing one is the one that matters:
+**`OakWrapInGlass(bar, style)`**, used by 8 of the 10 sites, which moves a bar's controls into a
+holder that becomes the glass's `contentView` and **returns the holder**. Add controls to the return
+value, never to `bar` — the SDK guarantees placement only for `contentView`.
+
+And the survey surfaced a genuine gap: **`OakCreateGlassContainer` has no production caller.** No
+adjacent glass surfaces are merged, including the file browser's header and actions bars — the exact
+case the header's own comment cites as why the container exists. A seam between two stacked bars is
+unbuilt, not broken.
+
+### `scm_test`'s CI hang is an unbounded wait, not a flake
+
+`t_gutter_diff_integration.cc:35` is `while(!done) CFRunLoopRun();`. `CFRunLoopRun` returns
+*immediately* when the runloop has no input sources, so that is a busy-spin with nothing bounding it
+and nothing failing it. Locally the binary finishes in **under 10 seconds** (82 of 84 — the 2 are the
+documented `hg`/`svn` skips). CI has now burned the full `timeout-minutes: 30` twice and been killed
+with `Terminate orphan process`, the second time on PR #24, whose diff touches nothing in `scm`.
+
+`Ruling: fix the helper rather than keep re-running the job. That this helper is the hang is a strong
+candidate, not proven — the runner prints results only at the end, so a killed job names no test. But
+the wait is unbounded, a survey found no other unbounded wait in scm, and a test that spins forever
+cannot report what went wrong. Cost if wrong: a small correct test fix, and the next hang names a
+test. Note CFRunLoopRunInMode also returns kCFRunLoopRunFinished immediately with no sources, so a
+deadline alone still burns CPU — the loop must check the return value.`
+
+### README gained a paragraph on interface work
+
+It described the plumbing (Xcode build, Ruby 2.6.10, WKWebView, Quick Look extension, fork identity)
+and nothing a user would see. Now says: glass materials, SwiftUI Settings panes behind the same
+AppKit window, and the Setup Assistant on first launch and under Help. Verified before writing —
+an earlier draft claimed "nothing moves a menu item" while the Setup Assistant adds one to Help.
+
+### If interrupted here
+
+PR #24 (Files pane) is **open with CI re-running** after the cancelled test job —
+https://github.com/sdenike/textmate/pull/24. Merge when green. `gh` in this repo defaults to
+**upstream `textmate/textmate`**; pass `-R sdenike/textmate` or PR numbers will not resolve.
+
+Then: fix `t_gutter_diff_integration.cc`'s `await_compute` on its own branch. **Still unanswered by
+the maintainer — ship or hold?** Cutting a `CHANGELOG.md` heading for `.27` publishes a signed
+release; the standing decision was to hold all six panes and ship together, and Terminal and Bundles
+are still AppKit.
+
+---
+
+## 2026-08-25 — four of six Settings panes ported; Files on a branch
 
 `master` holds v3.0.0-revived.26 plus three ported Settings panes (Software Update, Projects,
 Variables), **none released**. Files is on `phase-6/swiftui-files-pane`, unpushed at time of writing.

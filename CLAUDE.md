@@ -155,18 +155,43 @@ The two largest layers worth knowing:
 ### Liquid Glass (Phase 6)
 
 `Frameworks/OakAppKit/src/OakUIConstructionFunctions` — the shared UI-construction header, imported
-by 46 files — gained three constructors on 2026-08-14:
+by 46 files — gained the glass vocabulary on 2026-08-14:
 
 ```objc
 NSGlassEffectContainerView* OakCreateGlassContainer (CGFloat spacing = 0);
 NSGlassEffectView*          OakCreateGlassBackground (NSGlassEffectViewStyle style, NSColor* tint = nil);
 struct OakGlassMetrics { CGFloat cornerRadius; NSEdgeInsets contentInsets; };
 OakGlassMetrics             OakGlassChromeMetrics ();
+NSView*                     OakWrapInGlass (NSView* bar, NSGlassEffectViewStyle style);
 ```
 
-**They have no callers yet.** Increments 2-6 of the phase adopt them across the 12 existing
-`NSVisualEffectView` sites; the foundation landed first so those sites inherit one contract instead
-of twelve guesses. Design: `docs/superpowers/specs/2026-08-14-liquid-glass-design.md`.
+**Adoption is complete: `NSVisualEffect` no longer appears anywhere in the tree.** All 12 sites
+moved across, finishing at `6c7a46cb`. Design:
+`docs/superpowers/specs/2026-08-14-liquid-glass-design.md`.
+
+**`OakWrapInGlass` is the one to reach for**, and 8 of the 10 adoption sites use it — the file
+browser's header and actions bars, the HTML output and editor status bars, the pasteboard chooser,
+the filter-list chooser, the choice menu, and the Bundles prefs footer. It exists because a bar
+cannot simply gain a glass subview and keep adding controls to itself: `NSGlassEffectView` guarantees
+placement only for `contentView`, and the SDK header is explicit that "arbitrary subviews aren't
+guaranteed specific behavior with regard to z-order in relation to the content view or glass effect".
+So it moves the controls into a holder that becomes the glass's `contentView`, pins the glass to the
+bar's four edges, and **returns the holder**. Add controls to the return value, never to `bar`.
+
+The remaining two call `OakCreateGlassBackground` directly because they are single controls rather
+than bars: `OakToolTip` and `OakKeyEquivalentView`.
+
+**Two of the five entry points have no production caller, and one of those is a real gap.**
+`OakGlassChromeMetrics` is called only by `OakCreateGlassBackground` itself (and tests) — fine, that
+is the contract working. `OakCreateGlassContainer` is called only by tests, which means **no adjacent
+glass surfaces are currently merged** — including the file browser's header and actions bars, the
+exact case the header's own comment cites as the motivating example. Merging needs a container with
+non-zero `spacing` whose `contentView` holds both glass views. If a seam shows between two stacked
+bars, this is why; it is unbuilt, not broken.
+
+`OakGlassChromeMetrics()` currently returns `cornerRadius = 12` and `contentInsets = {8, 12, 8, 12}`.
+`OakKeyEquivalentView` deliberately overrides the radius to 8 — at 22 points tall, anything from 11
+up clamps to a full capsule.
 
 Three facts about the SDK that the constructors encode, each of which is easy to get wrong:
 
@@ -472,6 +497,35 @@ assertion *fails*, `to_s` throws `NSInvalidArgumentException`, and the generated
 failed, so the assertion actively destroys the information it exists to give you. That warning is
 the tell. `OAK_ASSERT_EQ` is fine on numbers, `BOOL`, `std::string` and anything else with a real
 `to_s`.
+
+**`scm_test` has hung twice in CI, and there is one unbounded wait in it.**
+`Frameworks/scm/tests/t_gutter_diff_integration.cc:35` waits for `compute`'s completion with:
+
+```cpp
+while(!done)
+    CFRunLoopRun();
+```
+
+`CFRunLoopRun` returns *immediately* when the runloop has no input sources, so that loop is a
+busy-spin, not a wait — nothing bounds it and nothing fails it. On this machine the whole binary
+finishes in under 10 seconds (82 of 84, the 2 being the documented `hg`/`svn` skips), but CI has
+twice run it for the full `timeout-minutes: 30` and been killed with `Terminate orphan process:
+pid (...) (scm_test)` — 23 minutes after the last line of build output, with no test output at all.
+Both were on `build-and-test / test`; the second was PR #24, whose diff touches nothing in `scm`.
+
+**That this helper is the hang is a strong candidate, not a proven one** — the runner prints its
+results only at the end, so a killed job yields no clue as to which test was running. What is
+certain is that the wait is unbounded, that it is the only unbounded one in `scm` (a survey of
+`dispatch_sync`, `dispatch_semaphore_wait`, `CFRunLoop*`, `sleep`, `waitpid` and the 10 `io::exec`
+git/hg/svn shell-outs found no other), and that a test which spins forever cannot report what went
+wrong. Fix it on those grounds and stop treating the job as flaky; if a hang survives the fix, the
+next one will at least name a test.
+
+`scm::wait_for_status` (`scm.cc:459`) already has the right shape — it drives `CFRunLoopRunInMode`
+against a deadline and gives up, defaulting to 30 s at `scm.h:58`. The helper wants that plus a
+failing assertion. Note that `CFRunLoopRunInMode` *also* returns immediately with
+`kCFRunLoopRunFinished` when the runloop has no input sources, so a deadline alone still burns CPU
+until it expires; the loop has to notice that return value.
 
 ## Performance (Phase 7)
 
