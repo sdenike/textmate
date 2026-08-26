@@ -40,6 +40,19 @@ cannot report what went wrong. Cost if wrong: a small correct test fix, and the 
 test. Note CFRunLoopRunInMode also returns kCFRunLoopRunFinished immediately with no sources, so a
 deadline alone still burns CPU — the loop must check the return value.`
 
+**Fixed and merged as #25.** 50 ms pumped bursts against a 10 s deadline, `usleep(10000)` on
+`kCFRunLoopRunFinished`, then `OAK_ASSERT(done)`. Verified by disabling `compute` so the callback
+could never fire: the suite failed in ~11 s instead of hanging, and reverting restored 82/84.
+
+The evidence got stronger right after: **#25's test job passed in 9m11s while #24's, on the same
+suite without the fix, was still running at 22 minutes** and had to be re-run. Still circumstantial
+— but two clean runs against two 30-minute kills is the best signal available without a runner that
+reports progress.
+
+Worth knowing separately: `scm_test`'s runner is a `.cc` runner and runs **parallel**. It is not one
+of the eight forced to `--no-parallel`, so the three affected tests' deadlines overlap rather than
+summing to 30 s.
+
 ### README gained a paragraph on interface work
 
 It described the plumbing (Xcode build, Ruby 2.6.10, WKWebView, Quick Look extension, fork identity)
@@ -53,7 +66,7 @@ PR #24 (Files pane) is **open with CI re-running** after the cancelled test job 
 https://github.com/sdenike/textmate/pull/24. Merge when green. `gh` in this repo defaults to
 **upstream `textmate/textmate`**; pass `-R sdenike/textmate` or PR numbers will not resolve.
 
-Then: fix `t_gutter_diff_integration.cc`'s `await_compute` on its own branch. **Still unanswered by
+The `scm_test` fix is done and merged (#25); this branch is rebased on it. **Still unanswered by
 the maintainer — ship or hold?** Cutting a `CHANGELOG.md` heading for `.27` publishes a signed
 release; the standing decision was to hold all six panes and ship together, and Terminal and Bundles
 are still AppKit.

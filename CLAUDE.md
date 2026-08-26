@@ -498,34 +498,46 @@ failed, so the assertion actively destroys the information it exists to give you
 the tell. `OAK_ASSERT_EQ` is fine on numbers, `BOOL`, `std::string` and anything else with a real
 `to_s`.
 
-**`scm_test` has hung twice in CI, and there is one unbounded wait in it.**
-`Frameworks/scm/tests/t_gutter_diff_integration.cc:35` waits for `compute`'s completion with:
+**`scm_test` hung CI twice, and the cause was a test helper waiting on nothing.** Fixed
+2026-08-25 in `Frameworks/scm/tests/t_gutter_diff_integration.cc`; the shape is worth knowing
+because it is easy to write again.
+
+The helper waited for `compute`'s completion with `while(!done) CFRunLoopRun();`. **`CFRunLoopRun`
+returns immediately when the runloop has no input sources**, so that is not a wait — it is a
+busy-spin with nothing bounding it and nothing failing it. The binary finishes locally in under 10
+seconds (82 of 84, the 2 being the documented `hg`/`svn` skips), but CI twice burned the full
+`timeout-minutes: 30` and was killed with `Terminate orphan process: pid (...) (scm_test)` roughly
+23 minutes after the last line of build output, with **no test results at all** — the runner prints
+only at the end, so a killed job names no test. The second was on a branch whose diff touches
+nothing under `Frameworks/scm/`.
+
+**A deadline alone does not fix it.** `CFRunLoopRunInMode` returns `kCFRunLoopRunFinished`
+immediately in the same situation, so a deadline-only loop still pegs a core until it expires. The
+loop has to check that return value and back off:
 
 ```cpp
-while(!done)
-    CFRunLoopRun();
+CFAbsoluteTime const deadline = CFAbsoluteTimeGetCurrent() + 10;
+while(!done && CFAbsoluteTimeGetCurrent() < deadline)
+{
+    if(CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true) == kCFRunLoopRunFinished)
+        usleep(10000);
+}
+OAK_ASSERT(done);
 ```
 
-`CFRunLoopRun` returns *immediately* when the runloop has no input sources, so that loop is a
-busy-spin, not a wait — nothing bounds it and nothing fails it. On this machine the whole binary
-finishes in under 10 seconds (82 of 84, the 2 being the documented `hg`/`svn` skips), but CI has
-twice run it for the full `timeout-minutes: 30` and been killed with `Terminate orphan process:
-pid (...) (scm_test)` — 23 minutes after the last line of build output, with no test output at all.
-Both were on `build-and-test / test`; the second was PR #24, whose diff touches nothing in `scm`.
+The assertion carries as much weight as the deadline. Without it the helper returns a
+default-constructed `result_t` on timeout and the failure surfaces as confusing value mismatches
+downstream instead of naming the real problem. `scm::wait_for_status` (`scm.cc:459`) already had
+this shape, defaulting to 30 s at `scm.h:58`.
 
-**That this helper is the hang is a strong candidate, not a proven one** — the runner prints its
-results only at the end, so a killed job yields no clue as to which test was running. What is
-certain is that the wait is unbounded, that it is the only unbounded one in `scm` (a survey of
-`dispatch_sync`, `dispatch_semaphore_wait`, `CFRunLoop*`, `sleep`, `waitpid` and the 10 `io::exec`
-git/hg/svn shell-outs found no other), and that a test which spins forever cannot report what went
-wrong. Fix it on those grounds and stop treating the job as flaky; if a hang survives the fix, the
-next one will at least name a test.
+Verified by disabling `compute` so the callback could never fire: the suite failed in ~11 s rather
+than hanging. Note that `scm_test`'s runner is a `.cc` runner and therefore runs **parallel** — it
+is not one of the eight forced to `--no-parallel` — so three affected tests' deadlines overlap
+rather than summing.
 
-`scm::wait_for_status` (`scm.cc:459`) already has the right shape — it drives `CFRunLoopRunInMode`
-against a deadline and gives up, defaulting to 30 s at `scm.h:58`. The helper wants that plus a
-failing assertion. Note that `CFRunLoopRunInMode` *also* returns immediately with
-`kCFRunLoopRunFinished` when the runloop has no input sources, so a deadline alone still burns CPU
-until it expires; the loop has to notice that return value.
+A survey of `dispatch_sync`, `dispatch_semaphore_wait`, `CFRunLoop*`, `sleep`, `waitpid` and the ten
+`io::exec` git/hg/svn shell-outs found no other unbounded wait in `scm`. If a hang recurs anyway, it
+will now at least name a test.
 
 ## Performance (Phase 7)
 
