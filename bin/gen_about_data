@@ -292,8 +292,15 @@ end
 
 # --- CHANGELOG.md -> Changelog.plist ---------------------------------------
 
+# This fork's own releases carry "revived" (the fork's own line) or "undead"
+# (the textmatelives lineage this fork merged from -- counts as ours) in
+# their version string. Filtered on that string, not a line number, so the
+# boundary keeps working as releases are added above it.
+fork_version_re = /revived|undead/
+full_history_url = 'https://github.com/sdenike/textmate/blob/master/CHANGELOG.md'
+
 changelog_lines = strip_front_matter(File.read(changelog_in, encoding: 'UTF-8').split("\n", -1))
-releases = split_releases(changelog_lines).map do |heading, body_lines|
+all_releases = split_releases(changelog_lines).map do |heading, body_lines|
   date, version = parse_release_heading(heading)
   parsed = parse_document_body(resolve_references(body_lines), '###')
   release = { 'title' => heading, 'date' => date, 'version' => version }
@@ -301,8 +308,26 @@ releases = split_releases(changelog_lines).map do |heading, body_lines|
   release['sections'] = parsed['sections']
   release
 end
+
+releases = all_releases.select { |r| r['version'] && r['version'] =~ fork_version_re }
+kept, skipped = releases.size, all_releases.size - releases.size
+abort "gen_about_data: no releases matched #{fork_version_re.inspect} in #{changelog_in} -- has the version-naming scheme changed?" if kept.zero?
+
+# Closing item, not a real release: same "text" segment kind as everything
+# else on the page, so it picks up link styling from SegmentsView instead of
+# the view special-casing a raw string. No date/version -- ReleaseHeaderView
+# already falls back to plain `title` for those (as it does for the several
+# undated headings further down CHANGELOG.md).
+releases << {
+  'title'    => 'Earlier releases',
+  'date'     => nil,
+  'version'  => nil,
+  'sections' => [],
+  'intro'    => [{ 'kind' => 'text', 'value' => "This page lists only this fork's own releases. Earlier releases are upstream TextMate's own history, available in the [full CHANGELOG.md](#{full_history_url})." }]
+}
+
 write_plist(changelog_out, { 'releases' => releases })
-puts "Wrote #{changelog_out} (#{releases.size} releases)"
+puts "Wrote #{changelog_out} (#{kept} releases kept, #{skipped} upstream releases skipped)"
 
 # --- about/Legal.md -> Legal.plist ------------------------------------------
 
