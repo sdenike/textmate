@@ -9541,6 +9541,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = F52CEBDF838588985E34B365 /* Build configuration list for PBXNativeTarget "mate" */;
 			buildPhases = (
+				E583B4BFE2649F9726943C0B /* Generate mate_version.h */,
 				A04C1A998845B4C2EB5F5688 /* Sources */,
 				1FBED95E67764D1D80E19FB1 /* Frameworks */,
 			);
@@ -11430,6 +11431,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"$SRCROOT/Xcode/scripts/gen_test.sh\" OakAppKit";
+		};
+		E583B4BFE2649F9726943C0B /* Generate mate_version.h */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Generate mate_version.h";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/mate_version.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/Xcode/scripts/gen_mate_version.sh\"";
 		};
 		E8376429641D8491DFBD8A85 /* Generate CxxTest runner (scm) */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -15607,7 +15628,6 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				GCC_PREFIX_HEADER = "$(SRCROOT)/Shared/PCH/prelude.mm";
-				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) MATE_APP_VERSION=\\\"$(TEXTMATE_MATE_VERSION:default=2.13.3)\\\"";
 				HEADER_SEARCH_PATHS = "$(inherited) $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/OakSystem";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -15644,7 +15664,6 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				GCC_PREFIX_HEADER = "$(SRCROOT)/Shared/PCH/prelude.mm";
-				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) MATE_APP_VERSION=\\\"$(TEXTMATE_MATE_VERSION:default=2.13.3)\\\"";
 				HEADER_SEARCH_PATHS = "$(inherited) $(SRCROOT)/Xcode/include/authorization $(SRCROOT)/Xcode/include/io $(SRCROOT)/Xcode/include/text $(SRCROOT)/Xcode/include/cf $(SRCROOT)/Xcode/include/ns $(SRCROOT)/Xcode/include/OakFoundation $(SRCROOT)/Xcode/include/plist $(SRCROOT)/Xcode/include/regexp $(SRCROOT)/Xcode/include/Onigmo $(SRCROOT)/Xcode/include/crash $(SRCROOT)/Xcode/include/OakSystem";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

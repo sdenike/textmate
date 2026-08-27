@@ -6,15 +6,22 @@
 #include <io/path.h>
 #include <plist/uuid.h>
 
-// MATE_APP_VERSION comes from GCC_PREPROCESSOR_DEFINITIONS (project.yml),
-// threaded through from the same CHANGELOG.md heading that supplies the
-// app's own CFBundleShortVersionString (see bin/build and
-// Xcode/scripts/assemble_resources.sh's app_version()). The literal fallback
-// keeps this file compiling standalone, and matters on its own: upstream's
-// mate reports "2.13.3" too, and a fork mate that also reports "2.13.3" is
-// how updateMateIfRequired ends up unable to ever replace an upstream binary
+// MATE_APP_VERSION comes from mate_version.h, generated into
+// $DERIVED_FILE_DIR by a preBuildScripts phase (project.yml) that runs
+// Xcode/scripts/gen_mate_version.sh -- same CHANGELOG.md heading that
+// supplies the app's own CFBundleShortVersionString (see
+// Xcode/scripts/assemble_resources.sh's app_version()). Generating it in a
+// build script phase, rather than threading it through an environment
+// variable, is what makes it work under bare xcodebuild, CI and Xcode's own
+// ⌘B, not just bin/build.
+//
+// The #ifndef fallback keeps this file compiling standalone if the header is
+// ever missing, and matters on its own: upstream's mate reports "2.13.3"
+// too, and a fork mate that also reports "2.13.3" is how
+// updateMateIfRequired ends up unable to ever replace an upstream binary
 // (both versions compare equal, so OakCompareVersionStrings never says the
 // fork's copy is newer).
+#include "mate_version.h"
 #ifndef MATE_APP_VERSION
 #define MATE_APP_VERSION "2.13.3"
 #endif
