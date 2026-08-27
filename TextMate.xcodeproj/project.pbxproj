@@ -202,6 +202,7 @@
 		2AFC8F9201DD7B614BBE193C /* marks.cc in Sources */ = {isa = PBXBuildFile; fileRef = 77E34967A9F7E76B7029D08E /* marks.cc */; };
 		2B16E18C22D46B55D2A36A00 /* OakKeyEquivalentView.mm in Sources */ = {isa = PBXBuildFile; fileRef = AA9BA9FE0134D4EFC9F8F620 /* OakKeyEquivalentView.mm */; };
 		2B3A474DB362E247A85AE582 /* libscope.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 062463E29DC3EAE8A239C4EB /* libscope.a */; };
+		2B58F06E991148A6F2C45722 /* SoftwareUpdateSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98B24C84DEA3B3227EFA913 /* SoftwareUpdateSheet.swift */; };
 		2B6854CD7AAA6246AF42940E /* libOnigmo.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 31E76E5898C92E188EECD7BA /* libOnigmo.a */; };
 		2BA43761399FD33FD2A5A05C /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 80FBECCF777AE60E4B51420F /* libz.tbd */; };
 		2BBF334118B44A045CFA5921 /* libiconv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 99210B9005E14E89D7EF24C7 /* libiconv.tbd */; };
@@ -595,6 +596,7 @@
 		81703CCCE15D7D7BCCE31BE1 /* libregexp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB62D9EC6A26A709AFD1F36A /* libregexp.a */; };
 		81F037AB7400B56DD9771566 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3624DA120E80CCCD37A5B1A2 /* Cocoa.framework */; };
 		822422F9F811B0AC128222CC /* TableView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F152305D4CBEE3345C97B /* TableView.mm */; };
+		826AF911F8E00D2F950089EA /* SUButtonSpec.mm in Sources */ = {isa = PBXBuildFile; fileRef = D2008188A1A50A16CB534FF2 /* SUButtonSpec.mm */; };
 		82BDB7931A7A26E5983275A8 /* libselection.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 12E2FD75966246A93CC5CC36 /* libselection.a */; };
 		83166EDFC33B1C4632AD967E /* insert.mm in Sources */ = {isa = PBXBuildFile; fileRef = 9728E356BFC6CE6A2497030C /* insert.mm */; };
 		83624306BD9D8D55C286C344 /* spellcheck.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4A23A89DC31B47194588A6AA /* spellcheck.mm */; };
@@ -5138,17 +5140,6 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 7;
-			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
-			);
-			name = "Embed Dependencies";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
 				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
@@ -5158,7 +5149,7 @@
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
+		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
@@ -5167,6 +5158,17 @@
 				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
 				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
 				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
+			);
+			name = "Embed Dependencies";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 7;
+			files = (
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5566,6 +5568,7 @@
 		CEF9E270EE75FB5BD15F377B /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		CFF1EF37DCF14BB5797E7124 /* p4.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = p4.cc; sourceTree = "<group>"; };
 		D06B718B455104E290367AC1 /* _TOnigmo.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _TOnigmo.cc; sourceTree = "<group>"; };
+		D2008188A1A50A16CB534FF2 /* SUButtonSpec.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SUButtonSpec.mm; sourceTree = "<group>"; };
 		D21331B2F6936A7FD35D69B5 /* OSAKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OSAKit.framework; path = System/Library/Frameworks/OSAKit.framework; sourceTree = SDKROOT; };
 		D25BE24D216758BF7BBB70BC /* VariablesPreferences.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = VariablesPreferences.mm; sourceTree = "<group>"; };
 		D2E4C49D2FB024B08E5EF960 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
@@ -5611,6 +5614,7 @@
 		E7FF707EF38762654244E29A /* HOWKScriptMessageHandler.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = HOWKScriptMessageHandler.mm; sourceTree = "<group>"; };
 		E87654BE5B081F11047C18B5 /* OTVHUD.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OTVHUD.mm; sourceTree = "<group>"; };
 		E954532BB83EFA9DC48C206D /* _Tfile.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _Tfile.cc; sourceTree = "<group>"; };
+		E98B24C84DEA3B3227EFA913 /* SoftwareUpdateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftwareUpdateSheet.swift; sourceTree = "<group>"; };
 		E9A3F933DF494BD7BA325EF6 /* SearchField.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SearchField.mm; sourceTree = "<group>"; };
 		E9F52168BA75FEB5110D7ED4 /* OFBFinderTagsChooser.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OFBFinderTagsChooser.mm; sourceTree = "<group>"; };
 		EA10B4A588797FDFE2A2E330 /* theme_test */ = {isa = PBXFileReference; includeInIndex = 0; path = theme_test; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -7940,6 +7944,8 @@
 				5E5C7E544A8FE44788C7984C /* OakCompareVersionStrings.mm */,
 				7C5A38C969478559245187F4 /* OakDownloadManager.mm */,
 				70C92F747CF237269F754C2D /* SoftwareUpdate.mm */,
+				E98B24C84DEA3B3227EFA913 /* SoftwareUpdateSheet.swift */,
+				D2008188A1A50A16CB534FF2 /* SUButtonSpec.mm */,
 			);
 			path = src;
 			sourceTree = "<group>";
@@ -9438,6 +9444,7 @@
 			buildConfigurationList = 36731844728EFAB97E7926EB /* Build configuration list for PBXNativeTarget "SoftwareUpdate" */;
 			buildPhases = (
 				9ACCCB57E9BBBCD4C11C498D /* Sources */,
+				73207ADC704EB7AA2CCB9199 /* Copy Swift Objective-C Interface Header */,
 			);
 			buildRules = (
 			);
@@ -11154,6 +11161,22 @@
 			shellPath = /bin/sh;
 			shellScript = "\"$SRCROOT/Xcode/scripts/gen_test.sh\" HTMLOutput";
 		};
+		73207ADC704EB7AA2CCB9199 /* Copy Swift Objective-C Interface Header */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			name = "Copy Swift Objective-C Interface Header";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/include/$(PRODUCT_MODULE_NAME)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
 		894038E6EC4A20302DF0346D /* Generate CxxTest runner (Onigmo) */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -12133,7 +12156,9 @@
 			files = (
 				68C3B187A4CCBEE643C8AC85 /* OakCompareVersionStrings.mm in Sources */,
 				C8E63CAE95090F7C57B5438D /* OakDownloadManager.mm in Sources */,
+				826AF911F8E00D2F950089EA /* SUButtonSpec.mm in Sources */,
 				ED0E2DAA6AF23B7F5782B2C0 /* SoftwareUpdate.mm in Sources */,
+				2B58F06E991148A6F2C45722 /* SoftwareUpdateSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
