@@ -1,0 +1,312 @@
+#!/System/Library/Frameworks/Ruby.framework/Versions/Current/usr/bin/ruby
+# encoding: utf-8
+Encoding.default_external = Encoding::UTF_8
+Encoding.default_internal = Encoding::UTF_8
+
+# Parses CHANGELOG.md and about/Legal.md into the two structured plists the
+# About window's SwiftUI Changes and Legal pages read at runtime (see
+# AboutData.swift). This replaces multimarkdown for these two files only --
+# bin/gen_html and the header/footer templates stay in service for TextMate
+# Help, which is unrelated (see the file comment on assemble_resources.sh).
+#
+# Headings, categories and bullets are real *structure*, decided once, here,
+# at build time -- SwiftUI only has to lay out already-classified pieces and
+# hand each piece's own text to AttributedString(markdown:) for *inline*
+# formatting (bold, italic, code spans, links). This script never interprets
+# inline markdown itself.
+#
+# Two things it does that AttributedString(markdown:)'s inline-only parsing
+# modes do not (confirmed with throwaway Swift against the real API, not
+# assumed):
+#
+#   * Reference-style links ([text][ref], [text][]) are resolved into plain
+#     [text](url) form here, scoped to one release (or the whole of Legal.md)
+#     at a time -- both files reuse "[1]" for unrelated targets in different
+#     sections, and a document-global resolution would make one of them wrong.
+#   * Hard-wrapped source lines within one paragraph are rejoined with a
+#     single space; a blank line starts a new paragraph. AttributedString's
+#     inline modes preserve whitespace exactly rather than reflowing it, so
+#     skipping this would render every wrapped sentence with a mid-sentence
+#     line break.
+#
+# The one fenced code block in CHANGELOG.md (an `sh` block under Homebrew)
+# is pulled out as its own "code" segment, verbatim, rather than left for
+# inline parsing to mangle.
+#
+# Usage: gen_about_data <changelog.md> <legal.md> <changelog-out.plist> <legal-out.plist>
+
+changelog_in, legal_in, changelog_out, legal_out = ARGV
+unless legal_out
+  abort "usage: #{File.basename(__FILE__)} <changelog.md> <legal.md> <changelog-out.plist> <legal-out.plist>"
+end
+
+BULLET_RE          = /\A[ \t]{0,4}[*-][ \t]+(.*)\z/
+THEMATIC_BREAK_RE  = /\A[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*\z/
+FENCE_RE           = /\A[ \t]*```/
+
+def esc(s)
+  s.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+end
+
+# Collapses hard-wrapped source lines back into paragraphs -- consecutive
+# non-blank lines join with a single space, a blank line starts a new
+# paragraph -- because AttributedString(markdown:)'s inline parsing modes
+# preserve "\n" verbatim rather than reflowing it (verified directly).
+def join_paragraphs(lines)
+  paragraphs = []
+  current = []
+  lines.each do |line|
+    if line.strip.empty?
+      paragraphs << current.join(' ') unless current.empty?
+      current = []
+    else
+      current << line.strip
+    end
+  end
+  paragraphs << current.join(' ') unless current.empty?
+  paragraphs.join("\n\n")
+end
+
+# Finds `[label]: url` reference definitions in `lines`, drops those lines,
+# and rewrites [text][label], [text][] and bare [text] uses -- but only when
+# `text`/`label` matches a definition found in this same scope -- into plain
+# [text](url) form. Everything else (author credits like *[Some Name]*, with
+# no matching definition) passes through untouched, which is also exactly
+# how CommonMark itself treats an unresolved reference.
+def resolve_references(lines)
+  definitions = {}
+  content = []
+  lines.each do |line|
+    if line =~ /\A\[([^\]]+)\]:[ \t]*(\S+)/
+      definitions[$1.downcase] = $2
+    else
+      content << line
+    end
+  end
+  return content if definitions.empty?
+
+  content.map do |line|
+    line.gsub(/\[([^\]]+)\](\[([^\]]*)\])?/) do
+      text = $1
+      label = $2 ? ($3.empty? ? text : $3) : text
+      url = definitions[label.downcase]
+      url ? "[#{text}](#{url})" : $&
+    end
+  end
+end
+
+# One accumulator: buffers raw text lines (later joined into paragraphs) and,
+# between a fence-open and fence-close line, raw code lines kept verbatim.
+# Used for a release's own lead-in text, a section's lead-in text, and a
+# single bullet -- all three are "some text, maybe a code block, maybe more
+# text" and nothing more.
+def new_buffer
+  { segments: [], text_buf: [], in_code: false, code_buf: [], code_indent: '' }
+end
+
+def buffer_flush_text(buf)
+  return if buf[:text_buf].empty?
+  text = join_paragraphs(buf[:text_buf])
+  buf[:segments] << { 'kind' => 'text', 'value' => text } unless text.empty?
+  buf[:text_buf] = []
+end
+
+def buffer_open_code(buf, fence_line)
+  buffer_flush_text(buf)
+  buf[:in_code] = true
+  buf[:code_buf] = []
+  buf[:code_indent] = fence_line[/\A[ \t]*/]
+end
+
+def buffer_close_code(buf)
+  buf[:segments] << { 'kind' => 'code', 'value' => buf[:code_buf].join("\n") }
+  buf[:in_code] = false
+  buf[:code_buf] = []
+end
+
+def buffer_finalize(buf)
+  buffer_close_code(buf) if buf[:in_code] && !buf[:code_buf].empty?
+  buffer_flush_text(buf)
+  buf[:segments]
+end
+
+def dedent(line, indent)
+  line.start_with?(indent) ? line[indent.length..-1] : line.lstrip
+end
+
+# Shared by CHANGELOG's per-release bodies and the whole of Legal.md: an
+# optional lead-in, then zero or more `marker`-level sections, each with its
+# own optional lead-in followed by zero or more bullets. 167 of CHANGELOG's
+# 202 releases have no "### Category" headings at all -- flat bullets
+# straight under the release -- so "no heading yet" is the common case, not
+# an edge case, and is handled the same way as a genuine section: as one
+# with no `category`.
+def parse_document_body(lines, marker)
+  heading_re = /\A#{Regexp.escape(marker)}[ \t]+(.+?)[ \t]*\z/
+  intro_segments = []
+  sections = []
+  current_section = nil
+  active = new_buffer
+  active_target = :intro # :intro | :section_intro | :item
+
+  finish_active = lambda do
+    segs = buffer_finalize(active)
+    case active_target
+    when :intro         then intro_segments.concat(segs)
+    when :section_intro then current_section['intro'].concat(segs)
+    when :item          then current_section['items'] << segs unless segs.empty?
+    end
+    active = new_buffer
+  end
+
+  push_section = lambda do
+    if current_section && (current_section['category'] || !current_section['intro'].empty? || !current_section['items'].empty?)
+      sections << current_section
+    end
+  end
+
+  lines.each do |line|
+    if active[:in_code]
+      if line =~ FENCE_RE
+        buffer_close_code(active)
+      else
+        active[:code_buf] << dedent(line, active[:code_indent])
+      end
+      next
+    end
+
+    if line =~ THEMATIC_BREAK_RE
+      next
+    elsif (m = heading_re.match(line))
+      finish_active.call
+      push_section.call
+      current_section = { 'category' => m[1], 'intro' => [], 'items' => [] }
+      active_target = :section_intro
+    elsif (m = BULLET_RE.match(line))
+      finish_active.call
+      current_section ||= { 'category' => nil, 'intro' => [], 'items' => [] }
+      active_target = :item
+      active[:text_buf] << m[1]
+    elsif line =~ FENCE_RE
+      buffer_open_code(active, line)
+    elsif line.strip.empty?
+      active[:text_buf] << ''
+    else
+      active[:text_buf] << line.strip
+    end
+  end
+  finish_active.call
+  push_section.call
+
+  result = {}
+  result['intro'] = intro_segments unless intro_segments.empty?
+  result['sections'] = sections.map do |s|
+    s = s.dup
+    s.delete('category') if s['category'].nil?
+    s.delete('intro') if s['intro'].empty?
+    s
+  end
+  result
+end
+
+def parse_release_heading(title)
+  return [nil, nil] unless title =~ /\A(\d{4}-\d{2}-\d{2})(?:[ \t]+\((.*)\))?\z/
+  date, raw_version = $1, $2
+  version = raw_version && raw_version =~ /\A\[([^\]]+)\]\(.*\)\z/ ? $1 : raw_version
+  [date, version]
+end
+
+# Strips a leading MultiMarkdown metadata block ("Title: ..." lines up to the
+# first blank line -- bin/gen_html's own header parse works the same way) and
+# the document's single H1, neither of which belong in the rendered content:
+# the H1 duplicates what the About window's own tab/segmented-control label
+# already says.
+def strip_front_matter(lines)
+  lines = lines.dup
+  lines.shift while !lines.empty? && lines.first =~ /\A\w+:[ \t]/
+  lines.shift while !lines.empty? && lines.first.strip.empty?
+  if !lines.empty? && lines.first =~ /\A#[ \t]/
+    lines.shift
+    lines.shift while !lines.empty? && lines.first.strip.empty?
+  end
+  lines
+end
+
+def split_releases(lines)
+  heading_re = /\A##[ \t]+(.+?)[ \t]*\z/
+  chunks = []
+  heading = nil
+  body = []
+  lines.each do |line|
+    if (m = heading_re.match(line))
+      chunks << [heading, body] if heading
+      heading, body = m[1], []
+    elsif heading
+      body << line
+    end
+  end
+  chunks << [heading, body] if heading
+  chunks
+end
+
+def plist_value(v, indent)
+  pad = "\t" * indent
+  case v
+  when Hash
+    lines = ["#{pad}<dict>"]
+    v.each do |k, val|
+      next if val.nil?
+      lines << "#{pad}\t<key>#{esc(k.to_s)}</key>"
+      lines << plist_value(val, indent + 1)
+    end
+    lines << "#{pad}</dict>"
+    lines.join("\n")
+  when Array
+    lines = ["#{pad}<array>"]
+    v.each { |item| lines << plist_value(item, indent + 1) }
+    lines << "#{pad}</array>"
+    lines.join("\n")
+  when String
+    "#{pad}<string>#{esc(v)}</string>"
+  else
+    raise "gen_about_data: unsupported plist value #{v.inspect}"
+  end
+end
+
+def write_plist(path, root)
+  xml = +<<~HEADER
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+  HEADER
+  xml << plist_value(root, 0)
+  xml << "\n</plist>\n"
+  File.write(path, xml)
+  abort "gen_about_data: plutil -lint failed for #{path}" unless system('plutil', '-lint', path)
+  # Binary is a straight, PropertyListDecoder-transparent win here: this
+  # schema's XML runs one <dict>/<key>/<string> per paragraph, which is
+  # mostly repeated tag text -- binary1 shrinks Changelog.plist by roughly a
+  # sixth with no reader-side change at all.
+  abort "gen_about_data: plutil -convert binary1 failed for #{path}" unless system('plutil', '-convert', 'binary1', path)
+end
+
+# --- CHANGELOG.md -> Changelog.plist ---------------------------------------
+
+changelog_lines = strip_front_matter(File.read(changelog_in, encoding: 'UTF-8').split("\n", -1))
+releases = split_releases(changelog_lines).map do |heading, body_lines|
+  date, version = parse_release_heading(heading)
+  parsed = parse_document_body(resolve_references(body_lines), '###')
+  release = { 'title' => heading, 'date' => date, 'version' => version }
+  release['intro'] = parsed['intro'] if parsed['intro']
+  release['sections'] = parsed['sections']
+  release
+end
+write_plist(changelog_out, { 'releases' => releases })
+puts "Wrote #{changelog_out} (#{releases.size} releases)"
+
+# --- about/Legal.md -> Legal.plist ------------------------------------------
+
+legal_lines = strip_front_matter(File.read(legal_in, encoding: 'UTF-8').split("\n", -1))
+legal = parse_document_body(resolve_references(legal_lines), '##')
+write_plist(legal_out, legal)
+puts "Wrote #{legal_out} (#{legal['sections'].size} sections)"
