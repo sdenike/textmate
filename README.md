@@ -22,10 +22,11 @@ identity for bundle identifiers and the privileged helper so it can coexist with
 install.
 
 Interface work has been narrower on purpose. Windows and controls adopt the macOS 26 materials
-rather than keeping the older vibrancy look, several Settings panes have been rebuilt in SwiftUI
-behind the same AppKit window, and a first launch now opens a short Setup Assistant — appearance and
-bundles — in place of the bare bundle prompt it used to show, and stays available from
-Help → Setup Assistant. Nothing else moved: same menus, same key bindings, same editor.
+rather than keeping the older vibrancy look; Settings, the About window and the software-update
+sheet have been rebuilt in SwiftUI behind the same AppKit windows; and a first launch now opens a
+short Setup Assistant — appearance and bundles — in place of the bare bundle prompt it used to show,
+and stays available from Help → Setup Assistant. Nothing else moved: same menus, same key bindings,
+same editor.
 
 Long live TextMate.
 

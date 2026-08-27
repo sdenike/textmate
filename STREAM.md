@@ -4,6 +4,75 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-27 — RESUME HERE: Phase 6 is complete; the release decision is the only thing left
+
+Everything is merged. **No open PRs, no open branches.** `/Applications/TextMate.app` carries a
+local build of `master`, and app, QuickLook extension and `mate` now all report `3.0.0-revived.26`.
+
+Landed today: #27 Terminal, #28 Bundles, #29 the two version-drift fixes, #30 the update sheet,
+#31 About. Phase 6's SwiftUI-islands item is done — six Settings panes, the update sheet and About —
+and there is no `WKWebView` left in the app's own chrome.
+
+### Two version bugs, both silent, one hit by the maintainer
+
+`mate .ssh/config` printed `Can't find TextMate.app`. `/usr/local/bin/mate` was upstream's Oct 2021
+binary looking up `com.macromates.TextMate`. Root cause: `mate.mm` hardcoded `AppVersion = "2.13.3"`,
+**upstream's own number**, so `updateMateIfRequired` compared *equal* and the fork could never replace
+an upstream install. The QuickLook extension had the same disease with a worse failure mode — its
+version was a literal that went stale the day after it was written, and macOS silently stops
+registering an appex whose version does not match its parent.
+
+`Ruling: derive both from CHANGELOG.md through a build script phase. An environment variable set by
+bin/build is NOT sufficient and looked like it was — release.yml:135 and build-and-test.yml:28 call
+xcodebuild directly, as does ⌘B, so every shipped binary would have taken the fallback while the
+local build looked perfect. Caught by reading the workflows, not the build output.`
+
+### About reversed a "settled, do not reopen" call, on evidence
+
+HANDOFF had shelved About because porting it meant writing a Markdown renderer for 202 releases of
+changelog. That objection was sound and had an answer nobody had looked for: parse the changelog into
+structured data at build time, let SwiftUI render headings and lists as *layout*, and use
+`AttributedString(markdown:)` only for inline formatting — which is exactly what it supports.
+
+The changelog is **less regular than it looks**: 167 of 202 releases have no `###` categories, some
+headings carry no version, one has no date, one is a bare title, and there is exactly one fenced code
+block. The parser falls back to raw heading text rather than dropping anything. Validated by running
+all **1,041** generated text segments through the real `AttributedString(markdown:)` API — zero
+throws — and by rendering all three pages offscreen and looking at them.
+
+**It also uncovered a dead mechanism**: `-showReleaseNotes YES` is passed on relaunch after an update
+and **nothing has ever read it**. The intended path, `showChangesIfUpdated`'s digest check, was
+broken because `URLForResource:withExtension:` does not search subdirectories without `subdirectory:`
+and the About resources live in `Resources/About/`. Fixed.
+
+### A size claim I got wrong, recorded so it is not repeated
+
+I predicted About would **save** ~276 KB. It **costs** ~276 KB: 27,784 → 28,060 KB. `Changelog.plist`
+is 366 KB where `CHANGELOG.html` was 276 KB — structured data with per-segment attributes is larger
+than the HTML, and the new Swift adds binary size. The plists are already binary, not XML (XML would
+be 442 KB), so that lever is spent.
+
+The remaining lever is trimming Changes to this fork's **27** releases instead of all **202**, which
+would cut most of the 366 KB. **Deliberately not done** — it changes what About shows, and that is
+the maintainer's call. Raised, not answered.
+
+### If interrupted here
+
+**The only open question is ship or hold, and the reason to hold is gone.** Settings is no longer
+half-modern — that was the standing argument for holding all six panes together, and all six landed.
+Cutting a `CHANGELOG.md` heading for `.27` publishes a signed, notarized release and updates the
+Homebrew cask.
+
+Unreleased on `master`: six SwiftUI Settings panes, the update sheet, About, and both version fixes.
+
+`gh` in this repo still defaults to **upstream `textmate/textmate`** — pass `-R sdenike/textmate`.
+
+Note for the next session: GitHub's **rebase**-merge rewrites SHAs, so a stacked branch still
+conflicts afterwards. Cherry-picking the child's own commits onto the new `master` is the reliable
+move; `git rebase --onto <old-base>` is not, because the old base no longer exists.
+
+---
+
 ## 2026-08-27 — About window ported to SwiftUI; the last WKWebView in the app's own chrome is gone
 
 On `phase-6/swiftui-about` (based on `phase-6/swiftui-update-sheet`), two commits, not yet merged

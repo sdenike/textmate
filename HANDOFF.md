@@ -21,12 +21,12 @@ maintainer and enforced throughout:
 | | |
 |---|---|
 | Released | **v3.0.0-revived.26** — Setup Assistant, PR #19 |
-| Unreleased | **all 6 SwiftUI Settings panes on `master`** — Software Update, Projects, Variables, Files, Terminal, Bundles. Zero xibs left in `Frameworks/Preferences`. |
-| Phases complete | 0-5, 7 |
-| Phase 6 | remainder in progress — QuickLook and onboarding done; **all 6 Settings panes ported**; update sheet and About are now also done, each on its own unmerged branch (`phase-6/swiftui-update-sheet`, `phase-6/swiftui-about`) |
-| Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |
+| Unreleased | **Phase 6 is complete on `master`** — all 6 Settings panes, the update sheet and About are SwiftUI; zero xibs in `Frameworks/Preferences`; no `WKWebView` in the app's own chrome. Plus the `mate` and QuickLook version-drift fixes. |
+| Phases complete | 0-7 |
+| Phase 6 | **complete** — QuickLook, onboarding, all 6 Settings panes, the update sheet and About. Everything merged; no open PRs. |
+| Phases remaining | 8 (shared modules), 9 (optional LSP) |
 | Build | `TextMate.xcodeproj`, generated from `project.yml` by XcodeGen |
-| Bundle | 26,012 KB — **1,916 KB smaller than the `undead` baseline** |
+| Bundle | 28,060 KB — up 276 KB from About's structured changelog data; see STREAM.md |
 
 ## Phase 6 was closed early — it is not complete
 
@@ -43,11 +43,11 @@ were never started:
 | Back/forward navigation | **already done — since 2018** | none |
 | **QuickLook extension** | **done and verified** — previews render syntax highlighted | — |
 | SwiftUI islands: onboarding | **done** — Setup Assistant, first launch and `Help → Setup Assistant…` | — |
-| SwiftUI islands: Settings panes | **5 of 6 done** — Software Update, Projects, Variables, Files, Terminal | — |
+| SwiftUI islands: Settings panes | **all 6 done** — Software Update, Projects, Variables, Files, Terminal, Bundles | — |
 | SwiftUI islands: Settings — Terminal | **done** — privileged `mate` install stays ObjC++ by design; the framework's last xib is gone | — |
 | SwiftUI islands: Settings — Bundles | **done** — 903 lines ported; see STREAM.md for the three stated losses | — |
 | SwiftUI islands: About | **done** — the "settled, do not reopen" call below was revised once the Changes page had a plan that didn't need a Markdown renderer | — |
-| SwiftUI islands: update sheet | **done**, on `phase-6/swiftui-update-sheet` | — |
+| SwiftUI islands: update sheet | **done** and merged | — |
 | `NSSplitViewController` sidebar | not started | large — defer |
 | `NSRulerView` gutter | not done | large — **do not do** |
 
