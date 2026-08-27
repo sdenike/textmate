@@ -1,4 +1,5 @@
 #import "AboutWindowController.h"
+#import "TextMate-Swift.h"
 #import <OakAppKit/OakUIConstructionFunctions.h>
 #import <OakFoundation/OakFoundation.h>
 #import <OakFoundation/NSString Additions.h>
@@ -6,19 +7,27 @@
 
 static NSString* const kUserDefaultsReleaseNotesDigestKey = @"releaseNotesDigest";
 
-static NSData* Digest (NSString* someString)
+static NSData* Digest (NSData* someData)
 {
-	char const* str = [someString UTF8String];
-	char md[CC_SHA1_DIGEST_LENGTH];
-	CC_SHA1((unsigned char*)str, strlen(str), (unsigned char*)md);
+	unsigned char md[CC_SHA1_DIGEST_LENGTH];
+	CC_SHA1(someData.bytes, (CC_LONG)someData.length, md);
 	return [NSData dataWithBytes:md length:sizeof(md)];
 }
 
-@interface AboutWindowController () <NSWindowDelegate, NSToolbarDelegate, WKNavigationDelegate, WKScriptMessageHandler>
+// bin/gen_about_data builds this at compile time from CHANGELOG.md (see its
+// own header comment). URLForResource:withExtension: does NOT search
+// subdirectories on its own -- confirmed against the real API -- so the
+// subdirectory: argument here is load-bearing, not decorative.
+static NSURL* ChangelogPlistURL ()
+{
+	return [NSBundle.mainBundle URLForResource:@"Changelog" withExtension:@"plist" subdirectory:@"About"];
+}
+
+@interface AboutWindowController () <NSWindowDelegate, NSToolbarDelegate>
 @property (nonatomic, readonly) NSArray<NSString*>* segmentLabels;
 @property (nonatomic) NSToolbar* toolbar;
 @property (nonatomic) NSSegmentedControl* segmentedControl;
-@property (nonatomic) WKWebView* webView;
+@property (nonatomic) AboutHostingController* aboutHostingController;
 @property (nonatomic) NSString* selectedPage;
 @end
 
@@ -31,9 +40,9 @@ static NSData* Digest (NSString* someString)
 
 + (void)showChangesIfUpdated
 {
-	NSURL* url = [[NSBundle mainBundle] URLForResource:@"CHANGELOG" withExtension:@"html"];
+	NSURL* url = ChangelogPlistURL();
 	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
-		if(NSString* releaseNotes = [NSString stringWithContentsOfURL:url encoding:NSUTF8StringEncoding error:NULL])
+		if(NSData* releaseNotes = [NSData dataWithContentsOfURL:url])
 		{
 			NSData* lastDigest    = [NSUserDefaults.standardUserDefaults dataForKey:kUserDefaultsReleaseNotesDigestKey];
 			NSData* currentDigest = Digest(releaseNotes);
@@ -69,53 +78,15 @@ static NSData* Digest (NSString* someString)
 		[win setHidesOnDeactivate:NO];
 		[win setTitleVisibility:NSWindowTitleHidden];
 
-		WKWebViewConfiguration* webConfig = [[WKWebViewConfiguration alloc] init];
-		[webConfig.userContentController addScriptMessageHandler:self name:@"textmate"];
+		self.aboutHostingController = [AboutHostingController new];
 
-		self.webView = [[WKWebView alloc] initWithFrame:NSZeroRect configuration:webConfig];
-		self.webView.navigationDelegate = self;
-		[self.webView setValue:@NO forKey:@"drawsBackground"];
+		NSView* contentView = self.aboutHostingController.view;
+		[contentView.widthAnchor constraintGreaterThanOrEqualToConstant:200].active = YES;
+		[contentView.heightAnchor constraintGreaterThanOrEqualToConstant:200].active = YES;
 
-		if(NSURL* url = [NSBundle.mainBundle URLForResource:@"WKWebView" withExtension:@"js"])
-		{
-			NSError* error;
-			if(NSMutableString* jsBridge = [NSMutableString stringWithContentsOfURL:url encoding:NSUTF8StringEncoding error:&error])
-			{
-				NSDictionary* variables = @{
-					@"version":   [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"],
-					@"copyright": [NSBundle.mainBundle objectForInfoDictionaryKey:@"NSHumanReadableCopyright"],
-				};
-
-				[variables enumerateKeysAndObjectsUsingBlock:^(NSString* key, NSString* value, BOOL* stop){
-					[jsBridge appendFormat:@"TextMate.%@ = %@;\n", key, [self javaScriptEscapedString:[value isEqual:[NSNull null]] ? @"" : value]];
-				}];
-
-				WKUserScript* script = [[WKUserScript alloc] initWithSource:jsBridge injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
-				[self.webView.configuration.userContentController addUserScript:script];
-			}
-			else if(error)
-			{
-				os_log_error(OS_LOG_DEFAULT, "Failed to load WKWebView.js: %{public}@", error.localizedDescription);
-			}
-		}
-		else
-		{
-			os_log_error(OS_LOG_DEFAULT, "Failed to locate WKWebView.js in application bundle");
-		}
-
-		[self.webView.widthAnchor constraintGreaterThanOrEqualToConstant:200].active = YES;
-		[self.webView.heightAnchor constraintGreaterThanOrEqualToConstant:200].active = YES;
-
-		[win setContentView:self.webView];
+		[win setContentView:contentView];
 	}
 	return self;
-}
-
-- (void)dealloc
-{
-	[_webView.configuration.userContentController removeAllUserScripts];
-	_webView.navigationDelegate = nil;
-	[_webView stopLoading];
 }
 
 - (void)showAboutWindow:(id)sender
@@ -161,8 +132,7 @@ static NSData* Digest (NSString* someString)
 	self.selectedPage = @"Changes";
 	[self showWindow:self];
 
-	NSURL* url = [[NSBundle mainBundle] URLForResource:@"CHANGELOG" withExtension:@"html"];
-	if(NSString* releaseNotes = [NSString stringWithContentsOfURL:url encoding:NSUTF8StringEncoding error:NULL])
+	if(NSData* releaseNotes = [NSData dataWithContentsOfURL:ChangelogPlistURL()])
 		[NSUserDefaults.standardUserDefaults setObject:Digest(releaseNotes) forKey:kUserDefaultsReleaseNotesDigestKey];
 }
 
@@ -180,19 +150,8 @@ static NSData* Digest (NSString* someString)
 		return;
 	_selectedPage = pageName;
 
-	NSDictionary* pages = @{
-		@"About":   @"About/About",
-		@"Changes": @"About/CHANGELOG",
-		@"Legal":   @"About/Legal"
-	};
-
-	if(NSString* file = pages[pageName])
-	{
-		if(NSURL* url = [NSBundle.mainBundle URLForResource:file withExtension:@"html"])
-			[self.webView loadRequest:[NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:60]];
-
-		_segmentedControl.selectedSegment = [_segmentLabels indexOfObject:pageName];
-	}
+	[self.aboutHostingController showPage:pageName];
+	_segmentedControl.selectedSegment = [_segmentLabels indexOfObject:pageName];
 }
 
 - (void)selectPageAtRelativeOffset:(NSInteger)offset
@@ -245,48 +204,4 @@ static NSData* Digest (NSString* someString)
 	}
 }
 
-// =============
-// = WKWebView =
-// =============
-
-- (NSString*)javaScriptEscapedString:(NSString*)src
-{
-	static NSRegularExpression* const regex = [NSRegularExpression regularExpressionWithPattern:@"['\"\\\\]" options:0 error:nil];
-	NSString* escaped = src ? [regex stringByReplacingMatchesInString:src options:0 range:NSMakeRange(0, src.length) withTemplate:@"\\\\$0"] : @"";
-	escaped = [escaped stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"];
-	return [NSString stringWithFormat:@"'%@'", escaped];
-}
-
-- (void)webView:(WKWebView*)webView decidePolicyForNavigationAction:(WKNavigationAction*)navigationAction decisionHandler:(void(^)(WKNavigationActionPolicy))decisionHandler
-{
-	if(![navigationAction.request.URL.scheme isEqualToString:@"file"] && [NSWorkspace.sharedWorkspace openURL:navigationAction.request.URL])
-			decisionHandler(WKNavigationActionPolicyCancel);
-	else	decisionHandler(WKNavigationActionPolicyAllow);
-}
-
-- (void)userContentController:(WKUserContentController*)userContentController didReceiveScriptMessage:(WKScriptMessage*)message
-{
-	if(![message.name isEqualToString:@"textmate"])
-	{
-		os_log_error(OS_LOG_DEFAULT, "Message received for unknown message handler: %{public}@", message.name);
-		return;
-	}
-
-	NSString* command     = message.body[@"command"];
-	NSDictionary* payload = message.body[@"payload"];
-
-	if([command isEqualToString:@"log"])
-	{
-		if([payload[@"level"] isEqualToString:@"error"])
-		{
-			static os_log_t log = os_log_create("com.macromates.JavaScript", "error");
-			os_log_error(log, "%{public}@:%{public}@: %{public}@", payload[@"filename"], payload[@"lineno"], payload[@"message"]);
-		}
-		else
-		{
-			static os_log_t log = os_log_create("com.macromates.JavaScript", "log");
-			os_log(log, "%{public}@: %{public}@", self.webView.title, payload[@"message"]);
-		}
-	}
-}
 @end

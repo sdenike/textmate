@@ -144,7 +144,7 @@ assemble_textmate() {
 	"$SRCROOT/bin/build_app_icon.sh" "$app/resources/textmate_lives.icon" "$contents/Resources/Assets.car"
 
 	local f
-	for f in WKWebView.js TextMate.scriptSuite TextMate.scriptTerminology Default.tmProperties KeyBindings.dict; do
+	for f in TextMate.scriptSuite TextMate.scriptTerminology Default.tmProperties KeyBindings.dict; do
 		cp -p "$app/resources/$f" "$contents/Resources/$f"
 	done
 
@@ -219,13 +219,23 @@ assemble_textmate() {
 	done < <(find "$SRCROOT/Frameworks" -type d \( -name gfx -o -name resources -o -name icons \) \
 		-exec find {} \( -type f -o -type l \) -not -name '*.xib' -print0 \;)
 
-	# about/* + ../../CHANGELOG.md -- files -> Resources/About.
+	# CHANGELOG.md and about/Legal.md -> structured plists the SwiftUI About
+	# window reads directly at runtime (see AboutData.swift and
+	# bin/gen_about_data's own header comment) -- replaces multimarkdown for
+	# these two files only; bin/gen_html/$header/$footer stay in use just
+	# above for TextMate Help, which is unrelated. about/About.md has no
+	# build step at all any more: its short, static prose is written
+	# directly in AboutView.swift with the version/copyright interpolated
+	# from the bundle, rather than round-tripped through generated HTML.
 	mkdir -p "$contents/Resources/About/css"
-	for f in About Legal; do
-		markdown "$app/about/$f.md" "$contents/Resources/About/$f.html" "$header" "$footer"
-	done
-	markdown "$changelog" "$contents/Resources/About/CHANGELOG.html" "$header" "$footer"
-	cp -p "$app/about/css/"* "$contents/Resources/About/css/"
+	"$SRCROOT/bin/gen_about_data" "$changelog" "$app/about/Legal.md" \
+		"$contents/Resources/About/Changelog.plist" "$contents/Resources/About/Legal.plist"
+	# tml_image.png is the only survivor of about/css/: the Setup Assistant's
+	# welcome page loads it from this exact bundle path
+	# (SetupAssistantView.swift), unrelated to the About window it was
+	# originally shipped for. stylesheet.css served only the About/Legal/
+	# CHANGELOG HTML this replaces, so it is no longer copied.
+	cp -p "$app/about/css/tml_image.png" "$contents/Resources/About/css/tml_image.png"
 
 	# support/* -- copy, never a compiler transform (rave's `copy` directive
 	# bypasses Compiler.transform entirely -- always a literal byte copy), so
