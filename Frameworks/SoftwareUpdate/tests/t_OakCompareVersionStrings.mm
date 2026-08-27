@@ -36,6 +36,20 @@ void test_undead_versions ()
 	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2.1.2-undead",         @"2.1.2-undead"),         NSOrderedSame);
 }
 
+// The fork's current tag form (CHANGELOG.md headings, and what mate.mm's
+// MATE_APP_VERSION now carries instead of a hardcoded literal).
+// TerminalPreferences.mm's updateMateIfRequired depends on a bare
+// upstream-style version never outranking a suffixed fork one it should lose
+// to, and on two fork releases ordering correctly against each other across
+// a double-digit build number.
+void test_revived_versions ()
+{
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"3.0.0-revived.5",  @"3.0.0-revived.26"), NSOrderedAscending);
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"3.0.0-revived.26", @"3.0.0-revived.26"), NSOrderedSame);
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"2.13.3",           @"3.0.0-revived.26"), NSOrderedAscending);
+	OAK_ASSERT_EQ(OakCompareVersionStrings(@"3.0.0-revived.26", @"2.13.3"),           NSOrderedDescending);
+}
+
 void test_null_string ()
 {
 	OAK_ASSERT_EQ(OakCompareVersionStrings(nil, @"2.0"), NSOrderedAscending);
