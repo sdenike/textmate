@@ -5155,11 +5155,9 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstSubfolderSpec = 7;
 			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
-				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5168,9 +5166,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 7;
+			dstSubfolderSpec = 13;
 			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;

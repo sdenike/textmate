@@ -4,6 +4,74 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-27 — About window ported to SwiftUI; the last WKWebView in the app's own chrome is gone
+
+On `phase-6/swiftui-about` (based on `phase-6/swiftui-update-sheet`), two commits, not yet merged
+to `master`. This was previously "settled, do not reopen" in HANDOFF.md because porting looked like
+it required a Markdown renderer for a 269 KB Changes page. It didn't: `bin/gen_about_data` parses
+CHANGELOG.md and Legal.md into structured plists at build time — headings, categories and bullets
+as real structure — and SwiftUI renders that structure as layout, calling
+`AttributedString(markdown:)` only for inline formatting inside each bullet.
+
+**CHANGELOG.md is not as regular as it looks from the last dozen releases.** 167 of 202 releases
+have no `### Category` headings at all (flat bullets, the pre-fork upstream style); some historical
+headings carry no version at all (`## 2012-08-12`), one carries no date at all
+(`## TextMate Hackathon`), several carry the version as a Markdown link
+(`## 2014-10-16 ([v2.0-beta.1](url))`), and one thematic break is spaced dashes (`- - -`), which a
+naive `^(---|\*\*\*|___)\s*$` check misses. The parser falls back to the raw heading text when it
+can't cleanly extract a date/version, and treats "no `###` yet" as a section with `category: nil`
+rather than a special case, since that's the common case, not the exception.
+
+**`AttributedString(markdown:)`'s inline-only parsing modes do not resolve reference-style links**
+(`[text][ref]`, `[text][]`) and do not reflow hard-wrapped source lines within a paragraph — both
+confirmed by compiling and running throwaway Swift against the real API, not assumed.
+`.full` interpretedSyntax does both, but block-parses the whole string (lists, indented code), which
+is more than "inline formatting" and would have put structure decisions back in Swift instead of the
+build-time parser. Chose to keep `gen_about_data` resolving references and rejoining paragraphs
+before handing bullet text to `.inlineOnlyPreservingWhitespace`, so Swift never does block parsing.
+
+**Reference-link resolution is scoped per release** (and separately, once, for all of Legal.md), not
+globally: CHANGELOG.md reuses the label `[1]` for two different targets in two different 2012
+releases, and a document-global "first definition wins" resolution — closer to how multimarkdown
+likely already resolves it, unverified — would silently point one of them at the wrong URL.
+
+**Validated all 202 releases' worth of generated text** (1041 segments) by decoding the real
+generated plist and running every segment through `AttributedString(markdown:)` in a throwaway Swift
+harness: zero throws, and spot-checked samples (author credits, reference links, bold, unicode)
+render correctly. Also rendered all three pages offscreen via `NSHostingView` +
+`cacheDisplay(in:to:)` (same technique as the Liquid Glass work) and looked at the PNGs — the first
+attempt, three independently-constructed `NSHostingView`s with no window and no forced appearance,
+rendered one of three pages solid black; matching the real integration (one `AboutHostingController`,
+one real backing `NSWindow`, page switched via `showPage:`) fixed it. Treat that as a lesson about
+this verification technique, not about the shipped code — a real window off a real
+`AboutWindowController` establishes its own appearance context.
+
+**Found and fixed a latent, unrelated bug while adapting the "reopen Changes after an update"
+digest check**: both lookup call sites used `URLForResource:withExtension:` with no `subdirectory:`,
+which does not search subdirectories — confirmed empirically against a throwaway test bundle — so
+the digest comparison silently never ran. Separately, `-showReleaseNotes YES` (passed by
+`SoftwareUpdate.mm` on relaunch) has no consumer anywhere in the codebase and never did; the digest
+check was always the only live mechanism. Preserved that mechanism, fixed its lookup.
+
+**Bundle size**, clean `Resources/` on both sides, same session: 27,784 KB before → 28,060 KB after
+(+276 KB). `About/` itself grew 852 KB → 932 KB despite removing 282 KB of HTML/CSS, because the
+plist's per-paragraph `<dict>/<key>/<string>` structure costs more than flat HTML even converted to
+binary1 (`gen_about_data` does that conversion; it was 442 KB as XML). Deleted as fully dead:
+`WKWebView.js`, `about/About.md`, `about/css/stylesheet.css`. `about/css/tml_image.png` stays — the
+Setup Assistant's welcome page loads it from that exact path, unrelated to the About window.
+`bin/gen_html`/`templates/header.html`/`footer.html` stay in service too: TextMate Help still uses
+them, confirmed by grep before assuming otherwise.
+
+### If interrupted here
+
+Both commits are on `phase-6/swiftui-about`, not merged anywhere. `bin/build` passes. Not clicked in
+a running app — cannot synthesize mouse events in this sandbox (see the Tab dragging section above) —
+so a link opening the default browser is inferred from the SDK's documented behaviour of a `.link`
+attribute on `Text`, not observed directly. Next: merge `phase-6/swiftui-update-sheet` and
+`phase-6/swiftui-about` toward `master`, then the release decision (still the maintainer's).
+
+---
+
 ## 2026-08-27 — RESUME HERE: all six panes ported; two version-drift bugs found
 
 `master` has **all six Settings panes as SwiftUI islands** — Terminal (#27) and Bundles (#28) landed
