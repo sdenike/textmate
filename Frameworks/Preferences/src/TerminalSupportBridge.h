@@ -32,6 +32,14 @@ extern "C" {
 // what t_terminal_support.mm exercises).
 extern NSArray<TMInstallPathItem*>* _Nonnull TMTerminalInstallPathItems(NSString* _Nullable currentPath);
 
+// Pulls the version token out of mate's own `mate <version> (<date>)` --version
+// output (mate.mm's version()). The capture is a bare \S+ rather than [\d.]+
+// so a suffixed fork version like "3.0.0-revived.26" survives whole -- a
+// digits-and-dots-only capture stops at the hyphen and silently truncates it.
+// Returns nil when output doesn't start with "mate ", e.g. when io::exec
+// couldn't run the binary at all and handed back NULL_STR.
+extern NSString* _Nullable TMParseMateVersion(NSString* _Nonnull output);
+
 #ifdef __cplusplus
 }
 #endif

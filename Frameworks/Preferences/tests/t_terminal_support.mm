@@ -44,3 +44,29 @@ void test_custom_current_path_sorts_first ()
 	OAK_ASSERT(items[3].isSeparator);
 	OAK_ASSERT(items[4].isOther);
 }
+
+// The capture is \S+, not [\d.]+ -- a suffixed fork version like
+// "3.0.0-revived.26" must come back whole, not truncated at the hyphen (the
+// truncation is what let a fork mate collide with upstream's own 2.13.3).
+void test_suffixed_version_survives_whole ()
+{
+	NSString* version = TMParseMateVersion(@"mate 3.0.0-revived.26 (Aug 27 2026)");
+	OAK_ASSERT(version != nil);
+	OAK_ASSERT([version isEqualToString:@"3.0.0-revived.26"]);
+}
+
+void test_bare_upstream_style_version_still_parses ()
+{
+	NSString* version = TMParseMateVersion(@"mate 2.13.3 (Oct 12 2021)");
+	OAK_ASSERT(version != nil);
+	OAK_ASSERT([version isEqualToString:@"2.13.3"]);
+}
+
+// io::exec hands back NULL_STR (or any other unrelated output) when it
+// couldn't run the binary at all -- neither starts with "mate ", and both
+// must come back nil rather than some bogus capture.
+void test_output_not_starting_with_mate_is_nil ()
+{
+	OAK_ASSERT(TMParseMateVersion(@"") == nil);
+	OAK_ASSERT(TMParseMateVersion(@"command not found") == nil);
+}
