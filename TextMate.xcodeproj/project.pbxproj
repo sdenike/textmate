@@ -370,6 +370,7 @@
 		501503C87568BED4B9FC6D58 /* libsettings.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 04F2F95CF0A919C15EA07420 /* libsettings.a */; };
 		5052905285F7CC2522DA91CF /* libcf.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FC84BF1D53A4AFB200D408AF /* libcf.a */; };
 		508B85BA978160C3C036BD1E /* libio.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 10B874173E1C9917097A3BF4 /* libio.a */; };
+		509E76EFB65DD7CAD335641C /* BundlesPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = F51A7BFB00CEB9F219546634 /* BundlesPane.swift */; };
 		512AFD89D9872A9C2022F075 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D45846DC7EE7EAB43FC926D8 /* ApplicationServices.framework */; };
 		512B2AD34B67E0C205ABDCC0 /* libOakSystem.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C471B5AD93E7C5234A4F5A43 /* libOakSystem.a */; };
 		518288EBBDBF98098C963673 /* libns.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5ACA089AE982352D6F430735 /* libns.a */; };
@@ -428,6 +429,7 @@
 		5B7199B6C4B7275D337ECE8B /* libcommand.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E64CD87E06A78B547480572 /* libcommand.a */; };
 		5B94C4190F25FF987085260C /* BundlesManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = F01927BFE24997B5F5A4E5C0 /* BundlesManager.mm */; };
 		5BAB84F49D24152D7EA8E27D /* HTMLOutputWindow.mm in Sources */ = {isa = PBXBuildFile; fileRef = 7DD075E9AF8896CDF6045314 /* HTMLOutputWindow.mm */; };
+		5BBD15A279F540EAAEB56642 /* SettingsBundlesBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = AF75D368F9E6948CDAAE7CCF /* SettingsBundlesBridge.mm */; };
 		5BF1938DF35F51D3579BF36E /* libundo.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BDA1CDAD2B3DC0ED273CF878 /* libundo.a */; };
 		5C10347C5F23DA8B2483B4DF /* libregexp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB62D9EC6A26A709AFD1F36A /* libregexp.a */; };
 		5C15D0F1BB368F2DD4C545D0 /* LiveSearchView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 1419F2C440DDFD691123E20D /* LiveSearchView.mm */; };
@@ -5136,19 +5138,6 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
-				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
-			);
-			name = "Embed Dependencies";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
 			dstSubfolderSpec = 6;
 			files = (
 				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
@@ -5158,13 +5147,26 @@
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
+		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 7;
 			files = (
 				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+			);
+			name = "Embed Dependencies";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5498,6 +5500,7 @@
 		AD73EBAFDFD7DBD1FDC72611 /* HOAutoScroll.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = HOAutoScroll.mm; sourceTree = "<group>"; };
 		AD9A059A8DD4770868833F02 /* ctype.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ctype.cc; sourceTree = "<group>"; };
 		ADF572538B85967A1CEF9D22 /* libBundlesManager.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libBundlesManager.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		AF75D368F9E6948CDAAE7CCF /* SettingsBundlesBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SettingsBundlesBridge.mm; sourceTree = "<group>"; };
 		B06BE8D195F9EB679EE6EB38 /* tm_dialog.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = tm_dialog.mm; sourceTree = "<group>"; };
 		B06C6794B77B5A5DF3F0D69E /* BundleFetcher.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = BundleFetcher.mm; sourceTree = "<group>"; };
 		B0B8466D6D429ED2FF161FA0 /* _Tcf.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _Tcf.cc; sourceTree = "<group>"; };
@@ -5635,6 +5638,7 @@
 		F33F244BC51DB76D4B22DD0A /* NSImage Additions.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "NSImage Additions.mm"; sourceTree = "<group>"; };
 		F3AC599A8A3420ED817D974D /* libOakDebug.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libOakDebug.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		F4D2FACB0E058BCA985A186B /* utf16_le.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = utf16_le.c; sourceTree = "<group>"; };
+		F51A7BFB00CEB9F219546634 /* BundlesPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundlesPane.swift; sourceTree = "<group>"; };
 		F5BBA0E48A9E8691488BE499 /* layout.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = layout.cc; sourceTree = "<group>"; };
 		F5DA5FF3F015A396998BD9F6 /* _Tparse.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _Tparse.cc; sourceTree = "<group>"; };
 		F5E19576093171CF6CC6E33E /* AboutWindowController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AboutWindowController.mm; sourceTree = "<group>"; };
@@ -7035,6 +7039,7 @@
 		1C6F81E05C0A25289D0AC458 /* src */ = {
 			isa = PBXGroup;
 			children = (
+				F51A7BFB00CEB9F219546634 /* BundlesPane.swift */,
 				749E3C463630985999821AAB /* BundlesPreferences.mm */,
 				26964143C80973F5EC4F60E4 /* FilesPane.swift */,
 				E59BFED6E26133C5D0D5B386 /* FilesPreferences.mm */,
@@ -7042,6 +7047,7 @@
 				30E570F4D97F24C50926CF54 /* Preferences.mm */,
 				567B54F40779104512154CC6 /* PreferencesPane.mm */,
 				6B855EEEAC6ACF41C1A6E6B1 /* ProjectsPreferences.mm */,
+				AF75D368F9E6948CDAAE7CCF /* SettingsBundlesBridge.mm */,
 				8A1C5CB6DBC26AED2DCAE576 /* SettingsFieldsBridge.mm */,
 				9A629C4F6000F3AEB413AD2A /* SettingsFormStyle.swift */,
 				77E5A9F337A4DF6309A498F6 /* SettingsSupport.swift */,
@@ -12175,6 +12181,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5BBD15A279F540EAAEB56642 /* SettingsBundlesBridge.mm in Sources */,
 				D6BDDB2A328DDA0334B35BC6 /* SettingsFieldsBridge.mm in Sources */,
 				E5960BA67047624E3F965414 /* SettingsSupportBridge.mm in Sources */,
 				3B1B3C12C5174AE422F900A6 /* SettingsVariablesBridge.mm in Sources */,
@@ -12300,6 +12307,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				509E76EFB65DD7CAD335641C /* BundlesPane.swift in Sources */,
 				F01D519ACF1F97E442DF9C29 /* BundlesPreferences.mm in Sources */,
 				3824B2F0C870E7C0E6B44923 /* FilesPane.swift in Sources */,
 				4CD9A3858D1A2B05D68832B3 /* FilesPreferences.mm in Sources */,

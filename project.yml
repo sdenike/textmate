@@ -1295,6 +1295,7 @@ targets:
     type: library.static
     platform: macOS
     sources:
+      - path: "Frameworks/Preferences/src/BundlesPane.swift"
       - path: "Frameworks/Preferences/src/BundlesPreferences.mm"
       - path: "Frameworks/Preferences/src/FilesPane.swift"
       - path: "Frameworks/Preferences/src/FilesPreferences.mm"
@@ -1358,6 +1359,7 @@ targets:
     type: library.static
     platform: macOS
     sources:
+      - path: "Frameworks/Preferences/src/SettingsBundlesBridge.mm"
       - path: "Frameworks/Preferences/src/SettingsFieldsBridge.mm"
       - path: "Frameworks/Preferences/src/SettingsSupportBridge.mm"
       - path: "Frameworks/Preferences/src/SettingsVariablesBridge.mm"
