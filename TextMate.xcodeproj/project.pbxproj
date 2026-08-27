@@ -370,6 +370,7 @@
 		501503C87568BED4B9FC6D58 /* libsettings.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 04F2F95CF0A919C15EA07420 /* libsettings.a */; };
 		5052905285F7CC2522DA91CF /* libcf.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FC84BF1D53A4AFB200D408AF /* libcf.a */; };
 		508B85BA978160C3C036BD1E /* libio.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 10B874173E1C9917097A3BF4 /* libio.a */; };
+		509E76EFB65DD7CAD335641C /* BundlesPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = F51A7BFB00CEB9F219546634 /* BundlesPane.swift */; };
 		512AFD89D9872A9C2022F075 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D45846DC7EE7EAB43FC926D8 /* ApplicationServices.framework */; };
 		512B2AD34B67E0C205ABDCC0 /* libOakSystem.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C471B5AD93E7C5234A4F5A43 /* libOakSystem.a */; };
 		518288EBBDBF98098C963673 /* libns.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5ACA089AE982352D6F430735 /* libns.a */; };
@@ -5137,9 +5138,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 7;
+			dstSubfolderSpec = 6;
 			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
+				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
+				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5148,11 +5151,9 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstSubfolderSpec = 7;
 			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
-				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5161,11 +5162,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 6;
+			dstSubfolderSpec = 13;
 			files = (
-				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
-				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
-				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5637,6 +5638,7 @@
 		F33F244BC51DB76D4B22DD0A /* NSImage Additions.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "NSImage Additions.mm"; sourceTree = "<group>"; };
 		F3AC599A8A3420ED817D974D /* libOakDebug.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libOakDebug.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		F4D2FACB0E058BCA985A186B /* utf16_le.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = utf16_le.c; sourceTree = "<group>"; };
+		F51A7BFB00CEB9F219546634 /* BundlesPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundlesPane.swift; sourceTree = "<group>"; };
 		F5BBA0E48A9E8691488BE499 /* layout.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = layout.cc; sourceTree = "<group>"; };
 		F5DA5FF3F015A396998BD9F6 /* _Tparse.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _Tparse.cc; sourceTree = "<group>"; };
 		F5E19576093171CF6CC6E33E /* AboutWindowController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AboutWindowController.mm; sourceTree = "<group>"; };
@@ -7037,6 +7039,7 @@
 		1C6F81E05C0A25289D0AC458 /* src */ = {
 			isa = PBXGroup;
 			children = (
+				F51A7BFB00CEB9F219546634 /* BundlesPane.swift */,
 				749E3C463630985999821AAB /* BundlesPreferences.mm */,
 				26964143C80973F5EC4F60E4 /* FilesPane.swift */,
 				E59BFED6E26133C5D0D5B386 /* FilesPreferences.mm */,
@@ -12304,6 +12307,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				509E76EFB65DD7CAD335641C /* BundlesPane.swift in Sources */,
 				F01D519ACF1F97E442DF9C29 /* BundlesPreferences.mm in Sources */,
 				3824B2F0C870E7C0E6B44923 /* FilesPane.swift in Sources */,
 				4CD9A3858D1A2B05D68832B3 /* FilesPreferences.mm in Sources */,
