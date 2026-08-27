@@ -428,6 +428,7 @@
 		5B7199B6C4B7275D337ECE8B /* libcommand.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E64CD87E06A78B547480572 /* libcommand.a */; };
 		5B94C4190F25FF987085260C /* BundlesManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = F01927BFE24997B5F5A4E5C0 /* BundlesManager.mm */; };
 		5BAB84F49D24152D7EA8E27D /* HTMLOutputWindow.mm in Sources */ = {isa = PBXBuildFile; fileRef = 7DD075E9AF8896CDF6045314 /* HTMLOutputWindow.mm */; };
+		5BBD15A279F540EAAEB56642 /* SettingsBundlesBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = AF75D368F9E6948CDAAE7CCF /* SettingsBundlesBridge.mm */; };
 		5BF1938DF35F51D3579BF36E /* libundo.a in Frameworks */ = {isa = PBXBuildFile; fileRef = BDA1CDAD2B3DC0ED273CF878 /* libundo.a */; };
 		5C10347C5F23DA8B2483B4DF /* libregexp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FB62D9EC6A26A709AFD1F36A /* libregexp.a */; };
 		5C15D0F1BB368F2DD4C545D0 /* LiveSearchView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 1419F2C440DDFD691123E20D /* LiveSearchView.mm */; };
@@ -5136,6 +5137,17 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
+			dstSubfolderSpec = 7;
+			files = (
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+			);
+			name = "Embed Dependencies";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
 				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
@@ -5145,7 +5157,7 @@
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		94AFCE2F6B53537B2E784F49 /* Embed Dependencies */ = {
+		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
@@ -5154,17 +5166,6 @@
 				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
 				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
 				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
-			);
-			name = "Embed Dependencies";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		BCC393CEEFC485B4ABA28EDD /* Embed Dependencies */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 7;
-			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5498,6 +5499,7 @@
 		AD73EBAFDFD7DBD1FDC72611 /* HOAutoScroll.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = HOAutoScroll.mm; sourceTree = "<group>"; };
 		AD9A059A8DD4770868833F02 /* ctype.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ctype.cc; sourceTree = "<group>"; };
 		ADF572538B85967A1CEF9D22 /* libBundlesManager.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libBundlesManager.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		AF75D368F9E6948CDAAE7CCF /* SettingsBundlesBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SettingsBundlesBridge.mm; sourceTree = "<group>"; };
 		B06BE8D195F9EB679EE6EB38 /* tm_dialog.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = tm_dialog.mm; sourceTree = "<group>"; };
 		B06C6794B77B5A5DF3F0D69E /* BundleFetcher.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = BundleFetcher.mm; sourceTree = "<group>"; };
 		B0B8466D6D429ED2FF161FA0 /* _Tcf.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _Tcf.cc; sourceTree = "<group>"; };
@@ -7042,6 +7044,7 @@
 				30E570F4D97F24C50926CF54 /* Preferences.mm */,
 				567B54F40779104512154CC6 /* PreferencesPane.mm */,
 				6B855EEEAC6ACF41C1A6E6B1 /* ProjectsPreferences.mm */,
+				AF75D368F9E6948CDAAE7CCF /* SettingsBundlesBridge.mm */,
 				8A1C5CB6DBC26AED2DCAE576 /* SettingsFieldsBridge.mm */,
 				9A629C4F6000F3AEB413AD2A /* SettingsFormStyle.swift */,
 				77E5A9F337A4DF6309A498F6 /* SettingsSupport.swift */,
@@ -12175,6 +12178,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5BBD15A279F540EAAEB56642 /* SettingsBundlesBridge.mm in Sources */,
 				D6BDDB2A328DDA0334B35BC6 /* SettingsFieldsBridge.mm in Sources */,
 				E5960BA67047624E3F965414 /* SettingsSupportBridge.mm in Sources */,
 				3B1B3C12C5174AE422F900A6 /* SettingsVariablesBridge.mm in Sources */,

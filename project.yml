@@ -1358,6 +1358,7 @@ targets:
     type: library.static
     platform: macOS
     sources:
+      - path: "Frameworks/Preferences/src/SettingsBundlesBridge.mm"
       - path: "Frameworks/Preferences/src/SettingsFieldsBridge.mm"
       - path: "Frameworks/Preferences/src/SettingsSupportBridge.mm"
       - path: "Frameworks/Preferences/src/SettingsVariablesBridge.mm"

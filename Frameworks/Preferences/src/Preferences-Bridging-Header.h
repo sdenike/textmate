@@ -16,6 +16,7 @@
 // a system umbrella header, which is fine here; a header out of
 // Xcode/include/ is not.
 #import <Cocoa/Cocoa.h>
+#import "SettingsBundlesBridge.h"
 #import "SettingsFieldsBridge.h"
 #import "SettingsVariablesBridge.h"
 #import "TerminalSupportBridge.h"
@@ -59,6 +60,15 @@ extern NSString* const kUserDefaultsRMateServerListenKey;  // @"rmateServerListe
 extern NSString* const kUserDefaultsRMateServerPortKey;    // @"rmateServerPort"
 extern NSString* const kRMateServerListenLocalhost;        // @"localhost"
 extern NSString* const kRMateServerListenRemote;           // @"remote"
+
+// The Bundles pane's two negated checkboxes. kUserDefaultsDisableBundleUpdatesKey
+// is DEFINED in Frameworks/BundlesManager/src/BundlesManager.mm -- BundlesManager.h
+// cannot be imported here, it sits behind Xcode/include/ and pulls in
+// bundles/item.h, so this is a bare re-declaration of the same extern symbol,
+// the same indirection used above for the SoftwareUpdate keys.
+// kUserDefaultsDisableBundleSuggestionsKey is DEFINED in
+// SettingsBundlesBridge.mm, imported above.
+extern NSString* const kUserDefaultsDisableBundleUpdatesKey; // @"disableBundleUpdates"
 
 // The Files pane keeps OakEncodingPopUpButton rather than rebuilding it in
 // SwiftUI: the control reads Charsets.plist and maintains the user's own
