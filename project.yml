@@ -1180,6 +1180,8 @@ targets:
       - path: "Frameworks/SoftwareUpdate/src/OakCompareVersionStrings.mm"
       - path: "Frameworks/SoftwareUpdate/src/OakDownloadManager.mm"
       - path: "Frameworks/SoftwareUpdate/src/SoftwareUpdate.mm"
+      - path: "Frameworks/SoftwareUpdate/src/SoftwareUpdateSheet.swift"
+      - path: "Frameworks/SoftwareUpdate/src/SUButtonSpec.mm"
     settings:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"

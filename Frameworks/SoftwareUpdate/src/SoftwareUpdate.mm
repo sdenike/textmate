@@ -1,10 +1,10 @@
 #import "SoftwareUpdate.h"
 #import "OakDownloadManager.h"
+#import "SUButtonSpec.h"
+#import "SoftwareUpdate-Swift.h"
 #import <OakAppKit/NSImage Additions.h>
 #import <OakAppKit/OakAppKit.h>
 #import <OakAppKit/OakSound.h>
-#import <OakAppKit/OakTransitionViewController.h>
-#import <OakAppKit/OakUIConstructionFunctions.h>
 #import <Security/Security.h>
 
 NSString* const kUserDefaultsLastSoftwareUpdateCheckKey                        = @"SoftwareUpdateLastPoll";
@@ -427,18 +427,6 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 // = SUDownloadViewController =
 // ============================
 
-@interface SUInfoViewController : NSViewController
-@property (nonatomic) NSTextField* messageTextField;
-@property (nonatomic) NSTextField* informativeTextField;
-@end
-
-@interface SUProgressViewController : NSViewController
-@property (nonatomic) NSTextField*         messageTextField;
-@property (nonatomic) NSTextField*         informativeTextField;
-@property (nonatomic) NSProgressIndicator* progressIndicator;
-@property (nonatomic) NSProgress*          progress;
-@end
-
 @interface SUDownloadViewController ()
 {
 	SUDownloadViewController* _retainedSelf;
@@ -449,16 +437,24 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 	NSURL* _downloadedArchiveURL;
 	NSURL* _remoteURL;
 
-	NSStackView* _buttonStackView;
+	// Folded in from the old SUProgressViewController, which owned an
+	// identical timer driving its own text fields/NSProgressIndicator. Both
+	// call sites that touch these are already main-thread -- see -setDownloadProgress:
+	// and -progressTimerDidFire: below -- so no dispatch_async is needed here.
+	NSProgress* _progress;
+	NSTimer*    _progressTimer;
+
+	// self.model.buttons is @Published, and a Combine property wrapper's
+	// storage is not bridged to Objective-C -- there is no "buttons" property
+	// on the generated SoftwareUpdateSheetModel interface to read it back
+	// from. -progressTimerDidFire: needs whatever buttons the CURRENT state
+	// set without changing them, so this mirrors it on the ObjC++ side
+	// instead of trying to read it back through the model.
+	NSArray<SoftwareUpdateButtonModel*>* _currentButtons;
 }
 @property (nonatomic, getter = isUpdateBadgeVisible) BOOL updateBadgeVisible;
 @property (nonatomic) NSDictionary<NSString*, NSString*>* publicKeys;
-
-@property (nonatomic) OakTransitionViewController*  contentViewController;
-@property (nonatomic) SUInfoViewController*         infoViewController;
-@property (nonatomic) SUProgressViewController*     progressViewController;
-@property (nonatomic, readonly) NSArray<NSButton*>* buttons;
-- (NSButton*)addButtonWithTitle:(NSString*)title;
+@property (nonatomic) SoftwareUpdateSheetModel* model;
 @end
 
 @implementation SUDownloadViewController
@@ -466,12 +462,9 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 {
 	if(self = [super initWithNibName:nil bundle:nil])
 	{
-		_completionHandler      = completionHandler;
-		_publicKeys             = NSBundle.mainBundle.infoDictionary[@"TMSigningKeys"];
-
-		_contentViewController  = [[OakTransitionViewController alloc] init];
-		_infoViewController     = [[SUInfoViewController alloc] init];
-		_progressViewController = [[SUProgressViewController alloc] init];
+		_completionHandler = completionHandler;
+		_publicKeys        = NSBundle.mainBundle.infoDictionary[@"TMSigningKeys"];
+		_model             = [SoftwareUpdateSheetModel new];
 
 		self.title = @"";
 	}
@@ -489,63 +482,63 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 		_completionHandler();
 }
 
-- (NSStackView*)buttonStackView
+// Every place below that used to mutate an NSTextField/NSButton in place now
+// replaces self.model's state wholesale through these two, which is also
+// where the window is re-measured -- see -resizeToFitContent. Called before
+// the window (or even self.view) necessarily exists yet: presentError: and
+// presentUIForBackgroundCheck: both push a first state before
+// runModalWithCompletionHandler: ever asks for self.view, the same
+// seed-before-measuring order SettingsPaneFactory's callers use.
+- (void)showMessage:(NSString*)message informative:(NSString*)informative buttons:(NSArray<SoftwareUpdateButtonModel*>*)buttons
 {
-	if(!_buttonStackView)
+	_currentButtons = buttons;
+	[self.model showWithMessage:message informative:informative buttons:buttons];
+	[self resizeToFitContent];
+}
+
+- (void)showProgressMessage:(NSString*)message informative:(NSString*)informative fraction:(double)fraction indeterminate:(BOOL)indeterminate buttons:(NSArray<SoftwareUpdateButtonModel*>*)buttons
+{
+	_currentButtons = buttons;
+	[self.model showProgressWithMessage:message informative:informative fraction:fraction indeterminate:indeterminate buttons:buttons];
+	[self resizeToFitContent];
+}
+
+// Re-measures the hosted SwiftUI content and resizes the window to match,
+// keeping the top-left corner stationary -- the closest AppKit equivalent to
+// what OakTransitionViewController did for the old per-controller subviews,
+// minus its crossfade (SwiftUI switches its own content instantly on the
+// @Published change that triggers this). fittingSize reflects self.model's
+// CURRENT values synchronously, the same guarantee SettingsPaneFactory's
+// callers already rely on -- no runloop turn is needed between updating the
+// model and reading it back.
+- (void)resizeToFitContent
+{
+	NSView* view = self.view;
+	NSSize fitting = view.fittingSize;
+
+	NSWindow* window = view.window;
+	if(!window)
 	{
-		_buttonStackView = [[NSStackView alloc] initWithFrame:NSZeroRect];
-		_buttonStackView.spacing = 16;
-		[_buttonStackView setHuggingPriority:NSLayoutPriorityDefaultHigh-1 forOrientation:NSLayoutConstraintOrientationVertical];
+		view.frame = (NSRect){ .size = fitting };
+		return;
 	}
-	return _buttonStackView;
-}
 
-- (NSArray<NSButton*>*)buttons
-{
-	return self.buttonStackView.views.reverseObjectEnumerator.allObjects;
-}
+	if(NSEqualSizes(fitting, view.frame.size))
+		return;
 
-- (NSButton*)addButtonWithTitle:(NSString*)title
-{
-	NSUInteger countOfButtons = self.buttons.count;
+	NSRect contentRect = [window contentRectForFrameRect:window.frame];
+	contentRect.origin.y -= (fitting.height - contentRect.size.height); // keep the top edge stationary
+	contentRect.size = fitting;
 
-	NSButton* button = [NSButton buttonWithTitle:title target:self action:@selector(didClickButton:)];
-	button.tag = NSAlertFirstButtonReturn + countOfButtons;
-	if(countOfButtons == 0)
-		button.keyEquivalent = @"\r";
-	else if([title isEqualToString:@"Cancel"])
-		button.keyEquivalent = @"\e";
-
-	[button setContentCompressionResistancePriority:NSLayoutPriorityRequired forOrientation:NSLayoutConstraintOrientationHorizontal];
-	NSLayoutConstraint* widthConstraint = [button.widthAnchor constraintEqualToConstant:86];
-	widthConstraint.priority = NSLayoutPriorityDefaultHigh;
-	widthConstraint.active = YES;
-
-	[self.buttonStackView insertView:button atIndex:0 inGravity:NSStackViewGravityTrailing];
-
-	return button;
+	view.frame = (NSRect){ .size = fitting };
+	[window setFrame:[window frameRectForContentRect:contentRect] display:YES animate:window.isVisible];
 }
 
 - (void)loadView
 {
-	NSImage* image = [NSImage imageNamed:NSImageNameApplicationIcon];
-	image.size = NSMakeSize(64, 64);
-
-	NSDictionary* views = @{
-		@"image":   [NSImageView imageViewWithImage:image],
-		@"content": self.contentViewController.view,
-		@"buttons": self.buttonStackView,
-	};
-
-	NSView* contentView = [[NSView alloc] initWithFrame:NSZeroRect];
-	OakAddAutoLayoutViewsToSuperview(views.allValues, contentView);
-
-	[NSLayoutConstraint activateConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-(24)-[image(==64)]-(16)-[content]-|"          options:NSLayoutFormatAlignAllTop metrics:nil views:views]];
-	[NSLayoutConstraint activateConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:[image]-(>=20)-[buttons]-|"                     options:0                         metrics:nil views:views]];
-	[NSLayoutConstraint activateConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|-(16)-[image(==64)]-(>=20)-|"                  options:0                         metrics:nil views:views]];
-	[NSLayoutConstraint activateConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:[content]-(==20@750,>=20@250)-[buttons]-(18)-|" options:0                         metrics:nil views:views]];
-
-	self.view = contentView;
+	NSImage* icon = [NSImage imageNamed:NSImageNameApplicationIcon];
+	icon.size = NSMakeSize(64, 64);
+	self.view = [SoftwareUpdateViewFactory makeSheetViewWithModel:self.model icon:icon];
 }
 
 - (void)viewWillAppear
@@ -556,7 +549,9 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 - (void)viewDidDisappear
 {
 	self.updateBadgeVisible = NO;
-	[_progressViewController.progress cancel];
+	[_progress cancel];
+	[_progressTimer invalidate];
+	_progressTimer = nil;
 
 	if(_downloadedArchiveURL)
 	{
@@ -571,11 +566,11 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 
 - (BOOL)presentError:(NSError*)error
 {
-	self.contentViewController.subview = self.infoViewController.view;
-
-	self.infoViewController.messageTextField.stringValue     = @"Error Checking for Update";
-	self.infoViewController.informativeTextField.stringValue = error.localizedDescription;
-	[self addButtonWithTitle:@"OK"];
+	__weak __typeof__(self) weakSelf = self;
+	SoftwareUpdateButtonModel* ok = [[SoftwareUpdateButtonModel alloc] initWithTitle:@"OK" enabled:YES isDefault:YES isCancel:NO action:^{
+		[weakSelf respondToModalWithResponse:NSAlertFirstButtonReturn];
+	}];
+	[self showMessage:@"Error Checking for Update" informative:error.localizedDescription buttons:@[ ok ]];
 
 	[self runModalWithCompletionHandler:nil];
 
@@ -614,9 +609,12 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 	[window makeKeyAndOrderFront:self];
 }
 
-- (void)didClickButton:(id)sender
+// Replaces didClickButton:'s tag lookup: a SwiftUI button's own action closure
+// now names the response code directly (see presentUIForBackgroundCheck:
+// below) instead of a target/action/tag triple resolving it indirectly.
+- (void)respondToModalWithResponse:(NSModalResponse)response
 {
-	if(!_runModalCompletionHandler || _runModalCompletionHandler([sender tag]))
+	if(!_runModalCompletionHandler || _runModalCompletionHandler(response))
 		[self.view.window close];
 	_runModalCompletionHandler = nil;
 }
@@ -653,34 +651,33 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 	if(backgroundCheck && ordering != NSOrderedAscending)
 		return;
 
-	self.contentViewController.subview = self.infoViewController.view;
-
+	NSString* message;
+	NSString* informative;
 	if(ordering == NSOrderedAscending)
 	{
-		self.infoViewController.messageTextField.stringValue     = @"New Version Available";
-		self.infoViewController.informativeTextField.stringValue = [NSString stringWithFormat: @"%@ %@ is now available. You have version %@. Would you like to download it now?", [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleName"], remoteVersion, localVersion];
-
-		[self addButtonWithTitle:@"Download"];
-		[self addButtonWithTitle:backgroundCheck ? @"Later" : @"Cancel"];
-		self.buttons.lastObject.keyEquivalent = @"\e";
+		message     = @"New Version Available";
+		informative = [NSString stringWithFormat: @"%@ %@ is now available. You have version %@. Would you like to download it now?", [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleName"], remoteVersion, localVersion];
 	}
 	else if(ordering == NSOrderedSame)
 	{
-		self.infoViewController.messageTextField.stringValue     = @"Up To Date";
-		self.infoViewController.informativeTextField.stringValue = [NSString stringWithFormat:@"You are running %@ which is the latest version available.", remoteVersion];
-
-		[self addButtonWithTitle:@"OK"];
-		if(allowRedownload)
-			[self addButtonWithTitle:@"Redownload"];
+		message     = @"Up To Date";
+		informative = [NSString stringWithFormat:@"You are running %@ which is the latest version available.", remoteVersion];
 	}
-	else if(ordering == NSOrderedDescending)
+	else
 	{
-		self.infoViewController.messageTextField.stringValue     = @"You are Using a Prerelease";
-		self.infoViewController.informativeTextField.stringValue = [NSString stringWithFormat:@"%@ is the latest version available. You have version %@.", remoteVersion, localVersion];
-
-		[self addButtonWithTitle:@"OK"];
-		[self addButtonWithTitle:[NSString stringWithFormat:@"Downgrade to %@", remoteVersion]];
+		message     = @"You are Using a Prerelease";
+		informative = [NSString stringWithFormat:@"%@ is the latest version available. You have version %@.", remoteVersion, localVersion];
 	}
+
+	__weak __typeof__(self) weakSelf = self;
+	NSMutableArray<SoftwareUpdateButtonModel*>* buttons = [NSMutableArray array];
+	[SUButtonsForVersionCheck(ordering, backgroundCheck, allowRedownload, remoteVersion) enumerateObjectsUsingBlock:^(SUButtonSpec* spec, NSUInteger idx, BOOL* stop){
+		NSModalResponse response = NSAlertFirstButtonReturn + idx;
+		[buttons addObject:[[SoftwareUpdateButtonModel alloc] initWithTitle:spec.title enabled:spec.enabled isDefault:spec.isDefault isCancel:spec.isCancel action:^{
+			[weakSelf respondToModalWithResponse:response];
+		}]];
+	}];
+	[self showMessage:message informative:informative buttons:buttons];
 
 	[self runModalWithCompletionHandler:^BOOL(NSModalResponse response){
 		if(response == (ordering == NSOrderedAscending ? NSAlertFirstButtonReturn : NSAlertSecondButtonReturn))
@@ -713,53 +710,99 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 	[self.view.window close];
 }
 
-- (void)takeURLToDownloadFrom:(NSButton*)sender
-{
-	[self downloadSoftwareUpdateAtURL:sender.cell.representedObject];
-}
-
+// downloadArchiveAtURL:forReplacingURL:publicKeys:completionHandler:'s
+// completion handler always arrives on the main thread: OakDownloadManager.mm
+// creates the NSURLSession with delegateQueue:NSOperationQueue.mainQueue, so
+// its NSURLSessionDataDelegate callbacks (including
+// -URLSession:task:didCompleteWithError:, which invokes this on the error
+// path) run on main, and the success path additionally wraps its call in
+// dispatch_group_notify(..., dispatch_get_main_queue(), ...). No hop is
+// needed before pushing into self.model.
 - (void)downloadSoftwareUpdateAtURL:(NSURL*)downloadURL
 {
 	_remoteURL = downloadURL;
 
+	__weak __typeof__(self) weakSelf = self;
 	id <NSProgressReporting> progressReporting = [OakDownloadManager.sharedInstance downloadArchiveAtURL:downloadURL forReplacingURL:NSBundle.mainBundle.bundleURL publicKeys:self.publicKeys completionHandler:^(NSURL* extractedArchiveURL, NSError* error){
-		self.progressViewController.progress = nil;
-
-		if(extractedArchiveURL)
-		{
-			self.updateBadgeVisible = YES;
-			if(NSApp.isActive)
-				OakPlayUISound(OakSoundDidCompleteSomethingUISound);
-
-			self.progressViewController.messageTextField.stringValue = [NSString stringWithFormat:@"Downloaded %@", downloadURL.lastPathComponent];
-
-			self.buttons[0].enabled                = YES;
-			self.buttons[0].cell.representedObject = extractedArchiveURL;
-			self.buttons[0].action                 = @selector(takeURLToInstallFrom:);
-
-			_downloadedArchiveURL = extractedArchiveURL; // Will be deleted in viewDidDisappear
-		}
-		else
-		{
-			self.progressViewController.messageTextField.stringValue     = @"Error Downloading Update";
-			self.progressViewController.informativeTextField.stringValue = error.localizedDescription ?: @"";
-
-			self.buttons[0].title                  = @"Retry";
-			self.buttons[0].enabled                = YES;
-			self.buttons[0].cell.representedObject = downloadURL;
-			self.buttons[0].action                 = @selector(takeURLToDownloadFrom:);
-		}
+		[weakSelf downloadDidFinishWithArchiveURL:extractedArchiveURL downloadURL:downloadURL error:error];
 	}];
 
-	self.progressViewController.progress = progressReporting.progress;
-	self.contentViewController.subview = self.progressViewController.view;
+	SoftwareUpdateButtonModel* install = [[SoftwareUpdateButtonModel alloc] initWithTitle:@"Install & Relaunch" enabled:NO isDefault:YES isCancel:NO action:^{}];
+	SoftwareUpdateButtonModel* cancelButton = [[SoftwareUpdateButtonModel alloc] initWithTitle:@"Cancel" enabled:YES isDefault:NO isCancel:YES action:^{
+		[weakSelf cancel:nil];
+	}];
+	[self showProgressMessage:@"" informative:@"" fraction:0 indeterminate:YES buttons:@[ install, cancelButton ]];
 
-	self.buttons[0].title         = @"Install & Relaunch";
-	self.buttons[0].enabled       = NO;
+	// -setDownloadProgress: fires an immediate tick (see below), which reads
+	// self.model.buttons back to preserve whatever was just set above -- the
+	// buttons must already be correct in self.model before that first tick,
+	// or it would momentarily show the PREVIOUS state's buttons (e.g. still
+	// "Download"/"Cancel" from New Version Available).
+	[self setDownloadProgress:progressReporting.progress];
+}
 
-	self.buttons[1].title         = @"Cancel";
-	self.buttons[1].action        = @selector(cancel:);
-	self.buttons[1].keyEquivalent = @"\e";
+- (void)downloadDidFinishWithArchiveURL:(NSURL*)extractedArchiveURL downloadURL:(NSURL*)downloadURL error:(NSError*)error
+{
+	[self setDownloadProgress:nil];
+
+	__weak __typeof__(self) weakSelf = self;
+	if(extractedArchiveURL)
+	{
+		self.updateBadgeVisible = YES;
+		if(NSApp.isActive)
+			OakPlayUISound(OakSoundDidCompleteSomethingUISound);
+
+		_downloadedArchiveURL = extractedArchiveURL; // Will be deleted in viewDidDisappear
+
+		SoftwareUpdateButtonModel* install = [[SoftwareUpdateButtonModel alloc] initWithTitle:@"Install & Relaunch" enabled:YES isDefault:YES isCancel:NO action:^{
+			[weakSelf installUpdateAtURL:extractedArchiveURL];
+		}];
+		SoftwareUpdateButtonModel* cancelButton = [[SoftwareUpdateButtonModel alloc] initWithTitle:@"Cancel" enabled:YES isDefault:NO isCancel:YES action:^{
+			[weakSelf cancel:nil];
+		}];
+		[self showMessage:[NSString stringWithFormat:@"Downloaded %@", downloadURL.lastPathComponent] informative:@"" buttons:@[ install, cancelButton ]];
+	}
+	else
+	{
+		SoftwareUpdateButtonModel* retry = [[SoftwareUpdateButtonModel alloc] initWithTitle:@"Retry" enabled:YES isDefault:YES isCancel:NO action:^{
+			[weakSelf downloadSoftwareUpdateAtURL:downloadURL];
+		}];
+		SoftwareUpdateButtonModel* cancelButton = [[SoftwareUpdateButtonModel alloc] initWithTitle:@"Cancel" enabled:YES isDefault:NO isCancel:YES action:^{
+			[weakSelf cancel:nil];
+		}];
+		[self showMessage:@"Error Downloading Update" informative:(error.localizedDescription ?: @"") buttons:@[ retry, cancelButton ]];
+	}
+}
+
+// Folded in from the old SUProgressViewController.setProgress:/
+// checkProgressTimerDidFire:. The timer is armed only from inside
+// -downloadSoftwareUpdateAtURL:, which -- see that method's own comment -- is
+// itself always main-thread, so scheduledTimerWithTimeInterval: here lands on
+// the main run loop and every tick below is main-thread too.
+- (void)setDownloadProgress:(NSProgress*)newProgress
+{
+	if(_progress && !newProgress)
+		[self progressTimerDidFire:nil];
+
+	if(_progress = newProgress)
+	{
+		[self progressTimerDidFire:nil];
+		_progressTimer = [NSTimer scheduledTimerWithTimeInterval:0.04 target:self selector:@selector(progressTimerDidFire:) userInfo:nil repeats:YES];
+	}
+	else
+	{
+		[_progressTimer invalidate];
+		_progressTimer = nil;
+	}
+}
+
+- (void)progressTimerDidFire:(NSTimer*)timer
+{
+	[self showProgressMessage:_progress.localizedDescription
+	               informative:(_progress.isIndeterminate ? @"Estimating time remaining." : _progress.localizedAdditionalDescription)
+	                  fraction:_progress.fractionCompleted
+	             indeterminate:_progress.isIndeterminate
+	                   buttons:_currentButtons];
 }
 
 - (BOOL)isInstallableApplicationAtURL:(NSURL*)applicationURL
@@ -772,10 +815,13 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 	return res;
 }
 
-- (void)takeURLToInstallFrom:(NSButton*)sender
+// Not weakifying self in the alert-completion blocks below: they are one-shot
+// blocks owned transiently by NSAlert's own sheet machinery (released once
+// the sheet completes), the same shape presentAlertWithMessage:...: already
+// uses, not blocks stored long-term inside self.model the way a button's
+// action is -- see the comment on self.model.buttons in showMessage:.
+- (void)installUpdateAtURL:(NSURL*)applicationURL
 {
-	NSURL* applicationURL = sender.cell.representedObject;
-
 	if([self isInstallableApplicationAtURL:applicationURL])
 	{
 		// Trust gate: the update must carry a valid Developer ID Application
@@ -808,18 +854,14 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 			return;
 		}
 
-		self.progressViewController.messageTextField.stringValue     = [NSString stringWithFormat:@"Installing %@…", [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleName"]];
-		self.progressViewController.informativeTextField.stringValue = @"";
-		self.progressViewController.progressIndicator.indeterminate  = YES;
-		[self.progressViewController.progressIndicator startAnimation:self];
-
-		self.buttons[0].enabled = NO;
-		self.buttons[1].enabled = NO;
+		SoftwareUpdateButtonModel* install = [[SoftwareUpdateButtonModel alloc] initWithTitle:@"Install & Relaunch" enabled:NO isDefault:YES isCancel:NO action:^{}];
+		SoftwareUpdateButtonModel* cancelButton = [[SoftwareUpdateButtonModel alloc] initWithTitle:@"Cancel" enabled:NO isDefault:NO isCancel:YES action:^{}];
+		[self showProgressMessage:[NSString stringWithFormat:@"Installing %@…", [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleName"]] informative:@"" fraction:0 indeterminate:YES buttons:@[ install, cancelButton ]];
 
 		NSError* error;
 		if([NSFileManager.defaultManager replaceItemAtURL:NSBundle.mainBundle.bundleURL withItemAtURL:applicationURL backupItemName:nil options:NSFileManagerItemReplacementUsingNewMetadataOnly resultingItemURL:nil error:&error])
 		{
-			self.progressViewController.messageTextField.stringValue = [NSString stringWithFormat:@"Relaunching %@…", [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleName"]];
+			[self showProgressMessage:[NSString stringWithFormat:@"Relaunching %@…", [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleName"]] informative:@"" fraction:0 indeterminate:YES buttons:@[ install, cancelButton ]];
 
 			NSString* script = [NSString stringWithFormat:@"{ kill %1$d; while ps -xp %1$d; do if (( ++n == 300 )); then exit; fi; sleep .2; done; open \"$0\" --args $1; } &>/dev/null &", getpid()];
 
@@ -839,12 +881,14 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 		}
 		else
 		{
-			[self.progressViewController.progressIndicator stopAnimation:self];
-			self.progressViewController.progressIndicator.indeterminate = NO;
-
+			// Left indeterminate/spinning behind the "Failed to Install Update"
+			// alert rather than reverting to a static determinate bar the old
+			// stopAnimation/indeterminate=NO pair produced -- this path has no
+			// test coverage either way, and a live spinner reads at least as
+			// well as a stale full progress bar sitting behind the alert.
 			[self presentAlertWithMessage:@"Failed to Install Update" informativeText:error.localizedDescription buttonTitles:@[ @"Retry", @"Cancel" ] completionHandler:^BOOL(NSModalResponse returnCode){
 				if(returnCode == NSAlertFirstButtonReturn)
-					[self takeURLToInstallFrom:sender];
+					[self installUpdateAtURL:applicationURL];
 				return returnCode == NSAlertSecondButtonReturn; // Close window if clicking “Cancel”
 			}];
 		}
@@ -865,107 +909,5 @@ static BOOL OakBundleIsSignedByTeam (NSURL* appURL, NSString* expectedTeamID)
 			return returnCode == NSAlertSecondButtonReturn; // Close window if clicking “Cancel”
 		}];
 	}
-}
-@end
-
-// ========================
-// = SUInfoViewController =
-// ========================
-
-@implementation SUInfoViewController
-- (void)loadView
-{
-	_messageTextField     = [NSTextField labelWithString:@"New Version Available"];
-	_informativeTextField = [NSTextField wrappingLabelWithString:@"Would you like to download and install?"];
-
-	NSStackView* stackView = [NSStackView stackViewWithViews:@[
-		_messageTextField, _informativeTextField
-	]];
-
-	stackView.orientation = NSUserInterfaceLayoutOrientationVertical;
-	stackView.alignment   = NSLayoutAttributeLeading;
-	[stackView setHuggingPriority:NSLayoutPriorityDefaultHigh-1 forOrientation:NSLayoutConstraintOrientationVertical];
-
-	_messageTextField.selectable     = YES;
-	_messageTextField.font           = [NSFont boldSystemFontOfSize:0];
-	_informativeTextField.selectable = YES;
-	_informativeTextField.font       = [NSFont messageFontOfSize:NSFont.smallSystemFontSize];
-
-	[stackView.widthAnchor constraintEqualToConstant:298].active = YES;
-
-	self.view = stackView;
-}
-@end
-
-// ============================
-// = SUProgressViewController =
-// ============================
-
-@interface SUProgressViewController ()
-{
-	NSTimer* _checkProgressTimer;
-}
-@end
-
-@implementation SUProgressViewController
-- (void)loadView
-{
-	_messageTextField     = [NSTextField labelWithString:@"Downloading Archive…"];
-	_progressIndicator    = [[NSProgressIndicator alloc] initWithFrame:NSZeroRect];
-	_informativeTextField = [NSTextField labelWithString:@"999.9 MB of 999.9 MB — About 59 minutes, 59 seconds remaining"];
-
-	_messageTextField.selectable     = YES;
-	_progressIndicator.maxValue      = 1;
-	_progressIndicator.indeterminate = NO;
-	_informativeTextField.font       = [NSFont monospacedDigitSystemFontOfSize:NSFont.smallSystemFontSize weight:NSFontWeightRegular];
-	_informativeTextField.selectable = YES;
-
-	NSStackView* stackView = [NSStackView stackViewWithViews:@[
-		_messageTextField, _progressIndicator, _informativeTextField
-	]];
-	stackView.spacing     = 0;
-	stackView.orientation = NSUserInterfaceLayoutOrientationVertical;
-	stackView.alignment   = NSLayoutAttributeLeading;
-
-	[stackView.widthAnchor constraintGreaterThanOrEqualToConstant:_informativeTextField.fittingSize.width + 20].active = YES;
-
-	self.view = stackView;
-}
-
-- (void)viewWillAppear
-{
-	if(_progress)
-		[self checkProgressTimerDidFire:nil];
-}
-
-- (void)viewDidDisappear
-{
-	[_checkProgressTimer invalidate];
-}
-
-- (void)setProgress:(NSProgress*)newProgress
-{
-	if(_progress && !newProgress)
-		[self checkProgressTimerDidFire:nil];
-
-	if(_progress = newProgress)
-	{
-		[self checkProgressTimerDidFire:nil];
-
-		_checkProgressTimer = [NSTimer scheduledTimerWithTimeInterval:0.04 target:self selector:@selector(checkProgressTimerDidFire:) userInfo:nil repeats:YES];
-		[self checkProgressTimerDidFire:_checkProgressTimer];
-	}
-	else
-	{
-		[_checkProgressTimer invalidate];
-		_checkProgressTimer = nil;
-	}
-}
-
-- (void)checkProgressTimerDidFire:(NSTimer*)timer
-{
-	_messageTextField.stringValue     = _progress.localizedDescription;
-	_informativeTextField.stringValue = _progress.isIndeterminate ? @"Estimating time remaining." : _progress.localizedAdditionalDescription;
-	_progressIndicator.doubleValue    = _progress.fractionCompleted;
 }
 @end
