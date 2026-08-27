@@ -4,6 +4,75 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-27 — RESUME HERE: all six panes ported; two version-drift bugs found
+
+`master` has **all six Settings panes as SwiftUI islands** — Terminal (#27) and Bundles (#28) landed
+today, and `Frameworks/Preferences` now contains **zero xibs**. Still unreleased, deliberately.
+
+### Terminal: the copy was living in the xib
+
+`TerminalPreferences.mm` read its two paragraphs' text out of the xib's initial `stringValue` and
+expanded them with `format_string::expand` over `installed` and `mate_path`. Deleting the xib would
+have deleted the copy. Both templates were lifted byte-for-byte with `od -c` first.
+
+New trap, now in CLAUDE.md: `fittingSize` came out **744×468** — too *wide*, the mirror of the
+zero-size trap already documented. `.fixedSize(horizontal: false, vertical: true)` alone let the
+unbounded width proposal reach the paragraphs unwrapped; `.frame(maxWidth: 400)` ahead of it fixed
+it. Final 490×498.
+
+### Bundles: ported, with three losses stated rather than hidden
+
+903 lines down to ~100. `fittingSize` **642×479, identical at 0/1/9/54/200 rows**. Lost: hover-reveal
+of the link and gear icons (both always visible now), `NSSortDescriptor` cycling (native `Table`
+`sortOrder` instead), and `viewDidAppear`'s first-responder assignment. A hand-rolled search field
+was written first and replaced with a hosted `NSSearchField` — no clear button, no Escape-to-clear,
+no recessed chrome on the hand-rolled one.
+
+### `mate` could never replace an upstream install
+
+Maintainer hit `Can't find TextMate.app`. `/usr/local/bin/mate` was upstream's Oct 2021 binary
+looking up `com.macromates.TextMate`. Root cause: `mate.mm` hardcoded `AppVersion = "2.13.3"`,
+upstream's own number, so `updateMateIfRequired` compared *equal* and never updated. Anyone
+upgrading from real TextMate is stuck the same way, silently.
+
+`Ruling: derive mate's version from CHANGELOG.md via a build script phase, and make
+updateMateIfRequired ask the installed binary rather than trust a remembered default. Cost if wrong:
+mate reports a version that disagrees with the app, which is what it already did.`
+
+**The first attempt was wrong in a way that passed every local check.** It threaded the version
+through `TEXTMATE_MATE_VERSION` exported by `bin/build` — but `release.yml:135` and
+`build-and-test.yml:28` call `xcodebuild` **directly**, as does ⌘B. Every shipped binary would have
+taken the `2.13.3` fallback while the developer's machine looked perfect. Caught by checking the
+workflows rather than the local build.
+
+### The QuickLook extension had the same disease, one step worse
+
+Its `CFBundleShortVersionString` was the literal `3.0.0-revived.25` — right on 2026-08-18, stale on
+the 19th, with nothing to keep it in sync ever. macOS **requires** an appex's version to match its
+parent, and the failure mode is the silent one that whole extension exists to fix. Now derived from
+the same `app_version()`. `pluginkit -m -p com.apple.quicklook.preview` confirms it registers at
+`3.0.0-revived.26`.
+
+### If interrupted here
+
+Open PR: **version fixes** on `fix/mate-version-collision`. Terminal and Bundles are merged.
+
+Remaining for "all modern": **the software-update sheet** (`SoftwareUpdate.mm` — `SUDownload`/
+`SUInfo`/`SUProgress` view controllers in an `NSPanel`, all code-built, no xib; all three are used
+*only* by that sheet, so it is self-contained) and **About**.
+
+About was re-measured rather than assumed: `About.html` 1.4 KB, `Legal.html` 2.2 KB, but
+`CHANGELOG.html` **276 KB across 202 releases of which only 27 are this fork's**. The old "you'd
+have to write a Markdown renderer" objection is entirely about that changelog. Proposal put to the
+maintainer: parse `CHANGELOG.md` into structured data at build time so SwiftUI renders headings and
+lists as *layout* and only needs `AttributedString(markdown:)` for inline links — which it does
+support. Drops the `WKWebView`, the JS bridge and ~276 KB. **Not yet approved** — it changes About to
+show 27 releases plus a link, not 202.
+
+`gh` in this repo still defaults to **upstream `textmate/textmate`** — pass `-R sdenike/textmate`.
+
+---
+
 ## 2026-08-27 — the Terminal pane went SwiftUI; the framework's last xib is gone
 
 Branch `phase-6/swiftui-terminal-pane`. Ported the last of the five simple Settings panes, following
