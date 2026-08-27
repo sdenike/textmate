@@ -6,7 +6,19 @@
 #include <io/path.h>
 #include <plist/uuid.h>
 
-static char const* const AppVersion = "2.13.3";
+// MATE_APP_VERSION comes from GCC_PREPROCESSOR_DEFINITIONS (project.yml),
+// threaded through from the same CHANGELOG.md heading that supplies the
+// app's own CFBundleShortVersionString (see bin/build and
+// Xcode/scripts/assemble_resources.sh's app_version()). The literal fallback
+// keeps this file compiling standalone, and matters on its own: upstream's
+// mate reports "2.13.3" too, and a fork mate that also reports "2.13.3" is
+// how updateMateIfRequired ends up unable to ever replace an upstream binary
+// (both versions compare equal, so OakCompareVersionStrings never says the
+// fork's copy is newer).
+#ifndef MATE_APP_VERSION
+#define MATE_APP_VERSION "2.13.3"
+#endif
+static char const* const AppVersion = MATE_APP_VERSION;
 
 static char const* socket_path ()
 {
