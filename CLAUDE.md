@@ -391,12 +391,12 @@ so the window controller's C++ theme extraction is verified by hand rather than 
 `Frameworks/Preferences` keeps its **AppKit shell** — `Preferences.mm` owns the window, toolbar,
 pane switching, key equivalents and persistence, and is deliberately untouched. Each *pane* is
 ported individually: its `loadView` installs an `NSHostingView` and the SwiftUI content lives in
-Swift. Four are done — Software Update, Projects, Variables, Files. Terminal and Bundles are not.
+Swift. Five are done — Software Update, Projects, Variables, Files, Terminal. Bundles is not.
 
 The design is `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`. Read it before
 porting another pane; it records why About was dropped entirely and why the order is what it is.
 
-**Six things here are non-obvious and each has already cost a build cycle or a shipped defect.**
+**Seven things here are non-obvious and each has already cost a build cycle or a shipped defect.**
 
 - **Every ObjC++ bridge function needs `extern "C"`** (`#ifdef __cplusplus` … `}`). Without it the
   definition gets a C++-mangled symbol while Swift's plain-C parse of the bridging header expects an
@@ -428,11 +428,22 @@ porting another pane; it records why About was dropped entirely and why the orde
   user-customisable subset, so rebuilding it means rebuilding `CustomizeEncodings.xib` too. It
   reports `intrinsicContentSize` 206×24, so no zero-size trap — but a hosted control does not inherit
   `LabeledContent`'s trailing alignment and needs placing explicitly.
+- **A `Text` with no width constraint reports its UNWRAPPED width as `fittingSize`, the mirror image
+  of the zero-size trap above.** The Terminal pane's two descriptive paragraphs, given only
+  `.fixedSize(horizontal: false, vertical: true)` to make them report a real wrapped height, measured
+  a 744-point-wide pane instead of the ~490 every sibling pane settles at: `fittingSize`'s query
+  proposes unbounded width, and `fixedSize(horizontal: false, …)` passes that straight through rather
+  than capping it, so the paragraph reports its ideal *unwrapped* single-line width instead of
+  wrapping. Adding `.frame(maxWidth: 400, alignment: .leading)` ahead of the `fixedSize` call fixed it
+  back to 490×498, matching the family — a long paragraph in a form needs an explicit width cap, not
+  just a height fix.
 
 **Negated checkboxes are the recurring trap.** Several panes bind a positively-phrased label to a
-`disable…` key through `NSNegateBooleanTransformerName` — Projects and Files have three each. A lost
-negation silently inverts the setting while the checkbox looks correct, and no test in this tree can
-catch it. Verify by `defaults export`, toggling every control, exporting again and diffing.
+`disable…` key through `NSNegateBooleanTransformerName` — Projects and Files have three each, and
+Terminal has one key doing it three ways (the "Accept rmate connections" checkbox's value, plus the
+port field's and the interface popup's `enabled`). A lost negation silently inverts the setting while
+the checkbox looks correct, and no test in this tree can catch it. Verify by `defaults export`,
+toggling every control, exporting again and diffing.
 
 **`Preferences_test` exists now** (it did not before Phase 6) and is wired into
 `.github/workflows/build-and-test.yml`'s hand-maintained `TESTS` list — **new `<name>_test` targets

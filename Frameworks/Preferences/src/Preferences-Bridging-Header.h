@@ -18,6 +18,7 @@
 #import <Cocoa/Cocoa.h>
 #import "SettingsFieldsBridge.h"
 #import "SettingsVariablesBridge.h"
+#import "TerminalSupportBridge.h"
 
 extern NSString* const kUserDefaultsDisableSoftwareUpdateKey;   // @"SoftwareUpdateDisablePolling"
 extern NSString* const kUserDefaultsAskBeforeUpdatingKey;       // @"SoftwareUpdateAskBeforeUpdating"
@@ -45,6 +46,19 @@ extern NSString* const kUserDefaultsEnvironmentVariablesKey;           // @"envi
 extern NSString* const kUserDefaultsDisableSessionRestoreKey;            // @"disableSessionRestore"
 extern NSString* const kUserDefaultsDisableNewDocumentAtStartupKey;      // @"disableNewDocumentAtStartup"
 extern NSString* const kUserDefaultsDisableNewDocumentAtReactivationKey; // @"disableNewDocumentAtReactivation"
+
+// The Terminal pane's rmate section. kUserDefaultsMateInstallPathKey and
+// kUserDefaultsMateInstallVersionKey are deliberately NOT re-declared here --
+// the shell-support half of the pane is pushed from TerminalPreferences.mm as
+// finished state (SettingsPaneMateInstall, in TerminalPane.swift) rather than
+// read from defaults directly, because installing needs a filesystem check, an
+// abbreviated-path display rule and format_string::expand, none of which
+// SwiftUI can do on its own.
+extern NSString* const kUserDefaultsDisableRMateServerKey; // @"rmateServerDisabled"
+extern NSString* const kUserDefaultsRMateServerListenKey;  // @"rmateServerListen"
+extern NSString* const kUserDefaultsRMateServerPortKey;    // @"rmateServerPort"
+extern NSString* const kRMateServerListenLocalhost;        // @"localhost"
+extern NSString* const kRMateServerListenRemote;           // @"remote"
 
 // The Files pane keeps OakEncodingPopUpButton rather than rebuilding it in
 // SwiftUI: the control reads Charsets.plist and maintains the user's own

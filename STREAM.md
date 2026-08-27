@@ -4,6 +4,88 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-27 — the Terminal pane went SwiftUI; the framework's last xib is gone
+
+Branch `phase-6/swiftui-terminal-pane`. Ported the last of the five simple Settings panes, following
+`docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`'s sequencing and CLAUDE.md's
+"Settings panes as SwiftUI islands" traps.
+
+### What stayed in ObjC++, and why
+
+All of `TerminalPreferences.mm:33-151` — `run_auth_command`, `mk_dir`, `rm_path`, `cp_requires_admin`,
+`cp_path`, `install_mate`, `uninstall_mate` — is untouched, and so is `+updateMateIfRequired` (called
+from `AppController.mm` at launch, not from this pane). `AuthorizationRef` and
+`oak::execute_with_privileges` are C++; they were never candidates for the bridge.
+
+The only new bridge is `TerminalSupportBridge.h/.mm`, in `PreferencesSupport`, and it is deliberately
+narrow: one pure function, `TMTerminalInstallPathItems`, reproducing `-updatePopUp:`'s ordering rule
+(a custom path that is neither `~/bin/mate` nor `/usr/local/bin/mate` sorts first, then those two,
+then a separator, then "Other…") so it is unit-testable the same way `TMFileTypeItemsSorted` is.
+Everything else — status/summary text, install state, the path list, the Install/Uninstall action,
+the Other… save-panel flow — follows the push/closure shape every other pane already uses
+(`SettingsPaneFileBrowserLocation`/`SettingsPaneUpdateStatus`): a new `SettingsPaneMateInstall`
+`@objc` `ObservableObject`, pushed from a new `-pushState` in `TerminalPreferences.mm` (replacing
+`-updateUI:`), with escaping closures for the two actions (`onSelectPath`, `onInstallOrUninstall`).
+No plain-C bridge function was needed for the state/action half at all — `TerminalPreferences.mm`
+already imports `Preferences-Swift.h` the same way `ProjectsPreferences.mm` does, so it calls the
+Swift factory and passes ObjC blocks directly.
+
+### The corner help button is a real NSButton, not a SwiftUI reimplementation
+
+`PreferencesPane.help:` reads `[sender alternateTitle]` for the anchor, and `help:` is inherited, not
+visible across the bridging header. Rather than guess whether this view controller sits in the
+responder chain once its view is a hosted SwiftUI tree, `-loadView` builds the actual button
+(`bezelStyle = .helpButton`, `alternateTitle = @"terminal"`, `target = self`, `action =
+@selector(help:)`) and hands it to a one-line `NSViewRepresentable` that just returns it. Unambiguous,
+and the same button object the AppKit pane would have used.
+
+### Three negated sites, sense preserved
+
+`disableRMate` backs three controls the xib bound through `NSNegateBoolean`: the "Accept rmate
+connections" checkbox's value, and the port field's and interface popup's `enabled`. The SwiftUI port
+uses a `Binding` that negates on both get and set for the checkbox
+(`Binding(get: { !disableRMate }, set: { disableRMate = !$0 })`), and passes `disableRMate` straight
+(un-negated) to `.disabled(...)` on the other two — `.disabled(X)` already means `enabled = !X`, so
+negating there would have been the bug. Cross-checked against the real consumer,
+`AppController.mm:481-484`, which reads the same key straight and starts the server on
+`!disableRmate` — unchanged by this port, and it agrees with what the checkbox now shows checked.
+
+`OakRMateInterfaceTransformer`'s only two references were the xib's binding and its own registration
+in `-init`; both are gone now, so the registration came out rather than sit there naming a stale
+transformer. The popup binds directly to the raw `kRMateServerListenLocalhost`/`Remote` string values,
+per the design brief.
+
+### fittingSize: 744×468 unconstrained, 490×498 fixed
+
+First measurement (standalone harness — real `TerminalPane.swift` + `SettingsFormStyle.swift`
+compiled via `swiftc` against a stub defining the bridging header's rmate constants, the same
+methodology the Software Update and Files panes used) came back **744 points wide** —
+`fittingSize`'s unbounded proposal met `.fixedSize(horizontal: false, vertical: true)` on the two
+descriptive paragraphs, which passes an unconstrained width straight through, so each paragraph
+reported its full unwrapped one-line width instead of wrapping. Adding
+`.frame(maxWidth: 400, alignment: .leading)` ahead of the `fixedSize` call on both paragraphs fixed it
+to **490×498**, matching every sibling pane's settled width, and identical whether `isInstalled` is
+true or false. Recorded as a new (seventh) trap in CLAUDE.md — the mirror image of the
+already-documented zero-size trap.
+
+### Verified
+
+`bin/build` → `** BUILD SUCCEEDED **`, no warnings against the four new/changed files (grepped the
+full log). `bin/build Preferences/test` → `** BUILD SUCCEEDED **`; `Preferences_test -v` → **30 tests
+passed** (27 existing + 3 new, for `TMTerminalInstallPathItems`'s ordering rule). Deleted
+`TerminalPreferences.xib`; `bin/verify_resources.sh` still reports OK (132 basenames, none stale) —
+the resource glob is dynamic, not a manifest, so there was nothing else to edit for the removal.
+
+### If interrupted here
+
+Committed on `phase-6/swiftui-terminal-pane`, not pushed, no PR. Only Bundles (903 lines) is left
+unported in `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`'s sequencing —
+**treat "it stays AppKit" as the default answer**, per that spec and HANDOFF.md's "Next" section. The
+release decision (cutting a `CHANGELOG.md` heading to ship the five ported panes) is still the
+maintainer's and still unmade.
+
+---
+
 ## 2026-08-25 — RESUME HERE: docs squared up; two defects found while squaring them
 
 Wrap-up pass over `README.md` and `CLAUDE.md` on `phase-6/swiftui-files-pane`. Checking the claims

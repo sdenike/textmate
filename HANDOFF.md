@@ -21,9 +21,9 @@ maintainer and enforced throughout:
 | | |
 |---|---|
 | Released | **v3.0.0-revived.26** — Setup Assistant, PR #19 |
-| Unreleased | **4 SwiftUI Settings panes on `master`** — Software Update, Projects, Variables, Files |
+| Unreleased | **5 SwiftUI Settings panes on `master`** — Software Update, Projects, Variables, Files, Terminal |
 | Phases complete | 0-5, 7 |
-| Phase 6 | remainder in progress — QuickLook and onboarding done; 4 of 6 Settings panes ported; About dropped deliberately |
+| Phase 6 | remainder in progress — QuickLook and onboarding done; 5 of 6 Settings panes ported; About dropped deliberately |
 | Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |
 | Build | `TextMate.xcodeproj`, generated from `project.yml` by XcodeGen |
 | Bundle | 26,012 KB — **1,916 KB smaller than the `undead` baseline** |
@@ -43,8 +43,8 @@ were never started:
 | Back/forward navigation | **already done — since 2018** | none |
 | **QuickLook extension** | **done and verified** — previews render syntax highlighted | — |
 | SwiftUI islands: onboarding | **done** — Setup Assistant, first launch and `Help → Setup Assistant…` | — |
-| SwiftUI islands: Settings panes | **4 of 6 done** — Software Update, Projects, Variables, Files | — |
-| SwiftUI islands: Settings — Terminal | not done — privileged `mate` install, the last xib | medium |
+| SwiftUI islands: Settings panes | **5 of 6 done** — Software Update, Projects, Variables, Files, Terminal | — |
+| SwiftUI islands: Settings — Terminal | **done** — privileged `mate` install stays ObjC++ by design; the framework's last xib is gone | — |
 | SwiftUI islands: Settings — Bundles | not done — 903 lines; **AppKit is a legitimate outcome** | large |
 | SwiftUI islands: About | **dropped deliberately** — a `WKWebView`, not AppKit | — |
 | SwiftUI islands: update sheet | not done | medium |
@@ -176,27 +176,31 @@ been made against `/Applications/TextMate.app`, an older installed release, not 
 
 ## Next
 
-`master` is at v3.0.0-revived.26 plus four ported Settings panes, **none released**. Nothing is in
+`master` is at v3.0.0-revived.26 plus five ported Settings panes, **none released**. Nothing is in
 flight — no open PRs, no open branches.
 
 **The release decision is unmade and is the maintainer's.** Cutting a `CHANGELOG.md` version heading
 publishes a signed, notarized build and updates the Homebrew cask. The standing decision was to hold
-all six panes and ship together so Settings never reaches users half-modern, and Terminal and Bundles
-are still AppKit — so the four panes are held on `master` rather than shipped. Flip it by adding the
+all six panes and ship together so Settings never reaches users half-modern, and Bundles is still
+AppKit — so the five panes are held on `master` rather than shipped. Flip it by adding the
 heading; nothing else is needed.
 
-### Phase 6 remainder — two Settings panes, the update sheet
+### Phase 6 remainder — one Settings pane, the update sheet
 
-**Four of six Settings panes are ported.** The pattern is proven and documented in `CLAUDE.md`'s
-*Settings panes as SwiftUI islands* section — read that before porting another; it records six traps
-that each cost a build cycle or a shipped defect, including one (`extern "C"`) that `Preferences_test`
-provably cannot catch.
+**Five of six Settings panes are ported.** The pattern is proven and documented in `CLAUDE.md`'s
+*Settings panes as SwiftUI islands* section — read that before porting another; it records seven
+traps that each cost a build cycle or a shipped defect, including one (`extern "C"`) that
+`Preferences_test` provably cannot catch.
 
 Order and reasoning live in `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`.
 
-**Terminal (372 lines)** — the last xib in this framework, and privileged `mate` installation through
-Authorization Services. Sequenced late deliberately: a second route to a privileged filesystem write
-earns its risk only once the pattern is proven, which it now is.
+**Terminal (372 lines) is done.** The privileged `mate` install machinery (Authorization Services)
+stays in ObjC++ untouched, reached from SwiftUI only through a narrow `TerminalSupportBridge` pure
+function (the "Location:" popup's ordering rule) plus a pushed `SettingsPaneMateInstall` model, the
+same shape the other panes use. The corner help button is a real `NSButton`, built and wired
+(`target:self action:@selector(help:)`) in ObjC++ and merely hosted in SwiftUI, since `help:`'s
+anchor comes from `-alternateTitle` and is not visible across the bridging header. The framework's
+last xib is deleted.
 
 **Bundles (903 lines)** — not really a preferences pane. An `NSArrayController`-backed table with
 network installs, four modal sheets and an eight-item contextual menu. **Treat "it stays AppKit" as

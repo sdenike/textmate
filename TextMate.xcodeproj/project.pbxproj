@@ -552,6 +552,7 @@
 		75D1C281D810CA7CC0A4BCD5 /* libns.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5ACA089AE982352D6F430735 /* libns.a */; };
 		75E35F6730A30847D62CFB53 /* libplist.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A9ED9849685A43ABB394279 /* libplist.a */; };
 		7640FC45DA0CBD024A1CBCAC /* libfile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D44D45A1C6800D1312349991 /* libfile.a */; };
+		764AB52C9D2F077FAEA8C9F2 /* TerminalSupportBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = 9DD4527E2EC7C9C5757C7C08 /* TerminalSupportBridge.mm */; };
 		7665A44D8D6AF0DA04BDAD44 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E19F8AC3F6DFA3EF9E573C7B /* Security.framework */; };
 		76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = 0CFA5B6C5738E78AA7391646 /* mate */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		76DDED8E02D220A16F94BA04 /* libiconv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 99210B9005E14E89D7EF24C7 /* libiconv.tbd */; };
@@ -791,6 +792,7 @@
 		ABE1E79E84770F456CF84C9C /* libselection.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 12E2FD75966246A93CC5CC36 /* libselection.a */; };
 		ABF91EB2D90D7BFE964FD877 /* render.cc in Sources */ = {isa = PBXBuildFile; fileRef = F914C0E01E8DFF737EF583E0 /* render.cc */; };
 		AC4DA9124979B5D59FA88074 /* libtext.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A7346ADC7019D50D93E42B15 /* libtext.a */; };
+		AC50F9DF6181CE878B99650A /* TerminalPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = F96D369DB72598390348AD29 /* TerminalPane.swift */; };
 		AC9520769980E59655AA97D8 /* libio.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 10B874173E1C9917097A3BF4 /* libio.a */; };
 		ACDE655295A0C7F8C6B1FB79 /* TMDSemaphore.mm in Sources */ = {isa = PBXBuildFile; fileRef = F0E574A62F933978C2147350 /* TMDSemaphore.mm */; };
 		ACE54FB7B05475E1CA4FB8BC /* install.cc in Sources */ = {isa = PBXBuildFile; fileRef = 3F2C66A8519644AE7E609550 /* install.cc */; };
@@ -5134,9 +5136,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 7;
+			dstSubfolderSpec = 13;
 			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5158,11 +5162,9 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstSubfolderSpec = 7;
 			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
-				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5469,6 +5471,7 @@
 		9BB1BEDA806C41954CC11CDF /* commit.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = commit.mm; sourceTree = "<group>"; };
 		9D43D2BB6AA65DAB88983AAD /* defaults.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = defaults.mm; sourceTree = "<group>"; };
 		9DCC61609567283AC392433E /* parse_test */ = {isa = PBXFileReference; includeInIndex = 0; path = parse_test; sourceTree = BUILT_PRODUCTS_DIR; };
+		9DD4527E2EC7C9C5757C7C08 /* TerminalSupportBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TerminalSupportBridge.mm; sourceTree = "<group>"; };
 		9F159C1C65F74906A4248578 /* ns_test */ = {isa = PBXFileReference; includeInIndex = 0; path = ns_test; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0C20494490A3408636944FD /* HOJSBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = HOJSBridge.mm; sourceTree = "<group>"; };
 		A22EE533040CF8DFECBFD09D /* OTVStatusBar.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OTVStatusBar.mm; sourceTree = "<group>"; };
@@ -5645,6 +5648,7 @@
 		F9112CB93AEC4E4E3DD722D7 /* ascii.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ascii.cc; sourceTree = "<group>"; };
 		F914C0E01E8DFF737EF583E0 /* render.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = render.cc; sourceTree = "<group>"; };
 		F92AEF987A5958212D969D8E /* CommitWindow.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CommitWindow.mm; sourceTree = "<group>"; };
+		F96D369DB72598390348AD29 /* TerminalPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPane.swift; sourceTree = "<group>"; };
 		FB62D9EC6A26A709AFD1F36A /* libregexp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libregexp.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		FC01590C31BAEB2E103FA556 /* alert.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = alert.mm; sourceTree = "<group>"; };
 		FC3A2ACFCD4E4DF81CAE2F80 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
@@ -7044,7 +7048,9 @@
 				E76EEECEC32CABEE6089DE13 /* SettingsSupportBridge.mm */,
 				1A9DEA155D2E42088FFF8734 /* SettingsVariablesBridge.mm */,
 				552158142570056B4898175F /* SoftwareUpdatePreferences.mm */,
+				F96D369DB72598390348AD29 /* TerminalPane.swift */,
 				E010D6C0758DDA8DB0B291B0 /* TerminalPreferences.mm */,
+				9DD4527E2EC7C9C5757C7C08 /* TerminalSupportBridge.mm */,
 				D25BE24D216758BF7BBB70BC /* VariablesPreferences.mm */,
 			);
 			path = src;
@@ -12172,6 +12178,7 @@
 				D6BDDB2A328DDA0334B35BC6 /* SettingsFieldsBridge.mm in Sources */,
 				E5960BA67047624E3F965414 /* SettingsSupportBridge.mm in Sources */,
 				3B1B3C12C5174AE422F900A6 /* SettingsVariablesBridge.mm in Sources */,
+				764AB52C9D2F077FAEA8C9F2 /* TerminalSupportBridge.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -12303,6 +12310,7 @@
 				A6102F6E1AA22D25DB875BF7 /* SettingsFormStyle.swift in Sources */,
 				72D151BDF807429F3552F928 /* SettingsSupport.swift in Sources */,
 				077F59BDF5D881094281C3E4 /* SoftwareUpdatePreferences.mm in Sources */,
+				AC50F9DF6181CE878B99650A /* TerminalPane.swift in Sources */,
 				0575CCA12F080E77A4C26E5C /* TerminalPreferences.mm in Sources */,
 				99A7F61B7FF6DA0CE79227FA /* VariablesPreferences.mm in Sources */,
 			);
