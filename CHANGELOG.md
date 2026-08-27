@@ -2,6 +2,54 @@ Title: Release Notes
 
 # Changes
 
+## 2026-08-27 (v3.0.0-revived.27)
+
+The `mate` command works again on Macs that once ran the original TextMate, and
+Settings, About and the update window are rebuilt.
+
+### Fixed
+
+* The `mate` command could not be updated, and on a Mac that had previously run
+  the original TextMate it did not work at all — `mate somefile` answered
+  "Can't find TextMate.app" and nothing ever fixed it. The copy already
+  installed in `/usr/local/bin` reported the same version number as the one
+  shipped here, so TextMate never offered to replace it, and an older copy goes
+  looking for an application this fork does not install.
+
+  The shipped command now carries this fork's own version number, and TextMate
+  asks the installed command what version it is rather than trusting what it
+  last remembered. If you are affected right now, Settings → Terminal →
+  Uninstall followed by Install fixes it immediately.
+
+* Quick Look previews could stop working after an update. The preview extension
+  carried a version number written by hand, which stopped matching the
+  application's on the first release after it was written. macOS refuses to
+  load an extension whose version disagrees with the application containing it,
+  and it does so without saying anything. Both now come from the same place.
+
+* Release notes never appeared after an update. TextMate was asked to show
+  them, but nothing was listening, and the check meant to decide whether
+  anything had changed was looking in the wrong folder and always concluded
+  there was nothing to show.
+
+### Changed
+
+* Settings is rebuilt. All six panes — Software Update, Projects, Variables,
+  Files, Terminal and Bundles — now use the current macOS interface instead of
+  layouts dating from TextMate 2. The window, its toolbar, its keyboard
+  shortcuts and every setting they read and write are unchanged.
+
+  One deliberate difference: in Settings → Bundles, the link and action buttons
+  on each row are now always visible, where previously they appeared only when
+  the pointer was over the row.
+
+* The About window no longer draws itself with an embedded web browser, and the
+  software-update window is rebuilt to match the rest of the application.
+
+* About → Changes now lists this fork's own releases rather than the whole of
+  TextMate's release history, with a link to the complete file for anything
+  older.
+
 ## 2026-08-19 (v3.0.0-revived.26)
 
 A Setup Assistant walks you through first launch.
