@@ -315,8 +315,8 @@ static std::string const kMateSummaryTextFormat =
 		{
 			[self setMateInstallPath:dstPath];
 			std::string res = io::exec(to_s(srcPath), "--version", NULL);
-			if(regexp::match_t const& m = regexp::search("\\Amate ([\\d.]+)", res))
-				[NSUserDefaults.standardUserDefaults setObject:[NSString stringWithCxxString:m[1]] forKey:kUserDefaultsMateInstallVersionKey];
+			if(NSString* version = TMParseMateVersion([NSString stringWithCxxString:res]))
+				[NSUserDefaults.standardUserDefaults setObject:version forKey:kUserDefaultsMateInstallVersionKey];
 		}
 	}
 	else
@@ -392,10 +392,19 @@ static std::string const kMateSummaryTextFormat =
 	{
 		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
 			std::string res = io::exec(to_s(newMate), "--version", NULL);
-			if(regexp::match_t const& m = regexp::search("\\Amate ([\\d.]+)", res))
+			if(NSString* newVersion = TMParseMateVersion([NSString stringWithCxxString:res]))
 			{
-				NSString* newVersion = [NSString stringWithCxxString:m[1]];
-				if(OakCompareVersionStrings(oldVersion, newVersion) == NSOrderedAscending)
+				// oldVersion (the remembered default) can be stale, absent, or
+				// describe a binary someone else replaced -- the installed
+				// binary's own --version is authoritative. io::exec on a path
+				// that no longer exists returns NULL_STR (spawn fails, process_t
+				// stays default-constructed/falsy, vexec bails before waiting on
+				// anything), which TMParseMateVersion then reports as nil, so
+				// this only falls back to the stored default when the installed
+				// binary genuinely can't be asked.
+				std::string installedRes = io::exec(to_s(oldMate), "--version", NULL);
+				NSString* installedVersion = TMParseMateVersion([NSString stringWithCxxString:installedRes]) ?: oldVersion;
+				if(OakCompareVersionStrings(installedVersion, newVersion) == NSOrderedAscending)
 				{
 					if(cp_requires_admin(to_s(oldMate)))
 					{
