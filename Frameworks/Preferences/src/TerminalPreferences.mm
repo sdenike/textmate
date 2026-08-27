@@ -1,34 +1,15 @@
 #import "TerminalPreferences.h"
 #import "Keys.h"
+#import "Preferences-Swift.h"
+#import "TerminalSupportBridge.h"
 #import <OakAppKit/NSAlert Additions.h>
-#import <OakAppKit/NSImage Additions.h>
 #import <OakFoundation/NSString Additions.h>
-#import <OakFoundation/OakStringListTransformer.h>
 #import <SoftwareUpdate/SoftwareUpdate.h> // OakCompareVersionStrings()
 #import <io/path.h>
 #import <io/exec.h>
 #import <ns/ns.h>
 #import <regexp/format_string.h>
-#import <bundles/bundles.h>
 #import <oak/compat.h>
-
-static void CreateHyperLink (NSTextField* textField, NSString* text, NSString* url)
-{
-	[textField setAllowsEditingTextAttributes:YES];
-	[textField setSelectable:YES];
-
-	NSAttributedString* str = [textField attributedStringValue];
-	NSRange range = [[str string] rangeOfString:text];
-
-	NSMutableAttributedString* attrString = [str mutableCopy];
-	[attrString beginEditing];
-	[attrString addAttribute:NSLinkAttributeName value:url range:range];
-	[attrString addAttribute:NSForegroundColorAttributeName value:[NSColor blueColor] range:range];
-	[attrString addAttribute:NSUnderlineStyleAttributeName value:@(NSUnderlineStyleSingle) range:range];
-	[attrString endEditing];
-
-	[textField setAttributedStringValue:attrString];
-}
 
 static bool run_auth_command (AuthorizationRef& auth, std::string const cmd, ...)
 {
@@ -150,80 +131,136 @@ static bool uninstall_mate (std::string const& path)
 	return access(path.c_str(), F_OK) != 0 || rm_path(path, auth);
 }
 
+// Read byte-for-byte out of TerminalPreferences.xib (git history) rather than
+// retyped: statusTextFormat used to be the initial stringValue of a text field
+// in that xib, and summaryTextFormat likewise. Both are still expanded through
+// format_string::expand exactly as before -- only the copy's home changed, not
+// its meaning. "installed" is only ever bound to the literal "installed" (its
+// absence, not its emptiness, is what the ternary tests), and mate_path is
+// deliberately either the real installed path or whatever the Location popup
+// currently shows as a preview -- see -pushState.
+//
+// The summary format's "${mate_path/^~/\$HOME/}" is a LIVE format_string
+// substitution, not inert text: it rewrites a leading ~ to the four literal
+// characters $HOME (the backslash escapes the $ so format_string does not try
+// to expand it as another variable), because the surrounding sentence is
+// itself a line meant to be pasted into ~/.bashrc, where bash performs that
+// expansion at shell-startup time, not here.
+static std::string const kMateStatusTextFormat = "Shell support ${installed:?:not }installed";
+static std::string const kMateSummaryTextFormat =
+	"To use TextMate as editor for subversion, git, and similar you need to install the mate shell command and add a line like the following to ~/.bashrc:\n"
+	"\n"
+	"\texport EDITOR=\"${mate_path/^~/\\$HOME/} -w\"\n"
+	"\n"
+	"For more information use the help button down in the corner.";
+
+@interface TerminalPreferences ()
+{
+	// The Location popup's current selection, independent of what is actually
+	// installed: nil until the user picks something, an abbreviated (~-form)
+	// path afterwards. Kept as an ivar because SwiftUI has no NSPopUpButton of
+	// its own to ask -- TMTerminalInstallPathItems rebuilds the item list from
+	// this on every -pushState, exactly as -updatePopUp: used to rebuild an
+	// NSMenu from its `path` argument.
+	NSString* _selectedPathTitle;
+	SettingsPaneMateInstall* _installModel;
+}
+@end
+
 @implementation TerminalPreferences
 - (id)init
 {
-	NSImage* icon = [NSImage imageNamed:@"Terminal" inSameBundleAsClass:[self class]];
-	if(@available(macos 11.0, *))
-		icon = [NSImage imageWithSystemSymbolName:@"terminal" accessibilityDescription:@"Terminal"];
-	if(self = [super initWithNibName:@"TerminalPreferences" label:@"Terminal" image:icon])
-	{
-		[OakStringListTransformer createTransformerWithName:@"OakRMateInterfaceTransformer" andObjectsArray:@[ kRMateServerListenLocalhost, kRMateServerListenRemote ]];
-
-		self.defaultsProperties = @{
-			@"path":         kUserDefaultsMateInstallPathKey,
-			@"disableRMate": kUserDefaultsDisableRMateServerKey,
-			@"interface":    kUserDefaultsRMateServerListenKey,
-			@"port":         kUserDefaultsRMateServerPortKey,
-		};
-	}
-	return self;
+	NSImage* icon = [NSImage imageWithSystemSymbolName:@"terminal" accessibilityDescription:@"Terminal"];
+	return [super initWithNibName:nil label:@"Terminal" image:icon];
 }
 
+// Rebuilds every piece of pushed state from scratch and hands it to
+// _installModel in one call. Called after every event that can change what
+// the pane shows: load, picking a path (standard or via the Other… save
+// panel), and install/uninstall -- exactly the set of places the AppKit pane
+// called -updateUI:. Recomputing the item list on each call rather than
+// caching it is deliberate: it is four objects, and the alternative is a
+// second place the list and the selection can disagree.
+- (void)pushState
+{
+	NSString* installedPath = self.mateInstallPath;
+	BOOL isInstalled = installedPath != nil;
+
+	NSArray<TMInstallPathItem*>* items = TMTerminalInstallPathItems(_selectedPathTitle);
+	NSInteger selectedIndex = 0;
+	if(_selectedPathTitle)
+	{
+		for(NSUInteger i = 0; i < items.count; ++i)
+		{
+			if(!items[i].isSeparator && !items[i].isOther && [items[i].title isEqualToString:_selectedPathTitle])
+			{
+				selectedIndex = i;
+				break;
+			}
+		}
+	}
+
+	// Same fallback the AppKit popup gave you for free by simply never calling
+	// -selectItemWithTitle: when path was nil, leaving its first item selected:
+	// when installed, show the real path; otherwise preview whatever the
+	// popup is currently sitting on.
+	NSString* displayedPath = isInstalled ? [installedPath stringByAbbreviatingWithTildeInPath] : items[selectedIndex].title;
+
+	std::map<std::string, std::string> variables;
+	if(isInstalled)
+		variables["installed"] = "installed";
+	variables["mate_path"] = to_s(displayedPath);
+
+	NSString* statusText  = [NSString stringWithCxxString:format_string::expand(kMateStatusTextFormat, variables)];
+	NSString* summaryText = [NSString stringWithCxxString:format_string::expand(kMateSummaryTextFormat, variables)];
+	NSImage*  statusImage = [NSImage imageNamed:(isInstalled ? NSImageNameStatusAvailable : NSImageNameStatusUnavailable)];
+
+	[_installModel updateWithStatusText:statusText summaryText:summaryText isInstalled:isInstalled statusImage:statusImage pathItems:items selectedPathIndex:selectedIndex];
+}
+
+// The fallback used when nothing has been explicitly selected yet: the first
+// entry TMTerminalInstallPathItems(nil) produces, i.e. "/usr/local/bin/mate" --
+// the same default the xib's popup had pre-selected (state="on" on that menu
+// item).
+- (NSString*)selectedPathTitleOrDefault
+{
+	return _selectedPathTitle ?: TMTerminalInstallPathItems(nil).firstObject.title;
+}
+
+// The Other… row's save-panel flow. Cancelling resets the selection to
+// whichever item is first in the CURRENT list rather than clearing it, which
+// reproduces -updatePopUp:'s old cancel branch exactly: it called
+// [installPathPopUp selectItemAtIndex:0] without rebuilding the menu, so a
+// previously-picked custom path (still item 0) stayed selected, while a plain
+// standard selection reverted to "/usr/local/bin/mate".
 - (void)selectInstallPath:(id)sender
 {
 	NSSavePanel* savePanel = [NSSavePanel savePanel];
 	[savePanel setNameFieldStringValue:@"mate"];
 	[savePanel beginSheetModalForWindow:[self view].window completionHandler:^(NSModalResponse result) {
 		if(result == NSModalResponseOK)
-				[self updatePopUp:[[savePanel.URL filePathURL] path]];
-		else	[installPathPopUp selectItemAtIndex:0];
-		[self updateUI:self];
+				self->_selectedPathTitle = [[[savePanel.URL filePathURL] path] stringByAbbreviatingWithTildeInPath];
+		else	self->_selectedPathTitle = TMTerminalInstallPathItems(self->_selectedPathTitle).firstObject.title;
+		[self pushState];
 	}];
 }
 
-- (void)updatePopUp:(NSString*)path
+// The callback SettingsPaneFactory's Location Picker invokes with the chosen
+// item's title -- empty exactly for the synthetic "Other…" row, the same
+// convention ProjectsPreferences uses for its file browser location popup.
+- (void)selectInstallPathTitle:(NSString*)title
 {
-	NSMenu* menu = [installPathPopUp menu];
-	[menu removeAllItems];
-
-	path = [path stringByAbbreviatingWithTildeInPath];
-	if(path && ![path isEqualToString:@"~/bin/mate"] && ![path isEqualToString:@"/usr/local/bin/mate"])
-		[menu addItemWithTitle:path action:@selector(updateUI:) keyEquivalent:@""];
-	[menu addItemWithTitle:@"/usr/local/bin/mate" action:@selector(updateUI:) keyEquivalent:@""];
-	[menu addItemWithTitle:@"~/bin/mate" action:@selector(updateUI:) keyEquivalent:@""];
-	[menu addItem:[NSMenuItem separatorItem]];
-	[menu addItemWithTitle:@"Other…" action:@selector(selectInstallPath:) keyEquivalent:@""];
-
-	for(NSMenuItem* menuItem in menu.itemArray)
-		menuItem.target = self;
-
-	if(path)
-		[installPathPopUp selectItemWithTitle:path];
-}
-
-- (void)updateUI:(id)sender
-{
-	BOOL isInstalled = self.mateInstallPath ? YES : NO;
-
-	std::map<std::string, std::string> variables;
-	if(isInstalled)
-		variables["installed"] = "installed";
-	variables["mate_path"] = to_s([self.mateInstallPath stringByAbbreviatingWithTildeInPath] ?: [installPathPopUp titleOfSelectedItem]);
-
-	[installStatusText setStringValue:[NSString stringWithCxxString:format_string::expand(statusTextFormat, variables)]];
-	[installSummaryText setStringValue:[NSString stringWithCxxString:format_string::expand(summaryTextFormat, variables)]];
-	self.installIndicaitorImage = [NSImage imageNamed:(isInstalled ? NSImageNameStatusAvailable : NSImageNameStatusUnavailable)];
-
-	[installPathPopUp setEnabled:isInstalled ? NO : YES];
-	[installButton setAction:isInstalled ? @selector(performUninstallMate:) : @selector(performInstallMate:)];
-	[installButton setState:isInstalled ? NSControlStateValueOn : NSControlStateValueOff];
+	if(title.length == 0)
+			[self selectInstallPath:self];
+	else
+	{
+		_selectedPathTitle = title;
+		[self pushState];
+	}
 }
 
 - (void)loadView
 {
-	[super loadView];
-
 	if(NSString* path = self.mateInstallPath)
 	{
 		if(access([path fileSystemRepresentation], F_OK) != 0)
@@ -233,20 +270,28 @@ static bool uninstall_mate (std::string const& path)
 		}
 	}
 
-	installPathPopUp.target = self;
-	installButton.target = self;
-	statusTextFormat  = to_s([installStatusText stringValue]);
-	summaryTextFormat = to_s([installSummaryText stringValue]);
-	[self updatePopUp:self.mateInstallPath];
-	[self updateUI:self];
+	_installModel = [[SettingsPaneMateInstall alloc] init];
+	[self pushState];
 
-	CreateHyperLink(rmateSummaryText, @"rmate", @"https://github.com/textmate/rmate/");
+	// Built and fully wired here rather than in Swift: help: is inherited from
+	// PreferencesPane and is not visible across the bridging header, and its
+	// anchor comes from -alternateTitle (PreferencesPane.help: reads
+	// [sender alternateTitle]), so the button has to be the real thing, not a
+	// SwiftUI reimplementation. target:self sidesteps any question of whether
+	// this view controller sits in the responder chain once its view is a
+	// hosted SwiftUI tree.
+	NSButton* helpButton = [NSButton buttonWithTitle:@"" target:self action:@selector(help:)];
+	helpButton.bezelStyle     = NSBezelStyleHelpButton;
+	helpButton.alternateTitle = @"terminal";
+
+	__weak __typeof__(self) weakSelf = self;
+	self.view = [SettingsPaneFactory terminalViewWithModel:_installModel helpButton:helpButton onSelectPath:^(NSString* title){
+		[weakSelf selectInstallPathTitle:title];
+	} onInstallOrUninstall:^{
+		[weakSelf performInstallOrUninstall];
+	}];
+
 	LSSetDefaultHandlerForURLScheme(CFSTR("txmt"), CFBundleGetIdentifier(CFBundleGetMainBundle()));
-}
-
-- (NSSize)preferredContentSize
-{
-	return self.view.frame.size;
 }
 
 - (NSString*)mateInstallPath
@@ -282,12 +327,12 @@ static bool uninstall_mate (std::string const& path)
 		[alert addButtonWithTitle:@"OK"];
 		[alert runModal];
 	}
-	[self updateUI:self];
+	[self pushState];
 }
 
-- (IBAction)performInstallMate:(id)sender
+- (void)performInstallMate
 {
-	NSString* dstObjPath = [[installPathPopUp titleOfSelectedItem] stringByExpandingTildeInPath];
+	NSString* dstObjPath = [[self selectedPathTitleOrDefault] stringByExpandingTildeInPath];
 
 	struct stat buf;
 	std::string dstPath = to_s(dstObjPath);
@@ -310,21 +355,31 @@ static bool uninstall_mate (std::string const& path)
 		[alert addButtons:@"Replace", @"Cancel", nil];
 		[alert beginSheetModalForWindow:[self.view window] completionHandler:^(NSModalResponse returnCode){
 			if(returnCode == NSAlertFirstButtonReturn)
-				[self installMateAs:[[installPathPopUp titleOfSelectedItem] stringByExpandingTildeInPath]];
+				[self installMateAs:[[self selectedPathTitleOrDefault] stringByExpandingTildeInPath]];
 		}];
 	}
 	else
 	{
 		[self installMateAs:dstObjPath];
 	}
-	[self updateUI:self];
+	[self pushState];
 }
 
-- (IBAction)performUninstallMate:(id)sender
+- (void)performUninstallMate
 {
 	if(uninstall_mate(to_s(self.mateInstallPath)))
 		[self setMateInstallPath:nil];
-	[self updateUI:self];
+	[self pushState];
+}
+
+// The Install/Uninstall button is a single control in the SwiftUI pane, its
+// title and behaviour both following isInstalled -- the same state the AppKit
+// button's -setAction:/-setState: pair used to switch on.
+- (void)performInstallOrUninstall
+{
+	if(self.mateInstallPath)
+			[self performUninstallMate];
+	else	[self performInstallMate];
 }
 
 + (void)updateMateIfRequired

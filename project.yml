@@ -1305,6 +1305,7 @@ targets:
       - path: "Frameworks/Preferences/src/SettingsFormStyle.swift"
       - path: "Frameworks/Preferences/src/SettingsSupport.swift"
       - path: "Frameworks/Preferences/src/SoftwareUpdatePreferences.mm"
+      - path: "Frameworks/Preferences/src/TerminalPane.swift"
       - path: "Frameworks/Preferences/src/TerminalPreferences.mm"
       - path: "Frameworks/Preferences/src/VariablesPreferences.mm"
     settings:
@@ -1360,6 +1361,7 @@ targets:
       - path: "Frameworks/Preferences/src/SettingsFieldsBridge.mm"
       - path: "Frameworks/Preferences/src/SettingsSupportBridge.mm"
       - path: "Frameworks/Preferences/src/SettingsVariablesBridge.mm"
+      - path: "Frameworks/Preferences/src/TerminalSupportBridge.mm"
     settings:
       base:
         GCC_PREFIX_HEADER: "$(SRCROOT)/Shared/PCH/prelude.mm"
