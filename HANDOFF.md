@@ -23,7 +23,7 @@ maintainer and enforced throughout:
 | Released | **v3.0.0-revived.26** — Setup Assistant, PR #19 |
 | Unreleased | **all 6 SwiftUI Settings panes on `master`** — Software Update, Projects, Variables, Files, Terminal, Bundles. Zero xibs left in `Frameworks/Preferences`. |
 | Phases complete | 0-5, 7 |
-| Phase 6 | remainder in progress — QuickLook and onboarding done; **all 6 Settings panes ported**; update sheet and About remain |
+| Phase 6 | remainder in progress — QuickLook and onboarding done; **all 6 Settings panes ported**; update sheet and About are now also done, each on its own unmerged branch (`phase-6/swiftui-update-sheet`, `phase-6/swiftui-about`) |
 | Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |
 | Build | `TextMate.xcodeproj`, generated from `project.yml` by XcodeGen |
 | Bundle | 26,012 KB — **1,916 KB smaller than the `undead` baseline** |
@@ -45,9 +45,9 @@ were never started:
 | SwiftUI islands: onboarding | **done** — Setup Assistant, first launch and `Help → Setup Assistant…` | — |
 | SwiftUI islands: Settings panes | **5 of 6 done** — Software Update, Projects, Variables, Files, Terminal | — |
 | SwiftUI islands: Settings — Terminal | **done** — privileged `mate` install stays ObjC++ by design; the framework's last xib is gone | — |
-| SwiftUI islands: Settings — Bundles | not done — 903 lines; **AppKit is a legitimate outcome** | large |
-| SwiftUI islands: About | **dropped deliberately** — a `WKWebView`, not AppKit | — |
-| SwiftUI islands: update sheet | not done | medium |
+| SwiftUI islands: Settings — Bundles | **done** — 903 lines ported; see STREAM.md for the three stated losses | — |
+| SwiftUI islands: About | **done** — the "settled, do not reopen" call below was revised once the Changes page had a plan that didn't need a Markdown renderer | — |
+| SwiftUI islands: update sheet | **done**, on `phase-6/swiftui-update-sheet` | — |
 | `NSSplitViewController` sidebar | not started | large — defer |
 | `NSRulerView` gutter | not done | large — **do not do** |
 
@@ -176,45 +176,47 @@ been made against `/Applications/TextMate.app`, an older installed release, not 
 
 ## Next
 
-`master` is at v3.0.0-revived.26 plus five ported Settings panes, **none released**. Nothing is in
-flight — no open PRs, no open branches.
+`master` is at v3.0.0-revived.26 plus six ported Settings panes, **none released**. Two more islands
+— the update sheet and About — are done but sit one commit each further out, on their own unmerged
+branches (`phase-6/swiftui-update-sheet`, then `phase-6/swiftui-about` on top of it), neither yet
+merged to `master`.
 
 **The release decision is unmade and is the maintainer's.** Cutting a `CHANGELOG.md` version heading
 publishes a signed, notarized build and updates the Homebrew cask. The standing decision was to hold
-all six panes and ship together so Settings never reaches users half-modern, and Bundles is still
-AppKit — so the five panes are held on `master` rather than shipped. Flip it by adding the
-heading; nothing else is needed.
+everything and ship together rather than have Settings, or the rest of the app's own chrome, reach
+users half-modern. With Bundles, the update sheet and About all now done, that mainly leaves merging
+the two outstanding branches and making the call.
 
-### Phase 6 remainder — one Settings pane, the update sheet
+### Phase 6 remainder — Settings panes, the update sheet and About are all now done
 
-**Five of six Settings panes are ported.** The pattern is proven and documented in `CLAUDE.md`'s
-*Settings panes as SwiftUI islands* section — read that before porting another; it records seven
-traps that each cost a build cycle or a shipped defect, including one (`extern "C"`) that
-`Preferences_test` provably cannot catch.
+**All six Settings panes are ported** (detail in STREAM.md — Terminal and Bundles landed most
+recently, Bundles keeping three stated, deliberate losses rather than hiding them). The pattern is
+documented in `CLAUDE.md`'s *Settings panes as SwiftUI islands* section — read that before touching
+one again; it records seven traps that each cost a build cycle or a shipped defect, including one
+(`extern "C"`) that `Preferences_test` provably cannot catch.
 
-Order and reasoning live in `docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`.
+Order and reasoning for the panes live in
+`docs/superpowers/specs/2026-08-20-settings-swiftui-panes-design.md`.
 
-**Terminal (372 lines) is done.** The privileged `mate` install machinery (Authorization Services)
-stays in ObjC++ untouched, reached from SwiftUI only through a narrow `TerminalSupportBridge` pure
-function (the "Location:" popup's ordering rule) plus a pushed `SettingsPaneMateInstall` model, the
-same shape the other panes use. The corner help button is a real `NSButton`, built and wired
-(`target:self action:@selector(help:)`) in ObjC++ and merely hosted in SwiftUI, since `help:`'s
-anchor comes from `-alternateTitle` and is not visible across the bridging header. The framework's
-last xib is deleted.
+**The update sheet is done**, on `phase-6/swiftui-update-sheet` — see that branch's own commit
+(`feat(update): port the software-update sheet to SwiftUI`) and STREAM.md for what it changed; not
+re-verified in detail from this entry.
 
-**Bundles (903 lines)** — not really a preferences pane. An `NSArrayController`-backed table with
-network installs, four modal sheets and an eight-item contextual menu. **Treat "it stays AppKit" as
-the default answer** unless a port demonstrably beats it. The Variables pane is the evidence: porting
-a 189-line table cost three fix rounds and permanently lost scroll-into-view on delete, because
-`ScrollViewReader` is a silent no-op driving a `Table` inside a `Form`. Bundles is that at five times
-the scale, on a pane where a defect means failed bundle installs.
-
-**The update sheet** remains unported and unexamined.
+**About is done**, on `phase-6/swiftui-about`. The "settled, do not reopen" call further down was
+made because porting looked like it required writing a Markdown renderer for a 269 KB Changes page.
+It was reopened once there was an answer to that specific objection: `bin/gen_about_data` parses
+CHANGELOG.md and Legal.md into structured plists at build time (headings, categories and bullets as
+real structure, one fenced code block pulled out verbatim, reference-style links resolved), and
+SwiftUI renders that structure as layout, calling `AttributedString(markdown:)` only for inline
+formatting inside each bullet — never a general renderer. All 202 releases render, verified against
+the real `AttributedString(markdown:)` API rather than assumed (see that commit and `CLAUDE.md`'s
+Swift section). `about/About.md` is gone — its 13 lines are written directly in SwiftUI instead,
+per that same commit's reasoning.
 
 Settled, do not reopen:
 
-- **About** — a `WKWebView` rendering generated HTML, not AppKit. Porting means writing a Markdown
-  renderer for a 269 KB Changes page to arrive at a window that looks identical. See below.
+- **About** — *no longer settled; done.* See above: the objection was writing a Markdown renderer
+  for the Changes page, and `bin/gen_about_data` answers it without one.
 - **Scope bar** and **back/forward navigation** — present since 2014 and 2018.
 - **`NSRulerView` gutter** — recommended against: deletes ~600 lines of better-fitted code.
 - **`NSSplitViewController` sidebar** — large, no forcing function. Defer.
