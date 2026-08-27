@@ -5138,11 +5138,9 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 6;
+			dstSubfolderSpec = 7;
 			files = (
-				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
-				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
-				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
+				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5151,9 +5149,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 7;
+			dstSubfolderSpec = 13;
 			files = (
-				1BD9813D9EF55F6717A9E6F8 /* PrivilegedTool in Embed Dependencies */,
+				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
+				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
+				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -5162,11 +5162,11 @@
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstSubfolderSpec = 6;
 			files = (
-				C71D27DEF3A9052FDACE4657 /* Dialog.bundle in Embed Dependencies */,
-				C98C9AC8B9BAF6218735662B /* Dialog2.bundle in Embed Dependencies */,
-				5F510555404BF8EBEB61B441 /* QuickLookExtension.appex in Embed Dependencies */,
+				76D2BD4E2F4AAD0192447084 /* mate in Embed Dependencies */,
+				0A10348DAA486A70CDF9FDA1 /* tm_query in Embed Dependencies */,
+				894B72BE416F039D71D53D21 /* CommitWindowTool in Embed Dependencies */,
 			);
 			name = "Embed Dependencies";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -9701,6 +9701,7 @@
 			buildPhases = (
 				7DD989A6B9DC6E16D0FA2E45 /* Sources */,
 				D59CE16842D92AF199109928 /* Frameworks */,
+				E5181815585A939B8269D8E7 /* Sync CFBundleShortVersionString (QuickLookExtension) */,
 			);
 			buildRules = (
 			);
@@ -11431,6 +11432,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"$SRCROOT/Xcode/scripts/gen_test.sh\" OakAppKit";
+		};
+		E5181815585A939B8269D8E7 /* Sync CFBundleShortVersionString (QuickLookExtension) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Sync CFBundleShortVersionString (QuickLookExtension)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/Xcode/scripts/sync_quicklook_version.sh\"";
 		};
 		E583B4BFE2649F9726943C0B /* Generate mate_version.h */ = {
 			isa = PBXShellScriptBuildPhase;

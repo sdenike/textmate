@@ -12,9 +12,19 @@
 #
 # TextMateQL.qlgenerator, the fourth target this comment used to name, was
 # retired for QuickLookExtension.appex (Phase 6): a modern app-extension
-# target with no rave heritage, so it needs none of this -- INFOPLIST_FILE
-# uses native Xcode `$(VAR)` substitution and there is no other resource to
-# assemble, so it carries no postBuildScripts entry at all.
+# target with no rave heritage, so it needs none of THIS script's
+# TextMate/Dialog/Dialog2 dispatch -- INFOPLIST_FILE uses native Xcode
+# `$(VAR)` substitution and there is no other resource for this script to
+# assemble for it.
+#
+# It does carry its own, unrelated postBuildScripts entry --
+# Xcode/scripts/sync_quicklook_version.sh -- which rewrites the built appex's
+# CFBundleShortVersionString from CHANGELOG.md so it can never drift from
+# the app's own (a hardcoded literal there went stale on the very next
+# release). That script does not call into this one or this one into it;
+# note it here anyway, because the previous version of this comment claimed
+# no postBuildScripts entry existed at all, and a stale comment saying so is
+# exactly what let the literal drift unnoticed.
 #
 # NOT this script's job: embedding another target's OWN build product
 # (@PrivilegedTool, @mate, @tm_query, @Dialog, @Dialog2, @QuickLookExtension,
