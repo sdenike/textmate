@@ -22,16 +22,6 @@ set -euo pipefail
 
 unset GEM_HOME GEM_PATH RUBYLIB RUBYOPT BUNDLE_GEMFILE
 
-# Same CHANGELOG.md heading assemble_resources.sh's app_version() reads for
-# the app's own CFBundleShortVersionString (identical grep/sed one-liner),
-# threaded into the mate target's GCC_PREPROCESSOR_DEFINITIONS (project.yml)
-# so mate's --version moves with every release instead of colliding with
-# upstream's own hardcoded 2.13.3. `|| true` rather than letting a malformed
-# heading trip `set -e`: project.yml's own :default=2.13.3 covers an empty
-# value here the same way mate.mm's #ifndef covers the macro being absent.
-TEXTMATE_MATE_VERSION="$(grep -om1 '^## .* (v.*)$' CHANGELOG.md | sed 's/.*(v\(.*\))/\1/')" || TEXTMATE_MATE_VERSION=""
-export TEXTMATE_MATE_VERSION
-
 PROJECT="TextMate.xcodeproj"
 CONFIGURATION="Release"
 TARGET="${1:-TextMate}"
