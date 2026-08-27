@@ -666,6 +666,54 @@ Diagnosing it needs care: `log show` returns nothing at all in some sandboxes, a
 silence as "the extension never ran" sent two rounds of investigation the wrong way. Sampling the
 live process (`sample <pid>`) is what actually located the hang.
 
+## Versions that must track the app
+
+Three binaries carry a version that has to follow the app's, and **two of them had drifted**, each
+silently. The app's own comes from `CHANGELOG.md`: `assemble_resources.sh`'s `app_version()` greps
+the first `## ... (v...)` heading and `expand_plist.sh` substitutes it into `${APP_VERSION}`. That
+is the single source; anything that needs the version derives it from there.
+
+**`mate` collided with upstream's, which made the fork unable to replace an upstream install.**
+`Applications/mate/src/mate.mm` hardcoded `AppVersion = "2.13.3"` -- upstream TextMate's number,
+never bumped. `+[TerminalPreferences updateMateIfRequired]` only replaces the installed binary when
+`OakCompareVersionStrings(old, new) == NSOrderedAscending`, so `2.13.3` vs `2.13.3` compared *equal*
+and it never updated. A user upgrading from real TextMate keeps a `mate` that looks up
+`com.macromates.TextMate`, gets `Can't find TextMate.app`, and nothing ever fixes it. Reported by
+the maintainer 2026-08-27; Settings -> Terminal -> Uninstall then Install is the manual escape.
+
+`updateMateIfRequired` also *trusted* `kUserDefaultsMateInstallVersionKey` -- a remembered value that
+can be stale, absent, or describe a binary somebody else replaced. It now runs the installed
+`mate --version` and believes that, falling back to the default only when the binary cannot be run.
+(`io::exec` on a missing path returns `NULL_STR`: `posix_spawn` fails `ENOENT`, `process_t::pid`
+stays `-1`, and `vexec` returns before `waitpid` -- no crash, no hang.)
+
+**The version-parsing regex was `([\d.]+)`, which stops at a hyphen.** On `3.0.0-revived.27` it
+captures `3.0.0`, so every release would store the same string and recreate the collision one
+release later. It captures `\S+` now.
+
+**An environment variable exported by `bin/build` cannot carry this, and looked like it worked.**
+`release.yml:135` and `build-and-test.yml:28`/`:79` invoke `xcodebuild` **directly**, and so does
+Xcode's ⌘B -- `bin/build` is the one path where it does not matter. A first attempt threaded the
+version through `TEXTMATE_MATE_VERSION` and verified green locally while every shipped binary would
+have fallen back to the hardcoded default. Use a **build script phase**, as
+`Xcode/scripts/gen_mate_version.sh` now does: it writes `mate_version.h` into `$DERIVED_FILE_DIR`,
+carries `basedOnDependencyAnalysis: false` so it always runs, and `cmp`s before replacing so it does
+not force a recompile every build. Both halves are needed, for the same opposite reasons the test
+runners' phases document above.
+
+**The QuickLook extension's version was a hardcoded literal and macOS requires it to match.**
+`Applications/QuickLookExtension/Info.plist` said `3.0.0-revived.25` -- correct the day it was
+written, stale the next day when the app went to `.26`, and nothing kept them in sync, so it would
+go stale on *every* release. The build says so (`The CFBundleShortVersionString of an app extension
+must match that of its containing parent app`) but the runtime failure is the silent one this whole
+extension exists to fix: it fails to register and previews stop working.
+`Xcode/scripts/sync_quicklook_version.sh` now rewrites the built `.appex`'s plist from the same
+`app_version()`. The literal left in the source plist is `0.0.0` -- deliberately not mistakable for
+a real version. Verify with `pluginkit -m -p com.apple.quicklook.preview`, which prints the
+registered version; `qlmanage` cannot see app extensions at all.
+
+`CFBundleVersion` is a plain literal (`9800`) on both and is not derived from anything.
+
 ## Bundle delivery
 
 **`BundleSpec.origin` is derived at load and never persisted**, so every spec read back from

@@ -21,9 +21,9 @@ maintainer and enforced throughout:
 | | |
 |---|---|
 | Released | **v3.0.0-revived.26** — Setup Assistant, PR #19 |
-| Unreleased | **5 SwiftUI Settings panes on `master`** — Software Update, Projects, Variables, Files, Terminal |
+| Unreleased | **all 6 SwiftUI Settings panes on `master`** — Software Update, Projects, Variables, Files, Terminal, Bundles. Zero xibs left in `Frameworks/Preferences`. |
 | Phases complete | 0-5, 7 |
-| Phase 6 | remainder in progress — QuickLook and onboarding done; 5 of 6 Settings panes ported; About dropped deliberately |
+| Phase 6 | remainder in progress — QuickLook and onboarding done; **all 6 Settings panes ported**; update sheet and About remain |
 | Phases remaining | 6 (remainder), 8 (shared modules), 9 (optional LSP) |
 | Build | `TextMate.xcodeproj`, generated from `project.yml` by XcodeGen |
 | Bundle | 26,012 KB — **1,916 KB smaller than the `undead` baseline** |
