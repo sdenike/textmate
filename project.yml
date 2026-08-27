@@ -1912,6 +1912,8 @@ targets:
       - path: "Applications/TextMate/src/RMateServer.mm"
       - path: "Applications/TextMate/src/TMPlugInController.mm"
       - path: "Applications/TextMate/src/main.mm"
+      - path: "Applications/TextMate/src/AboutWindow/AboutData.swift"
+      - path: "Applications/TextMate/src/AboutWindow/AboutView.swift"
       - path: "Applications/TextMate/src/SetupAssistant/SetupAssistantView.swift"
       - path: "Applications/TextMate/src/SetupAssistant/SetupAssistantWindowController.mm"
     settings:
