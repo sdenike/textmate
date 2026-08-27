@@ -225,6 +225,65 @@ private struct FooterHost: NSViewRepresentable {
 	func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
+// MARK: - Search field
+
+// NSSearchField, hosted rather than rebuilt: the hand-rolled TextField-in-a-
+// RoundedRectangle it replaced had no clear ("x") button, no Escape-to-clear,
+// no recessed search-field chrome and no correct focus ring, all of which
+// NSSearchField gives for free. sendsWholeSearchString and
+// sendsSearchStringImmediately are declared on both NSSearchField and
+// NSSearchFieldCell (NSSearchField.h, NSSearchFieldCell.h); set on the cell
+// here to match this tree's existing search fields, e.g. OakChooser.mm's
+// `[_searchField.cell setSendsSearchStringImmediately:YES]`.
+private struct SearchField: NSViewRepresentable {
+	@Binding var text: String
+
+	// Plain target/action, unlike EncodingPopUpButton's KVO above:
+	// -setStringValue: has no notification of its own to observe, and
+	// target/action is the field's native way to report a change.
+	final class Coordinator: NSObject {
+		var text: Binding<String>
+
+		init(text: Binding<String>) {
+			self.text = text
+		}
+
+		@objc func searchFieldChanged(_ sender: NSSearchField) {
+			text.wrappedValue = sender.stringValue
+		}
+	}
+
+	func makeCoordinator() -> Coordinator {
+		Coordinator(text: $text)
+	}
+
+	func makeNSView(context: Context) -> NSSearchField {
+		let searchField = NSSearchField()
+		searchField.controlSize = .small
+		searchField.target = context.coordinator
+		searchField.action = #selector(Coordinator.searchFieldChanged(_:))
+		// The pane filters live, so every keystroke has to reach searchText,
+		// not just Return or a click on the magnifying glass -- the opposite
+		// of sendsWholeSearchString's default.
+		if let cell = searchField.cell as? NSSearchFieldCell {
+			cell.sendsWholeSearchString = false
+			cell.sendsSearchStringImmediately = true
+		}
+		searchField.stringValue = text
+		return searchField
+	}
+
+	func updateNSView(_ searchField: NSSearchField, context: Context) {
+		context.coordinator.text = $text
+		// Only assign when it actually differs: the field is the first
+		// responder while the user types, and unconditionally resetting
+		// stringValue on every keystroke fights the insertion point.
+		if searchField.stringValue != text {
+			searchField.stringValue = text
+		}
+	}
+}
+
 // MARK: - Bundles pane
 
 struct BundlesPaneView: View {
@@ -407,19 +466,18 @@ struct BundlesPaneView: View {
 	}
 
 	private var searchField: some View {
-		HStack(spacing: 4) {
-			Image(systemName: "magnifyingglass")
-				.foregroundStyle(.secondary)
-				.font(.system(size: 11))
-			TextField("", text: $searchText)
-				.textFieldStyle(.plain)
-		}
-		.padding(.horizontal, 6)
-		.padding(.vertical, 3)
-		.background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
-		.overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
-		.frame(width: 120)
-		.controlSize(.small)
+		// controlSize and the live-filter behavior are set on the hosted
+		// NSSearchField itself (SearchField.makeNSView), not here: SwiftUI's
+		// .controlSize() environment value is never read by a plain
+		// NSViewRepresentable, so applying it to this view would be a no-op.
+		// .frame(width: 120) is unchanged from the hand-rolled version and is
+		// still doing real work -- it is an EXACT width, not an offered
+		// range the way LabeledContent's trailing slot is for
+		// EncodingPopUpButton in FilesPane.swift, so there is no wider
+		// proposal for the representable to fill and no need for
+		// .fixedSize().
+		SearchField(text: $searchText)
+			.frame(width: 120)
 	}
 
 	// Mixed means an install or uninstall is in flight for this bundle
