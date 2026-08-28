@@ -26,11 +26,17 @@ static struct TMMandatoryBundle const kTMMandatoryBundles[] = {
 	// Support/shared/bin/, which is what makes the many `#!/usr/bin/env ruby18`
 	// shebangs in *other* bundles run at all. That shim is a stopgap: those
 	// bundles still need forking and porting properly. See its header comment.
+	// Also carries Ruby 2.6 compatibility shims (jcode, parsedate, iconv) in
+	// Support/shared/lib/ for third-party bundles that still `require` them,
+	// reached via a RUBYLIB entry in Preferences/Shared Support Path.tmPreferences.
+	// That same file now also sets LC_CTYPE (deferring to one already present)
+	// for shebang'd commands, which never get it from bash_init.sh — see
+	// Frameworks/command/src/runner.mm's fix_shebang.
 	{
 		"0BB1F01A-4F0A-475A-ACDD-0F5578F2EFC3",
 		"Bundle Support",
 		"https://github.com/sdenike/bundle-support.tmbundle",
-		"e828e72cc2b1fc7aefe8ad7b86cc056cd0be2add",
+		"4ab32c68cbee4d501a6596594a11226ae98c5e08",
 		"Other",
 	},
 	// branch: main
