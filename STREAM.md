@@ -4,6 +4,94 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-28 — RESUME HERE: bundle Ruby fixed by shims, not forks; set_grammar lever re-identified
+
+`bundles/ruby26-shims` is ready to push. `sdenike/bundle-support.tmbundle` is at
+`4ab32c68cbee4d501a6596594a11226ae98c5e08`, the pin is bumped, the embedded copy is refreshed and
+`bin/build` is green.
+
+### The triage that justified this work was wrong on every axis
+
+Retriaged against the real 54 installed bundles, every construct executed against
+`/usr/bin/ruby` 2.6.10 rather than inferred. `ruby18` shebangs: 14 files in 2 bundles, not 24 in 13.
+`Object#type`: **0**, not ~5 — all 597 candidates were `attr_accessor :type`, `Struct` members or
+scope-name strings. `String#each`: **0**, not ~19. And `$KCODE`/`jcode`, recorded as "confirmed
+absent entirely", are present in 12 places.
+
+**The cause of the bad numbers is worth more than the numbers.** This machine's interactive `grep`
+is a wrapper around `ugrep … -I`, and `-I` skips binary files. Bundle commands are frequently binary
+plists. That single fact undercounted 11 files. Use `/usr/bin/grep` on the bundle tree, always.
+
+### The 14 `ruby18` files were never broken
+
+`Shared Support Path.tmPreferences` carries *unscoped* `shellVariables` that
+`bundles::scope_variables` merges into the `execve` environment, and one of them appends
+`$TM_SUPPORT_PATH/bin` to `PATH` — exactly where the `ruby18` shim lives. CLAUDE.md said those files
+"die at `env: ruby18: No such file or directory` before a line of Ruby runs" and that no shim
+existed. Both were true when written; neither is now.
+
+### Shims beat forks here
+
+`Ruling: fix the remaining constructs with shims in Support/shared/lib of the one bundle we own,
+not by forking the seven third-party bundles that contain them. require resolves through $RUBYLIB,
+so one repo covers Apache, Ruby, Markdown, SQL, HTML, TextMate and Mercurial at once, plus anything
+similar we have not looked at, with no permanent divergence from upstream. Cost if wrong: a shim
+masks a real problem instead of fixing it, which is why each one names its callers in a comment so
+it can be deleted when they are fixed properly.`
+
+`RUBYLIB` had to be delivered the same way `PATH` is — `bash_init.sh` sets it, but `fix_shebang`
+(`runner.mm:134-138`) only sources that file for shebang-**less** commands, and every affected file
+carries a shebang.
+
+An empty `jcode.rb` is **not** enough: 1.9+ has `each_char`/`chars` natively but not
+`jlength`/`jcount`, and four callers use them.
+
+### Two traps that would have shipped silently
+
+`String#encode(enc, enc)` same-to-same is a **no-op that validates nothing** — and validate-or-raise
+is exactly what `db_browser.rb` uses `Iconv.iconv('utf-8','utf-8',…)` for. Worse, `invalid: :raise`
+is not a legal option value (`:replace` is the only one) and raises `ArgumentError` immediately,
+which looks like the validation working. The shim bounces through UTF-16 when `to == from`.
+
+And nothing set `LC_CTYPE` for shebang'd commands at all, so `Encoding.default_external` fell back
+to US-ASCII. Text's Word Count reported **25 characters where the answer is 22** — counting bytes.
+Fixed as a deferred default so a user's own locale still wins.
+
+### Still broken, and a shim cannot reach it
+
+`SQL.tmbundle`'s `db_browser.rb` has two of its own defects: a `?c` char-literal fallback that is an
+Integer in 1.8 and a String from 1.9 (so `pack('C*')` raises `TypeError`), and a `$: <<` append in
+its vendored `json.rb` that loses the `require 'json/version'` race to Ruby 2.6's bundled json-2.7.1,
+leaving `JSON::VARIANT_BINARY` undefined. Fixing those needs a fork of `sql.tmbundle`. Three
+commands affected. Not done.
+
+### set_grammar: HANDOFF names the wrong lever
+
+HANDOFF says to parse the visible region instead of the whole file. **That cannot work** — parser
+state chains line to line from the top, so there is no way to skip to the viewport; you could only
+stop after it, which leaves the symbol list, folding and spell-check incomplete.
+
+The real cost is that `initiate_repair` (`Frameworks/buffer/src/parsing.cc:29-81`, **not**
+`Frameworks/parse/`, which CLAUDE.md gets wrong) parses **exactly one line per invocation**, each
+costing a `dispatch_async` to a global queue plus a `CFRunLoopPerformBlock` + `CFRunLoopWakeUp` back
+to the main runloop. A 1 MB file is roughly 30,000 round-trips.
+
+`limit_redraw` looks like it batches that and does not — trace the recursion into `update_scopes`
+and it only controls how often `did_parse` fires to notify observers. The lever is batching the
+parse itself into one dispatch: semantically identical, since parsing is sequential regardless, and
+no viewport plumbing needed. **Measure first** — CLAUDE.md records two plausible deferral changes
+that were implemented correctly and measured flat.
+
+### If interrupted here
+
+Push `bundles/ruby26-shims` and open the PR. Then `bin/deploy-local` + relaunch is all the maintainer
+needs — `ensureMandatoryBundlesOnDisk` runs every launch and syncs the Managed copy when the sha
+differs from the compiled-in pin. Verified end to end.
+
+Then set_grammar, measuring before and after with `bin/bench/measure-open.sh`.
+
+---
+
 ## 2026-08-27 — RESUME HERE: Phase 6 is complete; the release decision is the only thing left
 
 Everything is merged. **No open PRs, no open branches.** `/Applications/TextMate.app` carries a

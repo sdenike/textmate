@@ -811,57 +811,112 @@ Consequences, all of which shape the eventual bundle phase:
 The fix, when the bundle phase starts: re-fork those three under an account we control and
 repoint these pins. Until then, treat the embedded copies as read-only generated output.
 
-### KNOWN GAP — bundles are not covered by the Ruby 2.6 constraint
+### Ruby 2.6 in bundles — mostly solved by shims, and the earlier triage was wrong
 
-The fork's "zero traces of Ruby 1.8" rule currently stops at the app boundary, and bundles are
-where Ruby actually executes. Triaged 2026-08-13 across the 54 installed bundles. Every verdict
-below was checked by running the construct against the real system Ruby (2.6.10p210), not
-inferred.
+Bundles are where Ruby actually executes, and the fork's "zero traces of Ruby 1.8" rule stops at the
+app boundary. Retriaged 2026-08-28 against the 54 installed bundles. **The 2026-08-13 triage this
+replaces was wrong on every axis it measured**, so treat any number here as needing re-verification
+before you act on it too.
 
-**The dominant problem is a shebang, not a language feature.** 24 files across 13 bundles begin
-`#!/usr/bin/env ruby18`. There is no `ruby18` on `PATH` and **no `ruby18` shim** in
-`bundle-support.tmbundle/Support/shared/bin/` (it ships `ruby` only), so every one of them dies at
-`env: ruby18: No such file or directory` before a line of Ruby runs. The `${TM_RUBY:-/usr/bin/ruby}`
-shim does not save these — they name a different interpreter.
+**First, the tool that produced the wrong numbers.** This machine's interactive `grep` is a wrapper
+that execs `ugrep … -I`, and `-I` **skips binary files**. Bundle commands are frequently binary
+plists, so a bare `grep` silently misses them — that alone accounted for 11 undercounted files.
+**Use `/usr/bin/grep` explicitly** whenever you search the bundle tree, and decode command bodies
+with `plutil -convert xml1 -o -`.
 
-| Bundle | Broken files | Bundle | Broken files |
-|---|---|---|---|
-| Java | 4 | Markdown | 1 |
-| Python (templates) | 4 | Ruby | 1 |
-| YAML | 3 | Source | 1 |
-| Active4D | 2 | Groovy | 1 |
-| Lua | 2 | HTML | 1 |
-| Perl | 2 | Cron | 1 |
-| Gist | 1 | | |
+What the corrected triage found, against `/usr/bin/ruby` 2.6.10 with every construct actually
+executed rather than inferred:
 
-The Python entries are `Templates/*/info.plist` whose `<key>command</key>` *is* the `ruby18`
-script, so creating a new Python file from a template fails. Two further hits are **not**
-breakage: `Ruby.tmbundle/Tests/rubylexer/regtest.rb` is a test fixture, and
-`Bundle Development.tmbundle/Snippets/Ruby 1_8 Shebang.tmSnippet` is a snippet whose `<key>content</key>`
-inserts a 1.8 shebang — intentional, though a fork that bans 1.8 arguably should not ship a
-shortcut for writing one.
+| Claimed 2026-08-13 | Actually |
+|---|---|
+| 24 `ruby18` shebangs across 13 bundles | **14 files, 2 bundles** (Gist 10, Active4D 4) — and they *work*, see below |
+| `Object#type` ~5 files | **0** — all 597 candidates were `attr_accessor :type`, `Struct` members, or scope-name strings |
+| `String#each` ~19 files | **0** — all 409 were `Array#each` or `IO#each` |
+| `$KCODE`, `jcode` "confirmed absent entirely" | **present** — `$KCODE` ×3 (HTML), `jcode` ×9 across 6 bundles |
 
-**Library and API breakage, separate from the shebangs** (these sets overlap the table above — do
-not sum them). Confirmed fatal under 2.6.10: `require 'iconv'` and `require 'parsedate'` both
-`cannot load such file` (3 files, 1 file); `Config::CONFIG` and `TimeoutError` both raise
-`NameError` (1 file, 3 files); `Object#type` raises `NoMethodError` (~5 files). A `String#each`
-pattern matches ~19 files, but that regex also catches `Array#each` and `IO#each`, which are fine
-— treat 5 and 19 as upper bounds needing per-file confirmation, not counts.
+Java, Python, YAML, Lua, Perl, Source, Groovy and Cron were all listed as broken and are now clean.
 
-**Confirmed harmless** — deprecation warning only, code still runs: `Fixnum`/`Bignum` (11 files),
-`Hash#index` (18 files). **Confirmed absent entirely**: `$KCODE`, `require 'jcode'`, `ftools`,
-`generator`, `soap`. An earlier note in this file claimed `$KCODE` and `jcode` were the real
-breakage; that was wrong, and neither appears anywhere in the installed bundles.
+**The `ruby18` shebangs are not broken, because the shim is reachable.**
+`Bundle Support.tmbundle/Preferences/Shared Support Path.tmPreferences` carries **unscoped**
+`shellVariables` — no `scope` key, so `selector_t::does_match` returns an engaged `optional` and it
+matches everything — which `bundles::scope_variables` (`wrappers.cc:148-182`) merges into the
+environment that `OakCommand` hands to `execve`:
 
-Remaining work, **scheduled before Phase 5** because Phase 5 is what makes builds public — a
-signed, notarized app that pulls stock 1.8 bundles hands the bug to real users:
+```
+TM_SUPPORT_PATH = $TM_BUNDLE_SUPPORT/shared
+PATH            = $PATH:$TM_SUPPORT_PATH/bin
+RUBYLIB         = $TM_SUPPORT_PATH/lib${RUBYLIB:+:$RUBYLIB}
+LC_CTYPE        = ${LC_CTYPE:-en_US.UTF-8}
+```
 
-1. **Fix the shebangs** — 24 files, 13 bundles. Mechanical, and it is most of the problem.
-2. **Fix the library calls** — confirm the `Object#type` and `String#each` hits per file, then port
-   `iconv`, `parsedate`, `Config::CONFIG` and `TimeoutError`.
-3. **Fork and repoint** — fork whichever bundles get changed, decide the same for
-   `themes.tmbundle` (still upstream), point `AvailableBundles.plist` at the forks so a downloaded
-   build cannot silently pull stock 1.8 bundles, document an upstream re-merge path, and fix or
-   delete `reset_bundles.sh`'s dead paths.
+`$TM_SUPPORT_PATH/bin` is exactly where the `ruby18` shim lives, so `#!/usr/bin/env ruby18`
+resolves. **This is the only mechanism that reaches a command carrying its own shebang.**
+`Support/shared/lib/bash_init.sh` also sets `RUBYLIB` and `LC_CTYPE`, but `fix_shebang`
+(`Frameworks/command/src/runner.mm:134-138`) only injects the line that sources it when
+`command->substr(0, 2) != "#!"` — i.e. for shebang-**less** commands only. Anything you need a
+shebang'd command to see must go in the `.tmPreferences`, not in `bash_init.sh`.
 
-Ruby in bundles resolves through `${TM_RUBY:-/usr/bin/ruby}` via `Support/shared/bin/ruby` in the forked `bundle-support.tmbundle`. `TM_RUBY` is the long-standing override hook — do not introduce a new Ruby discovery scheme.
+**Compatibility shims, not forks.** The remaining fatal constructs were fixed by adding shims to
+`Support/shared/lib/` in `sdenike/bundle-support.tmbundle` — the one bundle we control — rather than
+forking the seven third-party bundles that contain them (Apache, Ruby, Markdown, SQL, HTML,
+TextMate, Mercurial). `require` resolves through `$RUBYLIB`, so one repo fixes all of them and
+anything similar we have not looked at, with no permanent divergence from upstream:
+
+- **`jcode.rb`** — `jlength`, `jcount`, `jsize` over the natives. An **empty** shim is *not*
+  sufficient: 1.9+ has `each_char`/`chars` natively but not `jlength`/`jcount`, and four callers use
+  them (Markdown's two setext headings, TextMate's `copy_as_rtf.rb:126`, Text's Word Count ×4).
+  Apache's four `-rjcode` commands call nothing from it.
+- **`parsedate.rb`** — `ParseDate.parsedate` over `Date._parse`, reshaped to 1.8's 8-element array.
+  Note `Date._parse` returns `:mday`, not `:day`, and no `:wday` at all.
+- **`iconv.rb`** — `Iconv.iconv`/`Iconv.conv` plus the `Failure`/`InvalidEncoding`/`IllegalSequence`
+  classes so a `rescue` naming them parses.
+
+**Two traps the iconv shim would have shipped silently.** `String#encode(enc, enc)` same-to-same is a
+**no-op that validates nothing** — the obvious implementation of a validate-or-raise idiom does
+nothing at all. And `invalid: :raise` / `undef: :raise` are not legal option values (`:replace` is
+the only one) and raise `ArgumentError` immediately, which looks like the validation working. The
+shim bounces through UTF-16 when `to == from` instead.
+
+**`LC_CTYPE` was missing entirely, and it silently corrupted counts.** Nothing set a locale for
+shebang'd commands, so `Encoding.default_external` fell back to US-ASCII and non-ASCII stdin raised
+`invalid byte sequence in US-ASCII`. Text's Word Count reported **25 characters where the answer is
+22** — it was counting bytes. Set as a deferred default (`${LC_CTYPE:-en_US.UTF-8}`) so a user's own
+locale wins; `.tm_properties` overrides win regardless, since `variables_for_path` runs after
+`scope_variables`.
+
+**`Support/shared/bin/ruby` is not actually reached for a plain `ruby` shebang.** The `PATH` value
+**appends** `$TM_SUPPORT_PATH/bin`, and the base `PATH` from `sysctl user.cs_path` is
+`/usr/bin:/bin:/usr/sbin:/sbin`, so `#!/usr/bin/env ruby` finds `/usr/bin/ruby` first. The shim only
+wins for names with no system binary — which is why `ruby18` works and `ruby` does not.
+`TM_RUBY` remains the documented override hook; do not introduce a second Ruby discovery scheme. But
+do not assume the `ruby` shim is in the path of execution, because it is not.
+
+**What is still broken, and why a shim cannot fix it.** `SQL.tmbundle`'s `db_browser.rb` has two of
+its own defects, both pre-existing and both in a repo we do not own:
+
+1. Its rescue fallback is `content.unpack('C*').map { |ch| ch < 128 ? ch : ?? }.pack('C*')`. `?c` was
+   an Integer in 1.8 and is a one-character String from 1.9 on, so `pack('C*')` gets a mixed array
+   and raises `TypeError`.
+2. `Support/lib/json.rb` appends its directory with `$: <<`, so Ruby 2.6's bundled json-2.7.1 gem
+   wins the `require 'json/version'` race and `JSON::VARIANT_BINARY` is undefined — `NameError`
+   before the `json/pure` fallback is ever reached.
+
+Fixing those means forking `sql.tmbundle`. Not done; the three commands affected are Execute
+Line/Selection as Query, Document for Current Word, and Table Browser.
+
+Also unaddressed, and not worth a fork on their own: `Config::CONFIG` in
+`Ruby.tmbundle/Support/vendor/rcodetools/setup.rb:788` (a vendored gem installer no command calls),
+and `$KCODE = 'U'` in three HTML commands (warning only under 2.6, the code still runs).
+
+**Gist and Active4D are orphans.** Neither appears in `Bundles.plist`, `AvailableBundles.plist`,
+`DefaultBundles.plist` or `MandatoryBundles.h`, and neither has a `.git`. There is nothing upstream
+to fork or repoint. Gist's last recorded change is literally *"HACK: Force Ruby v1.8 for now"* from
+2014. Their 14 `ruby18` shebangs work via the shim; beyond that they are unmaintained.
+
+**How a change to Bundle Support reaches a running app.** `ensureMandatoryBundlesOnDisk` runs
+unconditionally on every launch — it is *not* the 3-hour poll, which explicitly excludes mandatory
+bundles — and compares the installed `.sha` against the pin compiled into `MandatoryBundles.h`,
+copying the embedded copy over `~/Library/Application Support/TextMate/Managed/Bundles/` on
+mismatch. So the loop is: push to the fork, bump the sha in `MandatoryBundles.h`, run
+`bin/fetch_embedded_bundles.sh`, `bin/build`, `bin/deploy-local`, relaunch. No Check for Updates, no
+deleting anything by hand. Verified end to end 2026-08-28.
