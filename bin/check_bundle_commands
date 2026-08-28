@@ -54,6 +54,28 @@
 #                  only counted into the warning bucket below, never
 #                  classified individually.
 #
+#                  A fatal construct is satisfied, and not reported, when the
+#                  *same scanned body* also requires the stdlib name that
+#                  shims it (a literal require, a shebang -r flag, or a
+#                  require depending on that same file's own $LOAD_PATH push
+#                  -- check 2's own three forms) and that require actually
+#                  resolves. Which constructs a shim satisfies is read from
+#                  the shim's own source at startup (jcode.rb/iconv.rb/
+#                  parsedate.rb, located via a real require resolution, using
+#                  the same definition-site detection as the paragraph
+#                  above), never hardcoded, so this tracks a shim that gains
+#                  or loses a method. A shim that cannot be located or read
+#                  warns and is treated as providing nothing, so a missing
+#                  shim still reports every call site rather than going
+#                  quiet. Deliberately scoped to the same body only, matching
+#                  the $LOAD_PATH-push handling below: a call site whose only
+#                  satisfying require sits in a *different* file -- a command
+#                  that requires a Support/lib script and separately puts
+#                  -rjcode on its own shebang, for instance -- is still
+#                  reported, because tracing that would mean following
+#                  require targets across files, which this checker does not
+#                  do anywhere else either.
+#
 # A command that mutates its own $LOAD_PATH at runtime (`$: << expr`,
 # `$LOAD_PATH.unshift`/`.push`) is honoured for requires *in that same file*:
 # each pushed argument is resolved statically -- a literal string (anchored
@@ -194,6 +216,12 @@ end
 # list): a checker whose fatal bucket keeps growing by inference stops being
 # "small and knowable".
 RUBY18_STDLIB_NAMES = %w[jcode iconv parsedate ftools generator soap].freeze
+
+# The subset of RUBY18_STDLIB_NAMES that also ships an actual compatibility
+# shim file in Bundle Support.tmbundle's Support/shared/lib/ -- ftools,
+# generator and soap have no such file to read definitions from, so a fatal
+# construct can never be shim-satisfied through them.
+SHIMMED_STDLIB_NAMES = %w[jcode iconv parsedate].freeze
 
 # [label, ruby snippet, expected outcome]. Executed against the real
 # /usr/bin/ruby at startup (never against bundle content) so the fatal/warn
@@ -350,6 +378,52 @@ def verify_classifications!
        'refusing to scan with a fatal/warning table that may no longer be true:'
   mismatches.each { |label, expected, observed, msg| warn "  #{label}: expected #{expected}, observed #{observed} (#{msg})" }
   exit 1
+end
+
+# --- shim-provided construct detection --------------------------------------
+
+# Resolves lib (one of SHIMMED_STDLIB_NAMES) against env exactly like check 2
+# does, then reads back $LOADED_FEATURES.last for the real, absolute path
+# Ruby actually loaded, rather than re-deriving Bundle Support.tmbundle's
+# Support/shared/lib path a second, independent way. Returns nil (rather than
+# raising) when the require fails, so a missing/broken shim degrades to "no
+# path", not a crash.
+def locate_shimmed_stdlib(env, lib)
+  code = "require #{lib.inspect}; puts $LOADED_FEATURES.last"
+  out, status = Open3.capture2e(env, RUBY_BIN, '-e', code, unsetenv_others: true)
+  return nil unless status.success?
+  path = out.strip
+  path.empty? ? nil : path
+end
+
+# Which FATAL_CONSTRUCTS names lib's shim actually defines, read from the
+# shim's own source using the same def/alias/alias_method/symbol-literal
+# detection check 3 uses to exclude a definition site from being flagged as a
+# use -- so this keeps working if a shim gains or loses a method, rather than
+# hardcoding "jcode provides jlength/jcount/jsize" as a fact kept separate
+# from the code that makes it true. A shim that cannot be located or read
+# provides nothing: every call site it would have satisfied is then reported
+# as fatal, and this warns rather than failing silently, since a checker that
+# goes quiet about a missing shim is worse than one that over-reports.
+def shim_provided_constructs(env, lib)
+  path = locate_shimmed_stdlib(env, lib)
+  unless path
+    warn "check_bundle_commands: could not locate the #{lib.inspect} shim via require resolution -- " \
+         "#{lib} call sites will be reported as fatal even where a shim might satisfy them."
+    return []
+  end
+
+  begin
+    content = File.read(path, encoding: 'UTF-8', invalid: :replace, undef: :replace)
+  rescue StandardError => e
+    warn "check_bundle_commands: could not read #{path} to inspect the #{lib.inspect} shim (#{e.message}) -- " \
+         "#{lib} call sites will be reported as fatal even where a shim might satisfy them."
+    return []
+  end
+
+  FATAL_CONSTRUCTS.keys.select do |name|
+    content.each_line.any? { |line| !line.strip.start_with?('#') && removed_api_definition_site?(line, name) }
+  end
 end
 
 # --- plist decoding & command-body extraction -------------------------------
@@ -784,11 +858,13 @@ end
 
 verify_classifications!
 spawn_env = build_spawn_environment(bundle_root)
+shim_provides = SHIMMED_STDLIB_NAMES.each_with_object({}) { |lib, h| h[lib] = shim_provided_constructs(spawn_env, lib) }
 
 stats = Hash.new(0)
 bundle_findings   = Hash.new { |h, k| h[k] = [] }
 bundle_summaries  = {}
 require_occurrences = Hash.new { |h, k| h[k] = [] } # [lib, extra_dirs] => [[bundle, file, line, construct], ...]
+pending_api_fatals  = [] # [[bundle, file_label, lineno, name], ...] -- checked against shim_provides once requires resolve, below
 
 bundle_dirs = Dir.glob(File.join(bundle_root, '*.tmbundle')).sort
 bundle_dirs.each do |bundle_dir|
@@ -832,8 +908,15 @@ bundle_dirs.each do |bundle_dir|
     findings, index_calls = scan_removed_apis(body)
     local[:manual_index_calls] += index_calls
     findings.each do |lineno, name, classification|
-      bundle_findings[bundle] << Finding.new(bundle, file_label, lineno, name, classification, nil)
-      local[classification == :fatal ? :api_fatal : :api_warning] += 1
+      if classification == :fatal
+        # Deferred: whether a shim satisfies this depends on require
+        # resolution, which only runs once, batched, after every bundle has
+        # been scanned -- see pending_api_fatals below.
+        pending_api_fatals << [bundle, file_label, lineno, name]
+      else
+        bundle_findings[bundle] << Finding.new(bundle, file_label, lineno, name, classification, nil)
+        local[:api_warning] += 1
+      end
     end
   end
 
@@ -869,11 +952,13 @@ end
 occurrence_pairs = require_occurrences.to_a # [[[lib, extra_dirs], occurrences], ...], fixes job/result order
 jobs = occurrence_pairs.map { |(lib, extra_dirs), _occurrences| { 'lib' => lib, 'extra_dirs' => extra_dirs } }
 results = resolve_requires(spawn_env, jobs)
+resolved_libs_by_body = Hash.new { |h, k| h[k] = [] } # [bundle, file_label] => [lib, ...] that resolved OK in that body
 occurrence_pairs.each_with_index do |((lib, _extra_dirs), occurrences), i|
   status, message = results[i] || ['FAIL', 'not resolved (child process error)']
   occurrences.each do |bundle, file_label, lineno, construct|
     if status == 'OK'
       stats[:requires_resolved] += 1
+      resolved_libs_by_body[[bundle, file_label]] << lib
     elsif RUBY18_STDLIB_NAMES.include?(lib)
       stats[:requires_ruby18] += 1
       bundle_findings[bundle] << Finding.new(bundle, file_label, lineno, "#{construct} '#{lib}'", :fatal, message)
@@ -881,6 +966,21 @@ occurrence_pairs.each_with_index do |((lib, _extra_dirs), occurrences), i|
       stats[:requires_missing_gem] += 1
       bundle_findings[bundle] << Finding.new(bundle, file_label, lineno, "#{construct} '#{lib}'", :missing_gem, message)
     end
+  end
+end
+
+# A fatal construct is satisfied, and not reported, when the same body that
+# used it also has a require of a shim (see shim_provides above) that
+# resolved -- checked here rather than inside scan_removed_apis because
+# resolution only exists once the batched require pass above has run.
+pending_api_fatals.each do |bundle, file_label, lineno, name|
+  satisfied = resolved_libs_by_body[[bundle, file_label]].any? { |lib| shim_provides[lib]&.include?(name) }
+  if satisfied
+    stats[:api_fatal_shim_satisfied] += 1
+  else
+    bundle_findings[bundle] << Finding.new(bundle, file_label, lineno, name, :fatal, nil)
+    bundle_summaries[bundle][:api_fatal] += 1
+    stats[:api_fatal] += 1
   end
 end
 
@@ -933,6 +1033,7 @@ puts "Requires: unique_jobs=#{require_occurrences.size} occurrences_resolved=#{s
      "occurrences_ruby18=#{stats[:requires_ruby18]} occurrences_missing_gem=#{stats[:requires_missing_gem]} " \
      "skipped_nonliteral=#{stats[:requires_skipped_nonliteral]} load_path_pushes_unresolved=#{stats[:load_path_unresolved]}"
 puts "Removed-API scan: fatal=#{stats[:api_fatal]} warning=#{stats[:api_warning]} " \
+     "shim_satisfied=#{stats[:api_fatal_shim_satisfied]} " \
      "needs_manual_inspection(.index, folded into warning)=#{stats[:manual_index_calls]}"
 puts "Buckets: ruby18=#{total_ruby18} missing_gem=#{total_missing_gem} unresolved=#{total_unresolved} warning=#{total_warning}"
 puts "TOTAL RUBY18 (fatal): #{total_ruby18}"
