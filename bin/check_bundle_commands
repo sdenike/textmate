@@ -1,0 +1,704 @@
+#!/System/Library/Frameworks/Ruby.framework/Versions/Current/usr/bin/ruby
+# frozen_string_literal: true
+#
+# check_bundle_commands -- static Ruby-1.8-era breakage scanner for installed
+# TextMate bundles. This is the regression net for the jcode/parsedate/iconv
+# compatibility shims (3171b9c8) and the RUBYLIB/LC_CTYPE delivery that makes
+# them reachable.
+#
+# SAFETY: this script never executes a bundle command body. Bundle commands
+# create GitHub gists, stop Apache, run SQL and send mail -- running one to
+# "check" it is not an option. Everything below is either a read-only static
+# text scan, or a syntax-only invocation (`ruby -c`, `perl -c`, `python3 -m
+# py_compile`, `bash -n`) that parses without running, or a `require` of a
+# *library name string* extracted from a command body -- never the body
+# itself -- against a real Ruby process.
+#
+# Usage:
+#   bin/check_bundle_commands [bundle-root]
+#     bundle-root defaults to
+#       ~/Library/Application Support/TextMate/Managed/Bundles
+#     and if that directory does not exist (e.g. CI), this prints a skip
+#     notice and exits 0.
+#
+# The three checks, per command/macro/drag-command/template body and per
+# standalone Support/ script:
+#   1. Syntax   -- interpreter detected from the shebang, checked with the
+#                  matching tool. Does not resolve requires.
+#   2. Requires -- every literal `require`/`require_relative` argument, plus
+#                  any `-r<lib>` shebang flag, resolved by running *only* the
+#                  require (never the body) under a faithful reproduction of
+#                  TextMate's own spawn environment: oak::basic_environment()
+#                  plus the shellVariables from Bundle Support.tmbundle's own
+#                  "Shared Support Path" preferences, which is where
+#                  TM_SUPPORT_PATH/RUBYLIB/LC_CTYPE actually come from. Both
+#                  are read/derived at runtime, not hardcoded, so this keeps
+#                  working if either changes. Non-literal arguments
+#                  (interpolation, concatenation, a method call) are skipped
+#                  and counted, never guessed at.
+#   3. Removed-API scan -- a static, per-line regex scan for a short, fixed
+#                  list of constructs that are fatal or warn under Ruby 2.6.
+#                  The classification (which constructs are fatal vs. warn)
+#                  is itself verified at startup by executing each construct
+#                  against the real /usr/bin/ruby, so the table cannot drift
+#                  from reality silently. Hash#index is deliberately NOT
+#                  matched as a specific construct here: `.index(` is exactly
+#                  as ambiguous a receiver as the `.type`/`.each` false
+#                  positives a previous manual triage rejected by the hundred
+#                  (String#index, Array#index, Enumerable#index all share the
+#                  name), so occurrences are only counted into a clearly
+#                  separate "needs manual inspection" bucket that never
+#                  affects the exit code.
+#
+# Known, deliberate blind spot: a command that mutates its own $LOAD_PATH at
+# runtime (`$: << ENV['TM_BUNDLE_SUPPORT']`, seen in several Markdown.tmbundle
+# macros) and then does a relative `require 'lib/foo'` depending on that push
+# cannot be verified here. This script never executes the body, so the push
+# never happens, and check 2 only ever sees the fixed RUBYLIB this script
+# derives from Bundle Support.tmbundle's own preferences -- which is right
+# for TM_SUPPORT_PATH (that preference is unscoped/global and is defined,
+# and therefore expanded, in Bundle Support.tmbundle's own context) but is
+# not the per-command TM_BUNDLE_SUPPORT a real running command would also
+# have (its own owning bundle's Support directory). Such requires can show
+# as unresolved here even though they resolve fine inside the real app; that
+# is a structural limit of a checker that is not allowed to run the body it
+# is checking, not a bug in the classification.
+#
+# Output is grouped by bundle for humans, and every finding/skip-summary line
+# starts with a stable all-caps tag (FATAL/WARNING/MANUAL) followed by
+# tab-separated fields, so `grep '^FATAL'`, `cut -f2`, `awk -F'\t'` etc. all
+# work. Exit status is non-zero only when at least one FATAL finding exists
+# (a failed syntax check, an unresolved literal require, or a fatal
+# removed-API construct) -- warnings, skips and the manual-inspection bucket
+# never affect it, so this can be wired into CI as a pass/fail gate later.
+
+# --- guard: leaked Ruby version manager environment ------------------------
+#
+# chruby/rbenv/rvm export GEM_HOME/GEM_PATH into the shell. RubyGems reads
+# those at interpreter *startup*, before a line of this script runs, so
+# deleting them from ENV later is too late -- confirmed empirically: system
+# Ruby 2.6.10 then tries to activate a `json` gem built for a completely
+# different Ruby (3.3) off this machine's shared ~/.gem, and dies with
+# `syntax error, unexpected ..., expecting ')'` parsing that gem's own
+# lib/json/common.rb, which reads like this script is broken rather than
+# like a leaked shell environment (the exact class of trap bin/build's own
+# header comment documents for the build). The fix has to be a re-exec: spawn
+# a genuinely fresh process with those variables unset from the start, once,
+# then get out of the way.
+if !ENV['CHECK_BUNDLE_COMMANDS_ENV_CLEAN'] &&
+   %w[GEM_HOME GEM_PATH RUBYLIB RUBYOPT BUNDLE_GEMFILE].any? { |k| ENV[k] }
+  overrides = { 'CHECK_BUNDLE_COMMANDS_ENV_CLEAN' => '1' }
+  %w[GEM_HOME GEM_PATH RUBYLIB RUBYOPT BUNDLE_GEMFILE].each { |k| overrides[k] = nil }
+  exec(overrides, '/usr/bin/ruby', File.expand_path(__FILE__), *ARGV)
+end
+
+require 'json'
+require 'open3'
+require 'tmpdir'
+require 'etc'
+
+RUBY_BIN    = '/usr/bin/ruby'
+PERL_BIN    = '/usr/bin/perl'
+PYTHON3_BIN = '/usr/bin/python3'
+BASH_BIN    = '/bin/bash'
+PLUTIL_BIN  = '/usr/bin/plutil'
+GETCONF_BIN = '/usr/bin/getconf'
+
+MIN_ENV = { 'HOME' => Dir.home, 'PATH' => '/usr/bin:/bin:/usr/sbin:/sbin' }.freeze
+
+# A macro step's own `command` is a bare Cocoa/TextMate action selector
+# ("cut:", "executeCommandWithOptions:", "moveToBeginningOfDocumentAndModify
+# Selection:") wherever it sits alongside a nested `argument` dict, which is
+# where the real script text (if any) lives instead. Real script bodies
+# always have either a shebang, multiple lines, or at least a space; a bare
+# colon-terminated identifier never does, so this is a safe, general filter
+# that needs no per-file-type keypath knowledge of Commands vs. Macros vs.
+# DragCommands vs. Templates.
+SELECTOR_RE = /\A[A-Za-z_][A-Za-z0-9_]*(?::[A-Za-z_][A-Za-z0-9_]*)*:\z/
+
+EXT_INTERPRETER = {
+  '.rb' => :ruby, '.rbx' => :ruby,
+  '.py' => :python,
+  '.pl' => :perl, '.pm' => :perl,
+  '.sh' => :bash, '.bash' => :bash,
+  '.scpt' => :osascript, '.applescript' => :osascript,
+}.freeze
+
+FATAL_CONSTRUCTS = {
+  'Config::CONFIG' => /(?<!Rb)Config::CONFIG/,
+  'TimeoutError'   => /\bTimeoutError\b/,
+  'jlength'        => /\bjlength\b/,
+  'jcount'         => /\bjcount\b/,
+  'jsize'          => /\bjsize\b/,
+}.freeze
+
+WARNING_CONSTRUCTS = {
+  '$KCODE' => /\$KCODE\b/,
+  'Fixnum' => /\bFixnum\b/,
+  'Bignum' => /\bBignum\b/,
+}.freeze
+
+# [label, ruby snippet, expected outcome]. Executed against the real
+# /usr/bin/ruby at startup (never against bundle content) so the fatal/warn
+# table above cannot silently drift from what this machine's Ruby actually
+# does. Hash#index is probed too even though it is not matched as a specific
+# construct by the scan above -- this confirms *why* it is bucketed as
+# "needs manual inspection" is call-site ambiguity, not uncertainty about
+# its severity.
+CLASSIFICATION_PROBES = [
+  ['Config::CONFIG',   'Config::CONFIG',                    :fatal],
+  ['RbConfig::CONFIG', 'RbConfig::CONFIG',                  :ok],
+  ['TimeoutError',     'TimeoutError',                      :fatal],
+  ['Timeout::Error',   "require 'timeout'; Timeout::Error", :ok],
+  ['jlength',          "''.jlength",                        :fatal],
+  ['jcount',           "''.jcount('')",                     :fatal],
+  ['jsize',            "''.jsize",                          :fatal],
+  ['$KCODE',           '$KCODE',                            :ok],
+  ['Fixnum',           'Fixnum',                            :ok],
+  ['Bignum',           'Bignum',                            :ok],
+  ['Hash#index',       '({}).index(1)',                     :ok],
+].freeze
+
+Finding = Struct.new(:bundle, :file, :line, :construct, :classification, :detail)
+
+# --- environment construction -----------------------------------------------
+
+def secure_path
+  out, status = Open3.capture2(GETCONF_BIN, 'PATH')
+  status.success? ? out.strip : '/usr/bin:/bin:/usr/sbin:/sbin'
+end
+
+def installed_app_identifier
+  info = '/Applications/TextMate.app/Contents/Info.plist'
+  return 'com.macromates.TextMate' unless File.exist?(info)
+  out, status = Open3.capture2(PLUTIL_BIN, '-extract', 'CFBundleIdentifier', 'raw', '-o', '-', info)
+  status.success? && !out.strip.empty? ? out.strip : 'com.macromates.TextMate'
+rescue StandardError
+  'com.macromates.TextMate'
+end
+
+# Mirrors oak::basic_environment() (Frameworks/io/src/environment.cc): a
+# whitelist pass over the real process environment, plus HOME/PATH/TMPDIR/
+# LOGNAME/USER/TM_APP_IDENTIFIER/TM_FULLNAME/TM_PID computed the same way.
+# The environmentWhitelist user-default override that function supports is
+# not reproduced -- this approximates the shipped default only.
+def build_baseline_environment
+  whitelist_exact = %w[COMMAND_MODE SHELL SHLVL SSH_AUTH_SOCK __CF_USER_TEXT_ENCODING]
+  whitelist_globs = [/\AApple_/, /\ADIALOG/]
+  env = {}
+  ENV.each do |k, v|
+    env[k] = v if whitelist_exact.include?(k) || whitelist_globs.any? { |g| g.match?(k) }
+  end
+
+  login = begin
+    Etc.getlogin
+  rescue StandardError
+    nil
+  end || ENV['USER'] || 'unknown'
+
+  env['HOME']              = Dir.home
+  env['PATH']              = secure_path
+  env['TMPDIR']            = ENV['TMPDIR'] || Dir.tmpdir
+  env['LOGNAME']           = login
+  env['USER']              = login
+  env['TM_APP_IDENTIFIER'] = installed_app_identifier
+  env['TM_FULLNAME']       = begin
+    Etc.getpwnam(login).gecos
+  rescue StandardError
+    nil
+  end || 'John Doe'
+  env['TM_PID'] = Process.pid.to_s
+  env
+end
+
+# Expands each shellVariable's value against the environment accumulated so
+# far using a real bash, rather than reimplementing ${VAR:+x}/${VAR:-x}
+# parameter expansion by hand -- the plist's values are already written in
+# that exact syntax. Order matters and is preserved: TM_SUPPORT_PATH must
+# expand before PATH/RUBYLIB reference it.
+def expand_shell_variables(env, shell_vars)
+  shell_vars.each do |sv|
+    name, value = sv['name'], sv['value']
+    next unless name && value
+    script = %(printf '%s' "#{value}")
+    out, status = Open3.capture2e(env, BASH_BIN, '--noprofile', '--norc', '-c', script, unsetenv_others: true)
+    unless status.success?
+      warn "check_bundle_commands: failed to expand shellVariable #{name.inspect} (#{value.inspect}): #{out}"
+      next
+    end
+    env[name] = out
+  end
+  env
+end
+
+# Faithful reproduction of TextMate's spawn environment for a bundle command:
+# oak::basic_environment() plus the shellVariables from Bundle Support's own
+# "Shared Support Path" preferences (TM_SUPPORT_PATH, PATH, RUBYLIB,
+# LC_CTYPE) -- read from that file, not hardcoded, so this keeps working if
+# it changes. TM_BUNDLE_SUPPORT is seeded to Bundle Support.tmbundle's own
+# Support directory because that preference is unscoped/global and lives in
+# Bundle Support.tmbundle, so $TM_BUNDLE_SUPPORT in *its* value expands in
+# *its* own context -- confirmed against the shipped layout: TM_SUPPORT_PATH
+# = "$TM_BUNDLE_SUPPORT/shared" only resolves to a directory that exists
+# (.../Bundle Support.tmbundle/Support/shared, holding shared/lib/jcode.rb
+# etc.) under that reading.
+def build_spawn_environment(bundle_root)
+  env = build_baseline_environment
+  prefs = File.join(bundle_root, 'Bundle Support.tmbundle', 'Preferences', 'Shared Support Path.tmPreferences')
+  unless File.exist?(prefs)
+    warn "check_bundle_commands: no \"Shared Support Path\" preferences at #{prefs} -- proceeding without " \
+         'TM_SUPPORT_PATH/RUBYLIB/LC_CTYPE, so shimmed requires will legitimately fail to resolve.'
+    return env
+  end
+
+  out, status = Open3.capture2e(PLUTIL_BIN, '-convert', 'json', '-o', '-', prefs)
+  unless status.success?
+    warn "check_bundle_commands: could not parse #{prefs} as a plist (#{out.strip}) -- proceeding without its shellVariables."
+    return env
+  end
+
+  parsed = JSON.parse(out)
+  shell_vars = parsed.dig('settings', 'shellVariables') || []
+  env['TM_BUNDLE_SUPPORT'] = File.join(bundle_root, 'Bundle Support.tmbundle', 'Support')
+  expand_shell_variables(env, shell_vars)
+end
+
+# --- classification self-check ----------------------------------------------
+
+def verify_classifications!
+  mismatches = []
+  CLASSIFICATION_PROBES.each do |label, code, expected|
+    out, status = Open3.capture2e(MIN_ENV, RUBY_BIN, '-e', code, unsetenv_others: true)
+    observed = status.success? ? :ok : :fatal
+    mismatches << [label, expected, observed, out.lines.first.to_s.strip] unless observed == expected
+  end
+  return if mismatches.empty?
+
+  warn 'check_bundle_commands: classification drift detected against the running /usr/bin/ruby -- ' \
+       'refusing to scan with a fatal/warning table that may no longer be true:'
+  mismatches.each { |label, expected, observed, msg| warn "  #{label}: expected #{expected}, observed #{observed} (#{msg})" }
+  exit 1
+end
+
+# --- plist decoding & command-body extraction -------------------------------
+
+def file_format(path)
+  head = File.binread(path, 8)
+  return :binary if head == 'bplist00'
+  return :xml if head.start_with?('<?xml')
+  :other
+rescue StandardError
+  :other
+end
+
+def selector_shaped?(str)
+  SELECTOR_RE.match?(str)
+end
+
+def extract_command_bodies(node, out = [])
+  case node
+  when Hash
+    cmd = node['command']
+    out << cmd if cmd.is_a?(String) && !cmd.empty? && !selector_shaped?(cmd)
+    node.each_value { |v| extract_command_bodies(v, out) }
+  when Array
+    node.each { |v| extract_command_bodies(v, out) }
+  end
+  out
+end
+
+# Returns [format, bodies]. format is :binary/:xml/:other by the file's own
+# on-disk magic bytes (regardless of whether plutil could parse it), bodies
+# is [] when plutil failed to convert it at all (counted separately by the
+# caller as "not a plist").
+def decode_plist_commands(path)
+  fmt = file_format(path)
+  out, status = Open3.capture2e(PLUTIL_BIN, '-convert', 'json', '-o', '-', path)
+  return [fmt, nil] unless status.success?
+
+  begin
+    parsed = JSON.parse(out)
+  rescue JSON::ParserError
+    return [fmt, nil]
+  end
+  [fmt, extract_command_bodies(parsed)]
+end
+
+# --- interpreter detection --------------------------------------------------
+
+def classify_interpreter_name(name)
+  case name
+  when 'ruby18' then :ruby18
+  when /\Aruby/ then :ruby
+  when /\Apython/ then :python
+  when /\Aperl/ then :perl
+  when 'bash', 'sh' then :bash
+  when 'osascript' then :osascript
+  else :unknown
+  end
+end
+
+# Returns [category, extra-shebang-flags]. Detection is shebang-first always;
+# for a standalone file with no shebang (common for Support/lib/*.rb meant to
+# be `require`d, never executed directly -- Ruby.tmbundle/Support/vendor/
+# rcodetools/setup.rb is exactly this shape) the file extension is used as a
+# fallback so those files are not silently excluded from checks 2 and 3.
+# Plist-embedded bodies have no filename to fall back on and go to :none.
+def detect_interpreter(body, path = nil)
+  first_line = body.lines.first.to_s
+  if first_line.start_with?('#!')
+    tokens = first_line[2..].to_s.strip.split(/\s+/)
+    tokens.shift if tokens.first && File.basename(tokens.first) == 'env'
+    return [:none, []] if tokens.empty?
+    interp = tokens.shift
+    [classify_interpreter_name(File.basename(interp)), tokens]
+  elsif path && EXT_INTERPRETER.key?(File.extname(path).downcase)
+    [EXT_INTERPRETER[File.extname(path).downcase], []]
+  else
+    [:none, []]
+  end
+end
+
+# --- check 1: syntax ---------------------------------------------------------
+
+# Writes the body to a real temp file and checks that, rather than piping it
+# in on stdin -- confirmed empirically that this is not a cosmetic choice.
+# `ruby -c` on source fed via stdin (no filename, no -K/-E flag) falls back
+# to a locale-derived default source encoding, but `ruby -c realfile.rb` with
+# no magic comment defaults to UTF-8 regardless of locale (Ruby >= 2.0
+# behaviour) -- and TextMate's own command runner always executes an actual
+# file (runner.mm writes the body out and runs it), never a stdin stream. So
+# stdin-piping does not just risk a spurious pass/fail against LC_CTYPE, it
+# checks a mode the real app never uses. Proven both ways on real files here:
+# tm/htmloutput.rb (a legitimate non-ASCII byte in a comment, no magic
+# comment) is "Syntax OK" as a file with or without LC_CTYPE, but
+# "invalid multibyte char (US-ASCII)" piped via stdin without it -- a false
+# fatal stdin-checking would have produced. shelltokenize.rb's
+# `/[^\w_\-\+=\/\x7F-\xFF]/` fails identically as a file or via stdin, with
+# or without LC_CTYPE -- a genuine fatal either way, so the fix does not just
+# suppress failures wholesale.
+def run_syntax_check(category, body, env)
+  tool = case category
+         when :ruby, :ruby18 then [RUBY_BIN, ['-c']]
+         when :python then [PYTHON3_BIN, ['-m', 'py_compile']]
+         when :perl then [PERL_BIN, ['-c']]
+         when :bash then [BASH_BIN, ['-n']]
+         when :osascript then return [:skip, 'no syntax-check tool wired up for osascript']
+         when :unknown then return [:skip, 'unrecognized interpreter']
+         else return [:skip, 'no shebang, interpreter unknown']
+         end
+  bin, args = tool
+  ext = { ruby: '.rb', ruby18: '.rb', python: '.py', perl: '.pl', bash: '.sh' }.fetch(category)
+
+  Dir.mktmpdir('check_bundle_commands') do |dir|
+    file = File.join(dir, "check#{ext}")
+    File.write(file, body)
+    out, status = Open3.capture2e(env, bin, *args, file, unsetenv_others: true)
+    return [:ok, nil] if status.success?
+    return [:fatal, out.strip.gsub(file, File.basename(file))] # drop the volatile tmpdir prefix
+  end
+end
+
+# --- check 2: require extraction --------------------------------------------
+
+# Returns [literal_requires, skipped_count]. literal_requires is
+# [[line, construct, lib], ...]. Only a plain single/double-quoted literal
+# with no interpolation is accepted; require File.dirname(__FILE__)+'/x',
+# require "#{ENV['X']}/y", and similar are skipped and counted, never
+# guessed at. A whole-line comment is skipped outright; an inline trailing
+# comment is not specially stripped (not worth the false-negative risk of a
+# hand-rolled partial parser for a `#` that might be inside a string).
+#
+# require_relative resolves against the source file's own directory, not
+# $LOAD_PATH -- source_dir must be that directory (or nil, in which case a
+# require_relative target is resolved as if it were a plain require, which
+# is wrong but only reachable for a plist-embedded body, where "the file's
+# own directory" is not a meaningful concept in the first place). Passing
+# the raw relative string straight to `require` in the batched resolver
+# undercounts nothing but *overcounts* fatals: confirmed on
+# tm/gems_test.rb's real `require_relative "gems"`, which sits right next to
+# tm/gems.rb and resolves fine once anchored to its own directory, but
+# reports a false LoadError against $LOAD_PATH alone.
+def extract_requires(body, source_dir)
+  literal = []
+  skipped = 0
+  body.each_line.with_index(1) do |line, lineno|
+    next if line.strip.start_with?('#')
+    line.split(';').each do |segment|
+      m = segment.match(/\brequire(_relative)?\b\s*(.*)/)
+      next unless m
+      relative = !m[1].nil?
+      construct = relative ? 'require_relative' : 'require'
+      rest = m[2].to_s
+      lit = rest.match(/\A\(?\s*(['"])((?:(?!\1)[^\\]|\\.)*)\1/)
+      if lit && !(lit[1] == '"' && lit[2].include?('#{'))
+        trailing = rest[lit[0].length..].to_s.strip
+        if trailing.start_with?('+')
+          skipped += 1 # concatenation immediately after the literal
+        else
+          lib = relative && source_dir ? File.expand_path(lit[2], source_dir) : lit[2]
+          literal << [lineno, construct, lib]
+        end
+      else
+        skipped += 1
+      end
+    end
+  end
+  [literal, skipped]
+end
+
+def extract_shebang_requires(body)
+  first_line = body.lines.first.to_s
+  return [] unless first_line.start_with?('#!')
+  tokens = first_line[2..].to_s.strip.split(/\s+/)
+  libs = []
+  tokens.each_with_index do |t, i|
+    if t =~ /\A-r(.+)\z/
+      libs << Regexp.last_match(1)
+    elsif t == '-r' && tokens[i + 1]
+      libs << tokens[i + 1]
+    end
+  end
+  libs.map { |lib| [1, 'shebang -r', lib] }
+end
+
+# Resolves every unique lib name in one batched /usr/bin/ruby process under
+# the given (faithful) environment -- one spawn for the whole run rather than
+# one per occurrence, since resolution only depends on the lib name and the
+# environment, both fixed for the whole scan. Each require is independently
+# rescued so one failure never hides another. Result messages come from the
+# child's own rescued exception, not from scraping stderr, so this is
+# unaffected by the RubyGems "Ignoring X because its extensions are not
+# built" notices this machine's ~/.gem directory prints (confirmed: RubyGems
+# emits those whenever it has to search installed gemspecs at all -- a
+# resolvable default gem like bundler triggers it too, not just a genuine
+# LoadError -- and always to stderr, never stdout). stderr is deliberately
+# discarded rather than merged: it is never needed for a result message and
+# would otherwise dump that noise straight into this script's own terminal
+# output on every run.
+#
+# Ends with exit! rather than falling off the end: Bundle Support.tmbundle's
+# own Support/shared/lib/tm/gems_test.rb is a real, literal
+# `require "minitest/autorun"`, and minitest/autorun's whole contract is an
+# at_exit hook that runs every loaded test on normal interpreter exit. A
+# plain exit would let that hook fire (harmless here -- zero tests are
+# defined -- but it also corrupts this method's stdout-based JSON protocol
+# with MiniTest's own "Run options:/# Running:" banner, confirmed by hitting
+# exactly that JSON parse failure before this fix). exit! skips at_exit
+# entirely, which is also the more conservative choice: nothing a required
+# library registers to run at exit ever runs.
+def resolve_requires(env, libs)
+  return {} if libs.empty?
+
+  child = <<~'RUBY'
+    require 'json'
+    libs = JSON.parse(ARGF.read)
+    results = {}
+    libs.each do |lib|
+      begin
+        require lib
+        results[lib] = ['OK', nil]
+      rescue ScriptError, StandardError => e
+        results[lib] = ['FAIL', "#{e.class}: #{e.message}"]
+      end
+    end
+    puts '===CHECK_BUNDLE_COMMANDS_RESULT==='
+    STDOUT.write(JSON.generate(results))
+    STDOUT.flush
+    exit!(0)
+  RUBY
+
+  out, _err, status = Open3.capture3(env, RUBY_BIN, '-e', child, stdin_data: JSON.generate(libs), unsetenv_others: true)
+  raise "require-resolution child process exited unexpectedly (status #{status.exitstatus}): #{out}" unless status.success?
+
+  payload = out.split('===CHECK_BUNDLE_COMMANDS_RESULT===', 2).last
+  JSON.parse(payload)
+end
+
+# --- check 3: removed-API scan ----------------------------------------------
+
+# Returns [findings, ambiguous_index_call_count]. findings is
+# [[line, construct, :fatal|:warning], ...]. `.index(` call sites are counted
+# but never classified -- see the file header on why.
+def scan_removed_apis(body)
+  findings = []
+  index_calls = 0
+  body.each_line.with_index(1) do |line, lineno|
+    next if line.strip.start_with?('#')
+    FATAL_CONSTRUCTS.each { |name, re| findings << [lineno, name, :fatal] if re.match?(line) }
+    WARNING_CONSTRUCTS.each { |name, re| findings << [lineno, name, :warning] if re.match?(line) }
+    index_calls += line.scan(/\.index\s*\(/).size
+  end
+  [findings, index_calls]
+end
+
+# --- file discovery ----------------------------------------------------------
+
+# Commands/Macros/DragCommands are globbed wide (every file, not filtered by
+# extension) and classified by content instead: this tree's own history has
+# three separate resource-glob bugs on record from assuming an extension
+# list was exhaustive (see CLAUDE.md's "the glob has been wrong three
+# times"), and real Macros here are a mix of .plist and .tmMacro.
+def discover_plist_sources(bundle_dir)
+  sources = []
+  %w[Commands Macros DragCommands].each do |sub|
+    Dir.glob(File.join(bundle_dir, sub, '*')).sort.each { |f| sources << f if File.file?(f) }
+  end
+  Dir.glob(File.join(bundle_dir, 'Templates', '*', 'info.plist')).sort.each { |f| sources << f if File.file?(f) }
+  sources
+end
+
+# Everything under Support/, recursively, not just Support/bin and
+# Support/lib: Bundle Support.tmbundle's own shim libraries live under
+# Support/shared/lib/, and this run's own required verification target
+# (Ruby.tmbundle/Support/vendor/rcodetools/setup.rb) lives under
+# Support/vendor/ -- neither is reachable by a glob narrowed to the two
+# directory names the task names as examples.
+def discover_support_scripts(bundle_dir)
+  Dir.glob(File.join(bundle_dir, 'Support', '**', '*')).sort.select { |f| File.file?(f) }
+end
+
+def binary_file?(path)
+  chunk = File.binread(path, 8000)
+  chunk.b.include?("\x00".b)
+rescue StandardError
+  true
+end
+
+# --- main scan ---------------------------------------------------------------
+
+bundle_root = File.expand_path(ARGV[0] || '~/Library/Application Support/TextMate/Managed/Bundles')
+
+unless Dir.exist?(bundle_root)
+  puts "check_bundle_commands: no bundles directory at #{bundle_root} -- skipping (expected in CI)."
+  exit 0
+end
+
+verify_classifications!
+spawn_env = build_spawn_environment(bundle_root)
+
+stats = Hash.new(0)
+bundle_findings   = Hash.new { |h, k| h[k] = [] }
+bundle_summaries  = {}
+require_occurrences = Hash.new { |h, k| h[k] = [] } # lib => [[bundle, file, line, construct], ...]
+
+bundle_dirs = Dir.glob(File.join(bundle_root, '*.tmbundle')).sort
+bundle_dirs.each do |bundle_dir|
+  bundle = File.basename(bundle_dir)
+  local = Hash.new(0)
+
+  process_body = lambda do |body, file_label, source_dir|
+    category, _flags = detect_interpreter(body, file_label)
+    local[:"interp_#{category}"] += 1
+
+    outcome, detail = run_syntax_check(category, body, spawn_env)
+    case outcome
+    when :ok   then local[:syntax_ok] += 1
+    when :fatal
+      local[:syntax_fatal] += 1
+      lineno = detail[/:(\d+):/, 1] || detail[/\bline (\d+)/, 1] || 1
+      bundle_findings[bundle] << Finding.new(bundle, file_label, lineno.to_i, 'syntax error', :fatal, detail)
+    when :skip then local[:syntax_skip] += 1
+    end
+
+    next unless %i[ruby ruby18].include?(category)
+
+    literal, skipped = extract_requires(body, source_dir)
+    literal += extract_shebang_requires(body)
+    local[:requires_skipped_nonliteral] += skipped
+    literal.each do |lineno, construct, lib|
+      require_occurrences[lib] << [bundle, file_label, lineno, construct]
+      local[:requires_total] += 1
+    end
+
+    findings, index_calls = scan_removed_apis(body)
+    local[:manual_index_calls] += index_calls
+    findings.each do |lineno, name, classification|
+      bundle_findings[bundle] << Finding.new(bundle, file_label, lineno, name, classification, nil)
+      local[classification == :fatal ? :api_fatal : :api_warning] += 1
+    end
+  end
+
+  discover_plist_sources(bundle_dir).each do |path|
+    rel = path.sub("#{bundle_dir}/", '')
+    fmt, bodies = decode_plist_commands(path)
+    local[:"plist_#{fmt}"] += 1
+    if bodies.nil?
+      local[:plist_unparseable] += 1
+      next
+    end
+    local[:selector_only] += 1 if bodies.empty?
+    bodies.each_with_index do |body, idx|
+      label = bodies.size > 1 ? "#{rel} [##{idx + 1}]" : rel
+      process_body.call(body, label, File.dirname(path))
+    end
+  end
+
+  discover_support_scripts(bundle_dir).each do |path|
+    rel = path.sub("#{bundle_dir}/", '')
+    if binary_file?(path)
+      local[:support_binary_skipped] += 1
+      next
+    end
+    body = File.read(path, encoding: 'UTF-8', invalid: :replace, undef: :replace)
+    process_body.call(body, rel, File.dirname(path))
+  end
+
+  bundle_summaries[bundle] = local
+  local.each { |k, v| stats[k] += v }
+end
+
+lib_results = resolve_requires(spawn_env, require_occurrences.keys)
+require_occurrences.each do |lib, occurrences|
+  status, message = lib_results.fetch(lib, ['FAIL', 'not resolved (child process error)'])
+  occurrences.each do |bundle, file_label, lineno, construct|
+    if status == 'OK'
+      stats[:requires_resolved] += 1
+    else
+      stats[:requires_fatal] += 1
+      bundle_findings[bundle] << Finding.new(bundle, file_label, lineno, "#{construct} '#{lib}'", :fatal, message)
+    end
+  end
+end
+
+# --- report -------------------------------------------------------------------
+
+bundle_dirs.each do |bundle_dir|
+  bundle = File.basename(bundle_dir)
+  findings = bundle_findings[bundle].sort_by { |f| [f.file, f.line] }
+  local = bundle_summaries.fetch(bundle, {})
+
+  puts "== #{bundle} =="
+  findings.each do |f|
+    detail = f.detail ? "\t#{f.detail}" : ''
+    tag = f.classification == :fatal ? 'FATAL' : 'WARNING'
+    puts "#{tag}\t#{f.bundle}\t#{f.file}\t#{f.line}\t#{f.construct}#{detail}"
+  end
+  if local[:manual_index_calls].to_i.positive?
+    puts "MANUAL\t#{bundle}\t-\t-\t.index( call sites (ambiguous receiver -- not classified)\t#{local[:manual_index_calls]}"
+  end
+  scanned = local.select { |k, _| k.to_s.start_with?('interp_') }.values.sum
+  puts "  #{scanned} bodies scanned, #{local[:requires_total].to_i} literal requires found, " \
+       "#{local[:requires_skipped_nonliteral].to_i} requires skipped (non-literal), " \
+       "#{local[:syntax_fatal].to_i} syntax errors, #{local[:api_fatal].to_i} fatal / #{local[:api_warning].to_i} warning removed-API hits"
+  puts
+end
+
+total_fatal = stats[:syntax_fatal] + stats[:requires_fatal] + stats[:api_fatal]
+
+puts '==================== SUMMARY ===================='
+puts "Bundles scanned: #{bundle_dirs.size}"
+puts "Plist command sources: binary=#{stats[:plist_binary]} xml=#{stats[:plist_xml]} other=#{stats[:plist_other]} " \
+     "unparseable=#{stats[:plist_unparseable]} (selector-only, no real body: #{stats[:selector_only]})"
+puts "Support/ scripts: binary skipped=#{stats[:support_binary_skipped]}"
+interp_line = %i[ruby ruby18 python perl bash osascript none unknown].map { |c| "#{c}=#{stats[:"interp_#{c}"]}" }.join(' ')
+puts "Interpreter breakdown: #{interp_line}"
+puts "Syntax checks: ok=#{stats[:syntax_ok]} fatal=#{stats[:syntax_fatal]} skipped=#{stats[:syntax_skip]}"
+puts "Requires: unique=#{require_occurrences.size} occurrences_resolved=#{stats[:requires_resolved]} " \
+     "occurrences_fatal=#{stats[:requires_fatal]} skipped_nonliteral=#{stats[:requires_skipped_nonliteral]}"
+puts "Removed-API scan: fatal=#{stats[:api_fatal]} warning=#{stats[:api_warning]} " \
+     "needs_manual_inspection(.index)=#{stats[:manual_index_calls]}"
+puts "TOTAL FATAL: #{total_fatal}"
+puts "Exit: #{total_fatal.positive? ? 1 : 0}"
+
+exit(total_fatal.positive? ? 1 : 0)
