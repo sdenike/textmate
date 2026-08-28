@@ -43,6 +43,19 @@ if [ -n "$conflict" ]; then
 	exit 1
 fi
 
+# Separate refusal: the check above exists to protect Apple-Event addressing
+# and deliberately does not flag a process running at exactly $APP, since
+# that is what this script's own prior run leaves behind. But the very
+# first thing the loop below does is `pkill -f
+# "$APP/Contents/MacOS/$BIN_NAME"` -- if $APP is someone's real, currently
+# open session rather than a copy this script is about to launch itself,
+# that kills it with no warning. Checked once, here, before the loop has
+# pkilled anything: at this point nothing matching can be ours yet.
+if pgrep -f "$APP/Contents/MacOS/$BIN_NAME" >/dev/null 2>&1; then
+	echo "$LABEL: refusing to measure -- an instance at $APP is already running (the loop below would kill it). Quit it yourself first." >&2
+	exit 1
+fi
+
 now_ms () { python3 -c 'import time;print(int(time.time()*1000))'; }
 
 # One bounded Apple Event. Prints its round-trip latency in ms, or 9999 if it
