@@ -908,6 +908,47 @@ Also unaddressed, and not worth a fork on their own: `Config::CONFIG` in
 `Ruby.tmbundle/Support/vendor/rcodetools/setup.rb:788` (a vendored gem installer no command calls),
 and `$KCODE = 'U'` in three HTML commands (warning only under 2.6, the code still runs).
 
+**`bin/check_bundle_commands` is the regression net for all of this.** It walks every installed
+bundle and reports Ruby-1.8-era breakage **without executing any command body** — bundle commands
+create GitHub gists, stop Apache, run SQL and send mail, so executing them to test them is not an
+option. Requires are checked by extracting them and running *only* the requires in a child process,
+under a spawn environment derived from `Shared Support Path.tmPreferences` rather than hardcoded.
+
+Three checks: per-interpreter syntax (`ruby -c`, `perl -c`, `python3 -m py_compile`, `bash -n`),
+require resolution, and a removed-API scan whose fatal/warning table is self-verified against the
+running `/usr/bin/ruby` at startup so it cannot drift.
+
+Findings are **bucketed**, and only `ruby18` sets the exit code — `missing_gem`, `unresolved` and
+`warning` are informational. The first version reported 116 fatals and explained most of them away
+in prose; a checker whose exit code is always 1 is worse than no checker. It exits 0 when the
+bundles directory is absent, so it is safe in CI.
+
+Two behaviours worth knowing before you trust or extend it:
+
+- **It knows about the shims.** A `jlength` call is not a finding when the body requires `jcode` and
+  that require resolves — and the method names come from reading `jcode.rb` itself, not a hardcoded
+  list, so it keeps working if the shim changes. Satisfaction is scoped to the **same body**: two
+  findings deliberately remain, because `copy_as_rtf.rb`'s `-rjcode` lives in the *calling* command's
+  shebang and `doctohtml.rb`'s only `jlength` sits in a function with no caller anywhere in the
+  54-bundle corpus.
+- **Ambiguous receivers go to a "needs manual inspection" bucket that does not fail the build.** The
+  retriage rejected **597** `.type` and **409** `.each` candidates as false positives after
+  inspection; a scanner that reports those as fatal is generating work, not finding bugs.
+
+Two build-environment bugs surfaced while writing it, both worth remembering: batching requires into
+one child with `$LOAD_PATH.replace` wipes RubyGems' lazily-activated paths between jobs and produces
+a false `LoadError` for a perfectly present gem; and a leaked chruby/rbenv `GEM_HOME`/`GEM_PATH`
+breaks system Ruby's `require` the same way `bin/build`'s header already documents for native
+extensions, so the script re-execs itself with a clean environment.
+
+**It found a category every previous audit missed: 14 syntax errors.** The earlier triages scanned
+for library and API breakage and never checked whether the code *parses*. `when X: Y` — Ruby 1.8's
+colon form of `case` — is a hard `SyntaxError` since 1.9, and it is live in Apache, C and
+Objective-C. `Bundle Support`'s own `shelltokenize.rb` has an `invalid multibyte escape`. Four live
+`Python.tmbundle` commands and `Markdown.tmbundle`'s `html2text.py` are Python 2. **No shim can fix
+any of these** — a file with a syntax error cannot load — so they need edits in place, and for the
+third-party ones that means forking.
+
 **Gist and Active4D are orphans.** Neither appears in `Bundles.plist`, `AvailableBundles.plist`,
 `DefaultBundles.plist` or `MandatoryBundles.h`, and neither has a `.git`. There is nothing upstream
 to fork or repoint. Gist's last recorded change is literally *"HACK: Force Ruby v1.8 for now"* from
