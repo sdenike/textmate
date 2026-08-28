@@ -15,12 +15,26 @@ from os import popen, path, environ as env
 # if not tm_support_path in env:
 #     sys.path.insert(0, tm_support_path)
 
-from plistlib import writePlistToString, readPlistFromString
+import plistlib
 
-# alias the plistlib functions, we will replace these
-# with PyObjC when it becomes available.
-to_plist   = writePlistToString
-from_plist = readPlistFromString
+# `plistlib.py` used to be vendored here (a copy of Python 2's stdlib module,
+# predating Python 3's dumps/loads-based rewrite). It shadowed the real
+# stdlib module for anything importing "plistlib" with this dir on
+# sys.path, so it's gone now rather than ported line-for-line -- Python 3
+# ships its own, and self-shadowing a same-named stdlib module makes it
+# impossible for code *inside* the vendored file to ever reach the real one.
+#
+# to_plist/from_plist keep the old str-in/str-out contract (the original
+# writePlistToString/readPlistFromString both operated on Python 2 `str`,
+# which was a byte string) rather than switching callers to the stdlib's
+# own bytes-based dumps/loads.
+def to_plist(value):
+    return plistlib.dumps(value).decode("utf-8")
+
+def from_plist(data):
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    return plistlib.loads(data)
 
 def current_word(pat, direction="both"):
     """ Return the current word from the environment.

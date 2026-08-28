@@ -67,12 +67,21 @@ class String
 	end
 	
 	# insert escape sequences where needed
+	#
+	# Walks bytes, not characters: on Ruby 1.8 all strings were byte strings, and
+	# \x7F-\xFF was a literal high-byte range meaning "leave multibyte UTF-8 lead/
+	# continuation bytes alone, they're never shell metacharacters". The /n flag
+	# (ASCII-8BIT) restores exactly that: it stops Onigmo from reading \x7F-\xFF as
+	# part of a Unicode range under the file's default UTF-8 source encoding (which
+	# is the "invalid multibyte escape" error under 2.6+) and matches byte.chr's
+	# own per-byte, non-UTF-8 result. The character class itself is untouched, so
+	# which bytes get escaped is unchanged.
 	def quote_filename_for_shell
 		outname = ""
-		self.each_byte do |byte|	
+		self.each_byte do |byte|
 			char = byte.chr
 			case char
-				when /[^\w_\-\+=\/\x7F-\xFF]/
+				when /[^\w_\-\+=\/\x7F-\xFF]/n
 					outname += "\\"
 			end
 			outname += char
