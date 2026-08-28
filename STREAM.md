@@ -4,6 +4,61 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-28 — RESUME HERE: a checker for the bundles, and 14 syntax errors nobody had looked for
+
+`bin/check_bundle_commands` is on `bundles/command-checker` (PR #37) — a static checker for
+Ruby-1.8-era breakage across all 54 installed bundles that **executes no bundle body**. That
+constraint is not fussiness: these commands create GitHub gists, stop Apache, run SQL and send mail.
+
+### It proves the shims work
+
+No `jcode`/`iconv`/`parsedate` require is fatal any more. It also decodes **233 binary plists** —
+precisely the class the 2026-08-13 triage skipped, because the interactive `grep` here wraps
+`ugrep -I`.
+
+### The exit code had to be made to mean something
+
+First version: **116 fatal**, most explained away in prose rather than in code. Fixed in two passes —
+honour statically visible `$LOAD_PATH` pushes, don't count `def` sites as call sites, and bucket
+findings so only `ruby18` fails. 116 → 22 → 17.
+
+`Ruling: teach the checker about the shims rather than suppressing the findings. A jlength call is
+not a finding when the body requires jcode and that require resolves, and the method names are read
+from jcode.rb itself so the checker tracks the shim. Cost if wrong: a real jlength break hides behind
+a require that resolves but does not define it — mitigated by reading the shim's actual definitions
+rather than assuming.`
+
+Satisfaction is scoped to the **same body**, so two findings remain by design: `copy_as_rtf.rb`'s
+`-rjcode` is in the *calling* command's shebang, and `doctohtml.rb`'s `jlength` sits in a function
+with no caller in the whole corpus. Reported, not guessed at.
+
+### The real finding: 14 syntax errors
+
+Every previous audit scanned for library and API breakage and **never checked whether the code
+parses**. `when X: Y` is Ruby 1.8's colon `case` form and a hard `SyntaxError` since 1.9 — live in
+Apache, C and Objective-C. `Bundle Support`'s own `shelltokenize.rb` has an invalid multibyte escape.
+Four live `Python.tmbundle` commands plus `Markdown.tmbundle`'s `html2text.py` are Python 2.
+
+**No shim reaches these.** A file that does not parse cannot load. They need edits in place.
+
+### If interrupted here
+
+PR #37 open (the checker). #35 (shims) and #36 (`measure-open.sh`) merged.
+
+In flight on `bundles/fix-shared-lib-syntax`: the two syntax errors we own, in Bundle Support.
+`shelltokenize.rb` is a **shared library** — check its callers before changing that regex, since a
+sloppy fix there changes which characters get shell-quoted.
+
+Open questions for the maintainer, both asked:
+1. **Fork Apache, C, Objective-C, Python and Markdown** to fix their syntax errors? It is the only
+   way those get fixed. Worth checking first whether macOS 26 has any `python` at all — if not, the
+   Python ones are broken twice over and a syntax fix alone will not make them run.
+2. `set_grammar` profiling needs their TextMate **quit** — `RMateServer.mm` unconditionally
+   `unlink()`s and rebinds `/tmp/textmate-<uid>.sock`, so a second instance steals the live
+   session's `mate` socket. `bin/bench/measure-open.sh` now exists for it.
+
+---
+
 ## 2026-08-28 — RESUME HERE: bundle Ruby fixed by shims, not forks; set_grammar lever re-identified
 
 `bundles/ruby26-shims` is ready to push. `sdenike/bundle-support.tmbundle` is at
