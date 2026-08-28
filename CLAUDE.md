@@ -588,7 +588,7 @@ language. It falls back to the full matcher for any `*` in the first component a
 for parenthesised sub-selectors.
 
 **Deferring work off the main thread is not the lever it appears to be.**
-`initiate_repair` (`parsing.cc`) already parses on a background queue and bounces
+`initiate_repair` (`Frameworks/buffer/src/parsing.cc`) already parses on a background queue and bounces
 the completion back every ~10-20 lines, so the main thread answers Apple Events in
 ~470 ms during a load *without* any change. Deferring the symbol list until after
 first paint was implemented twice, correctly, and measured flat both times.
