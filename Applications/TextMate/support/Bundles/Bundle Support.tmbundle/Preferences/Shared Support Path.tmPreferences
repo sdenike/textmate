@@ -20,6 +20,12 @@
 				<key>value</key>
 				<string>$PATH:$TM_SUPPORT_PATH/bin</string>
 			</dict>
+			<dict>
+				<key>name</key>
+				<string>RUBYLIB</string>
+				<key>value</key>
+				<string>$TM_SUPPORT_PATH/lib${RUBYLIB:+:$RUBYLIB}</string>
+			</dict>
 		</array>
 	</dict>
 	<key>uuid</key>
