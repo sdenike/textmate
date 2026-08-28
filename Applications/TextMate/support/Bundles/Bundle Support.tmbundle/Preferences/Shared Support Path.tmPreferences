@@ -26,6 +26,12 @@
 				<key>value</key>
 				<string>$TM_SUPPORT_PATH/lib${RUBYLIB:+:$RUBYLIB}</string>
 			</dict>
+			<dict>
+				<key>name</key>
+				<string>LC_CTYPE</string>
+				<key>value</key>
+				<string>${LC_CTYPE:-en_US.UTF-8}</string>
+			</dict>
 		</array>
 	</dict>
 	<key>uuid</key>

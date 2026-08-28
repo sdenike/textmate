@@ -29,11 +29,14 @@ static struct TMMandatoryBundle const kTMMandatoryBundles[] = {
 	// Also carries Ruby 2.6 compatibility shims (jcode, parsedate, iconv) in
 	// Support/shared/lib/ for third-party bundles that still `require` them,
 	// reached via a RUBYLIB entry in Preferences/Shared Support Path.tmPreferences.
+	// That same file now also sets LC_CTYPE (deferring to one already present)
+	// for shebang'd commands, which never get it from bash_init.sh — see
+	// Frameworks/command/src/runner.mm's fix_shebang.
 	{
 		"0BB1F01A-4F0A-475A-ACDD-0F5578F2EFC3",
 		"Bundle Support",
 		"https://github.com/sdenike/bundle-support.tmbundle",
-		"809b321afddaad82ecfdea6e07f6401683adf22f",
+		"4ab32c68cbee4d501a6596594a11226ae98c5e08",
 		"Other",
 	},
 	// branch: main
