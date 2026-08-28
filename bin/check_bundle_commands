@@ -41,36 +41,61 @@
 #                  The classification (which constructs are fatal vs. warn)
 #                  is itself verified at startup by executing each construct
 #                  against the real /usr/bin/ruby, so the table cannot drift
-#                  from reality silently. Hash#index is deliberately NOT
-#                  matched as a specific construct here: `.index(` is exactly
-#                  as ambiguous a receiver as the `.type`/`.each` false
-#                  positives a previous manual triage rejected by the hundred
-#                  (String#index, Array#index, Enumerable#index all share the
-#                  name), so occurrences are only counted into a clearly
-#                  separate "needs manual inspection" bucket that never
-#                  affects the exit code.
+#                  from reality silently. A `def`/`alias`/`alias_method`/
+#                  symbol-literal site naming a fatal construct (jcode.rb's
+#                  own `def jlength` and `method_defined?(:jlength)`, for
+#                  instance) is a definition, not a use, and is excluded --
+#                  only a genuine call site is flagged. Hash#index is
+#                  deliberately NOT matched as a specific construct here:
+#                  `.index(` is exactly as ambiguous a receiver as the
+#                  `.type`/`.each` false positives a previous manual triage
+#                  rejected by the hundred (String#index, Array#index,
+#                  Enumerable#index all share the name), so occurrences are
+#                  only counted into the warning bucket below, never
+#                  classified individually.
 #
-# Known, deliberate blind spot: a command that mutates its own $LOAD_PATH at
-# runtime (`$: << ENV['TM_BUNDLE_SUPPORT']`, seen in several Markdown.tmbundle
-# macros) and then does a relative `require 'lib/foo'` depending on that push
-# cannot be verified here. This script never executes the body, so the push
-# never happens, and check 2 only ever sees the fixed RUBYLIB this script
-# derives from Bundle Support.tmbundle's own preferences -- which is right
-# for TM_SUPPORT_PATH (that preference is unscoped/global and is defined,
-# and therefore expanded, in Bundle Support.tmbundle's own context) but is
-# not the per-command TM_BUNDLE_SUPPORT a real running command would also
-# have (its own owning bundle's Support directory). Such requires can show
-# as unresolved here even though they resolve fine inside the real app; that
-# is a structural limit of a checker that is not allowed to run the body it
-# is checking, not a bug in the classification.
+# A command that mutates its own $LOAD_PATH at runtime (`$: << expr`,
+# `$LOAD_PATH.unshift`/`.push`) is honoured for requires *in that same file*:
+# each pushed argument is resolved statically -- a literal string (anchored
+# to the pushing file's own directory when relative, the only reading under
+# which a bare `".."`/`"../lib"` push, as in Ruby.tmbundle's vendored
+# rcodetools test/*.rb, means anything at all), an `ENV['NAME']` lookup, or a
+# concatenation/interpolation of the two. TM_BUNDLE_SUPPORT is corrected to
+# the *scanned file's own owning bundle* when expanded this way -- mirroring
+# item_t::bundle_variables() in Frameworks/bundles/src/item.cc -- rather than
+# reusing this script's single global spawn environment, which only ever
+# really holds Bundle Support.tmbundle's own TM_BUNDLE_SUPPORT; every other
+# variable (TM_SUPPORT_PATH included) keeps using that global spawn
+# environment because it genuinely is unscoped in the real app. A dynamic
+# argument (a local variable, a method call) still cannot be resolved and is
+# counted into the unresolved bucket below instead of guessed at. Requires
+# are resolved one child process per run rather than one per file (see
+# resolve_requires below for why that is add-only, not reset-per-job, and
+# the narrow cross-job leakage that trades for), so a require this resolves
+# thanks to one file's push can also resolve for an unrelated file's require
+# of the same literal name that never pushed anything itself.
 #
 # Output is grouped by bundle for humans, and every finding/skip-summary line
-# starts with a stable all-caps tag (FATAL/WARNING/MANUAL) followed by
-# tab-separated fields, so `grep '^FATAL'`, `cut -f2`, `awk -F'\t'` etc. all
-# work. Exit status is non-zero only when at least one FATAL finding exists
-# (a failed syntax check, an unresolved literal require, or a fatal
-# removed-API construct) -- warnings, skips and the manual-inspection bucket
-# never affect it, so this can be wired into CI as a pass/fail gate later.
+# starts with a stable all-caps tag (FATAL/MISSING-GEM/UNRESOLVED/WARNING)
+# followed by tab-separated fields, so `grep '^FATAL'`, `cut -f2`,
+# `awk -F'\t'` etc. all work. Findings are further split into four buckets,
+# counted separately in the summary, only one of which affects the exit code:
+#   ruby18       (FATAL)       -- the thing this checker exists for: a
+#                   failed syntax check, a genuine removed-API call site, or
+#                   a literal require/require_relative/shebang -r that fails
+#                   to resolve and names one of a small, explicit list of
+#                   1.8-era stdlib libraries -- RUBY18_STDLIB_NAMES below.
+#                   This is the only bucket the exit code reflects.
+#   missing-gem  (MISSING-GEM) -- a require that fails to resolve and is
+#                   *not* on that list: presumed a third-party gem this
+#                   machine never installed, a different problem than a
+#                   Ruby 2.6 port fixes. Never affects exit.
+#   unresolved   (UNRESOLVED)  -- a require or a $LOAD_PATH push this
+#                   checker could not statically resolve (a non-literal
+#                   argument), so it was never actually attempted against a
+#                   real Ruby. Never affects exit.
+#   warning      (WARNING)     -- $KCODE/Fixnum/Bignum plus the ambiguous
+#                   `.index(` bucket from check 3 above. Never affects exit.
 
 # --- guard: leaked Ruby version manager environment ------------------------
 #
@@ -137,6 +162,38 @@ WARNING_CONSTRUCTS = {
   'Fixnum' => /\bFixnum\b/,
   'Bignum' => /\bBignum\b/,
 }.freeze
+
+# A `def NAME`/`def self.NAME`/`alias NAME ...`/`alias_method :NAME, ...`/
+# `:NAME` symbol-literal site names a fatal construct without using it --
+# jcode.rb's own `def jlength` and its guarding `method_defined?(:jlength)`
+# are exactly this shape. Checked per construct name, not just per line, so
+# a line naming more than one construct is judged independently for each.
+def removed_api_definition_site?(line, name)
+  n = Regexp.escape(name)
+  return true if /\bdef\s+(self\.)?#{n}\b/.match?(line)
+  return true if /\balias(_method)?\b/.match?(line) && /\b#{n}\b/.match?(line)
+  # (?<!:) so a `::`-qualified name like Config::CONFIG isn't mistaken for a
+  # symbol literal by the leading colon its own scope-resolution operator
+  # supplies -- confirmed against Ruby.tmbundle/Support/vendor/rcodetools/
+  # setup.rb's genuine `::Config::CONFIG` call site, which must stay flagged.
+  return true if /(?<!:):#{n}\b/.match?(line)
+  false
+end
+
+# The whole reason this checker exists: a small, explicit, knowable list of
+# Ruby stdlib libraries that shipped in 1.8 and no longer resolve under
+# 2.6.10 -- confirmed empirically against the running system Ruby, not
+# inferred. jcode/iconv/parsedate are the three CLAUDE.md and 3171b9c8 name
+# as shimmed (Bundle Support.tmbundle's Support/shared/lib/); ftools,
+# generator and soap are the other three CLAUDE.md's "KNOWN GAP" audit names
+# as confirmed-absent-but-worth-watching-for. A require that fails and is
+# NOT on this list is presumed a third-party gem rather than 1.8-era
+# breakage -- see the missing-gem bucket in the file header. Deliberately
+# not grown by guessing at every name that happens to fail on this machine
+# (readbytes, for instance, is also gone from 2.6.10 but is not on this
+# list): a checker whose fatal bucket keeps growing by inference stops being
+# "small and knowable".
+RUBY18_STDLIB_NAMES = %w[jcode iconv parsedate ftools generator soap].freeze
 
 # [label, ruby snippet, expected outcome]. Executed against the real
 # /usr/bin/ruby at startup (never against bundle content) so the fatal/warn
@@ -261,6 +318,21 @@ def build_spawn_environment(bundle_root)
   shell_vars = parsed.dig('settings', 'shellVariables') || []
   env['TM_BUNDLE_SUPPORT'] = File.join(bundle_root, 'Bundle Support.tmbundle', 'Support')
   expand_shell_variables(env, shell_vars)
+end
+
+# spawn_env's own TM_BUNDLE_SUPPORT is only ever really Bundle
+# Support.tmbundle's (see build_spawn_environment above). A real running
+# command's TM_BUNDLE_SUPPORT is its *own owning bundle's* Support directory
+# -- item_t::bundle_variables() in Frameworks/bundles/src/item.cc sets it
+# from `path::join(bundlePath, "../Support")` for whichever bundle the
+# running item belongs to -- so a static $LOAD_PATH push referencing
+# ENV['TM_BUNDLE_SUPPORT'] in a file belonging to bundle_dir needs that
+# correction to mean anything (Markdown.tmbundle's commands are exactly
+# this shape). Every other variable, TM_SUPPORT_PATH included, keeps
+# spawn_env's value: it is genuinely unscoped/global in the real app (see
+# build_spawn_environment's own comment).
+def build_bundle_env(spawn_env, bundle_dir)
+  spawn_env.merge('TM_BUNDLE_SUPPORT' => File.join(bundle_dir, 'Support'))
 end
 
 # --- classification self-check ----------------------------------------------
@@ -462,20 +534,148 @@ def extract_shebang_requires(body)
   libs.map { |lib| [1, 'shebang -r', lib] }
 end
 
-# Resolves every unique lib name in one batched /usr/bin/ruby process under
-# the given (faithful) environment -- one spawn for the whole run rather than
-# one per occurrence, since resolution only depends on the lib name and the
-# environment, both fixed for the whole scan. Each require is independently
-# rescued so one failure never hides another. Result messages come from the
-# child's own rescued exception, not from scraping stderr, so this is
-# unaffected by the RubyGems "Ignoring X because its extensions are not
-# built" notices this machine's ~/.gem directory prints (confirmed: RubyGems
-# emits those whenever it has to search installed gemspecs at all -- a
-# resolvable default gem like bundler triggers it too, not just a genuine
-# LoadError -- and always to stderr, never stdout). stderr is deliberately
-# discarded rather than merged: it is never needed for a result message and
-# would otherwise dump that noise straight into this script's own terminal
-# output on every run.
+# --- $LOAD_PATH-push handling (see the file header) -------------------------
+
+# Statically evaluates a single pushed expression to a string: a plain
+# literal, an ENV['NAME']/ENV["NAME"] lookup against env, string
+# concatenation of the two (left-associative, so the recursion peels off one
+# `+` at a time), or a double-quoted string interpolating either. Returns
+# nil for anything else (a local variable, a method call) rather than
+# guessing.
+def resolve_term_value(term, env)
+  term = term.strip
+  return nil if term.empty?
+
+  if (m = term.match(/\A"((?:[^"\\]|\\.)*)"\z/))
+    return resolve_interpolated_string(m[1], env)
+  end
+  if (m = term.match(/\A'((?:[^'\\]|\\.)*)'\z/))
+    return m[1]
+  end
+  if (m = term.match(/\AENV\[(['"])([A-Za-z_][A-Za-z0-9_]*)\1\]\z/))
+    return env[m[2]]
+  end
+  if (m = term.match(/\A(.+?)\s*\+\s*(.+)\z/))
+    lhs = resolve_term_value(m[1], env)
+    return nil unless lhs
+    rhs = resolve_term_value(m[2], env)
+    return nil unless rhs
+    return lhs + rhs
+  end
+  nil
+end
+
+# raw is the text between the outer double quotes, unescaped. Only a single
+# level of #{...} is understood (no nested braces) -- everything pushed in
+# the installed corpus is a plain ENV lookup, never anything more nested.
+def resolve_interpolated_string(raw, env)
+  result = +''
+  rest = raw
+  until rest.empty?
+    if rest.start_with?('#{')
+      close = rest.index('}')
+      return nil unless close
+      value = resolve_term_value(rest[2...close], env)
+      return nil unless value
+      result << value
+      rest = rest[(close + 1)..]
+    else
+      result << rest[0]
+      rest = rest[1..]
+    end
+  end
+  result
+end
+
+# A resolved string anchors to source_dir when relative -- the only reading
+# under which a bare ".."/"../lib" push means anything (see the file
+# header) -- and otherwise just runs through File.expand_path, so a leading
+# "~" still expands and an absolute path is merely normalized.
+def anchor_load_path_dir(raw, source_dir)
+  return nil if raw.nil? || raw.empty?
+  return File.expand_path(raw) if raw.start_with?('/', '~')
+  return nil unless source_dir
+  File.expand_path(raw, source_dir)
+end
+
+# Splits a `$: <<`/`$LOAD_PATH <<` chain -- `<<` associates left-to-right, so
+# one expression can push more than one directory, as in Ruby.tmbundle's
+# vendored rcodetools test/*.rb's `$: << ".." << "../lib"` -- or a
+# `.unshift(...)`/`.push(...)` call's argument list, into individual pushed-
+# value expressions.
+def split_load_path_terms(expr)
+  expr = expr.strip
+  if expr.start_with?('<<')
+    expr[2..].to_s.split('<<')
+  elsif (m = expr.match(/\A\.(?:unshift|push)\s*\(?(.*?)\)?\z/))
+    m[1].split(',')
+  else
+    []
+  end
+end
+
+# Scans a file's own body for a $LOAD_PATH mutation and resolves every
+# pushed argument against env (build_bundle_env's per-file environment).
+# Only requires in this same file benefit from the result -- see the file
+# header. Returns [resolved_dirs, unresolved_push_count].
+def extract_load_path_extra_dirs(body, source_dir, env)
+  dirs = []
+  unresolved = 0
+  body.each_line do |raw_line|
+    line = raw_line.chomp
+    next if line.strip.start_with?('#')
+    m = line.match(/\$(?:LOAD_PATH|:)\s*(?:<<|\.(?:unshift|push))/)
+    next unless m
+
+    expr = line[m.begin(0)..]
+                .sub(/\A\$(?:LOAD_PATH|:)/, '')
+                .sub(/\s+(?:if|unless)\s+.*\z/, '')
+    split_load_path_terms(expr).each do |term|
+      value = resolve_term_value(term, env)
+      dir = value && anchor_load_path_dir(value, source_dir)
+      dir ? dirs << dir : unresolved += 1
+    end
+  end
+  [dirs.uniq, unresolved]
+end
+
+# Resolves every unique (lib, extra load-path directories) job in one
+# batched /usr/bin/ruby process under the given (faithful) environment --
+# one spawn for the whole run rather than one per occurrence, since
+# resolution only depends on the job and the environment, both fixed for
+# the whole scan. Each job's extra directories are *added* to $LOAD_PATH
+# and never removed -- confirmed the hard way that resetting it (even back
+# to a snapshot taken before the batch started) is wrong: a plain
+# `require 'test/unit'` with no extra directories at all started failing
+# with a genuine LoadError partway through the real 149-job corpus, only
+# once resolving requires stopped being an isolated, single-lib operation.
+# Bisected to exactly this -- once *any* prior job in the same process has
+# successfully required 'test/unit' once (activating its gem, which
+# RubyGems satisfies by inserting that gem's own lib directory into the
+# live $LOAD_PATH -- not present in any snapshot taken before that
+# activation happened), resetting $LOAD_PATH back to such a snapshot for a
+# later job removes that directory again. Gem::Specification's own
+# bookkeeping still considers the gem activated, so it does not reinsert
+# the path, and the next `require 'test/unit'` -- unable to prove from a
+# $LOAD_PATH that no longer contains it that the feature is already loaded
+# -- fails outright instead of the no-op a second `require` of an
+# already-loaded feature is supposed to be. Add-only sidesteps this
+# entirely, at the cost of the inverse, milder risk it replaces: a lib that
+# job A's extra directories resolve can now also resolve for an unrelated
+# later job B that never pushed those directories itself, if B requests the
+# exact same lib name. Not observed in the installed corpus -- extra
+# directories here are bundle-specific enough not to collide -- but a
+# structural limit of batching worth knowing about. Each require is
+# independently rescued so one failure never hides another. Result
+# messages come from the child's own rescued exception, not
+# from scraping stderr, so this is unaffected by the RubyGems "Ignoring X
+# because its extensions are not built" notices this machine's ~/.gem
+# directory prints (confirmed: RubyGems emits those whenever it has to
+# search installed gemspecs at all -- a resolvable default gem like bundler
+# triggers it too, not just a genuine LoadError -- and always to stderr,
+# never stdout). stderr is deliberately discarded rather than merged: it is
+# never needed for a result message and would otherwise dump that noise
+# straight into this script's own terminal output on every run.
 #
 # Ends with exit! rather than falling off the end: Bundle Support.tmbundle's
 # own Support/shared/lib/tm/gems_test.rb is a real, literal
@@ -487,19 +687,23 @@ end
 # exactly that JSON parse failure before this fix). exit! skips at_exit
 # entirely, which is also the more conservative choice: nothing a required
 # library registers to run at exit ever runs.
-def resolve_requires(env, libs)
-  return {} if libs.empty?
+#
+# jobs is [{ 'lib' => ..., 'extra_dirs' => [...] }, ...]; returns a parallel
+# array of ['OK', nil] / ['FAIL', message].
+def resolve_requires(env, jobs)
+  return [] if jobs.empty?
 
   child = <<~'RUBY'
     require 'json'
-    libs = JSON.parse(ARGF.read)
-    results = {}
-    libs.each do |lib|
+    jobs = JSON.parse(ARGF.read)
+    results = jobs.map do |job|
+      extra = Array(job['extra_dirs'])
+      $LOAD_PATH.push(*(extra - $LOAD_PATH))
       begin
-        require lib
-        results[lib] = ['OK', nil]
+        require job['lib']
+        ['OK', nil]
       rescue ScriptError, StandardError => e
-        results[lib] = ['FAIL', "#{e.class}: #{e.message}"]
+        ['FAIL', "#{e.class}: #{e.message}"]
       end
     end
     puts '===CHECK_BUNDLE_COMMANDS_RESULT==='
@@ -508,7 +712,7 @@ def resolve_requires(env, libs)
     exit!(0)
   RUBY
 
-  out, _err, status = Open3.capture3(env, RUBY_BIN, '-e', child, stdin_data: JSON.generate(libs), unsetenv_others: true)
+  out, _err, status = Open3.capture3(env, RUBY_BIN, '-e', child, stdin_data: JSON.generate(jobs), unsetenv_others: true)
   raise "require-resolution child process exited unexpectedly (status #{status.exitstatus}): #{out}" unless status.success?
 
   payload = out.split('===CHECK_BUNDLE_COMMANDS_RESULT===', 2).last
@@ -525,7 +729,11 @@ def scan_removed_apis(body)
   index_calls = 0
   body.each_line.with_index(1) do |line, lineno|
     next if line.strip.start_with?('#')
-    FATAL_CONSTRUCTS.each { |name, re| findings << [lineno, name, :fatal] if re.match?(line) }
+    FATAL_CONSTRUCTS.each do |name, re|
+      next unless re.match?(line)
+      next if removed_api_definition_site?(line, name)
+      findings << [lineno, name, :fatal]
+    end
     WARNING_CONSTRUCTS.each { |name, re| findings << [lineno, name, :warning] if re.match?(line) }
     index_calls += line.scan(/\.index\s*\(/).size
   end
@@ -580,12 +788,13 @@ spawn_env = build_spawn_environment(bundle_root)
 stats = Hash.new(0)
 bundle_findings   = Hash.new { |h, k| h[k] = [] }
 bundle_summaries  = {}
-require_occurrences = Hash.new { |h, k| h[k] = [] } # lib => [[bundle, file, line, construct], ...]
+require_occurrences = Hash.new { |h, k| h[k] = [] } # [lib, extra_dirs] => [[bundle, file, line, construct], ...]
 
 bundle_dirs = Dir.glob(File.join(bundle_root, '*.tmbundle')).sort
 bundle_dirs.each do |bundle_dir|
   bundle = File.basename(bundle_dir)
   local = Hash.new(0)
+  bundle_env = build_bundle_env(spawn_env, bundle_dir)
 
   process_body = lambda do |body, file_label, source_dir|
     category, _flags = detect_interpreter(body, file_label)
@@ -604,10 +813,19 @@ bundle_dirs.each do |bundle_dir|
     next unless %i[ruby ruby18].include?(category)
 
     literal, skipped = extract_requires(body, source_dir)
-    literal += extract_shebang_requires(body)
     local[:requires_skipped_nonliteral] += skipped
+
+    # Extra directories only apply to requires actually written in this
+    # file's body -- a shebang -r flag resolves before any of the body
+    # (including its own $: << line, if any) has run, so it never benefits.
+    extra_dirs, lp_unresolved = extract_load_path_extra_dirs(body, source_dir, bundle_env)
+    local[:load_path_unresolved] += lp_unresolved
     literal.each do |lineno, construct, lib|
-      require_occurrences[lib] << [bundle, file_label, lineno, construct]
+      require_occurrences[[lib, extra_dirs]] << [bundle, file_label, lineno, construct]
+      local[:requires_total] += 1
+    end
+    extract_shebang_requires(body).each do |lineno, construct, lib|
+      require_occurrences[[lib, []]] << [bundle, file_label, lineno, construct]
       local[:requires_total] += 1
     end
 
@@ -648,15 +866,20 @@ bundle_dirs.each do |bundle_dir|
   local.each { |k, v| stats[k] += v }
 end
 
-lib_results = resolve_requires(spawn_env, require_occurrences.keys)
-require_occurrences.each do |lib, occurrences|
-  status, message = lib_results.fetch(lib, ['FAIL', 'not resolved (child process error)'])
+occurrence_pairs = require_occurrences.to_a # [[[lib, extra_dirs], occurrences], ...], fixes job/result order
+jobs = occurrence_pairs.map { |(lib, extra_dirs), _occurrences| { 'lib' => lib, 'extra_dirs' => extra_dirs } }
+results = resolve_requires(spawn_env, jobs)
+occurrence_pairs.each_with_index do |((lib, _extra_dirs), occurrences), i|
+  status, message = results[i] || ['FAIL', 'not resolved (child process error)']
   occurrences.each do |bundle, file_label, lineno, construct|
     if status == 'OK'
       stats[:requires_resolved] += 1
-    else
-      stats[:requires_fatal] += 1
+    elsif RUBY18_STDLIB_NAMES.include?(lib)
+      stats[:requires_ruby18] += 1
       bundle_findings[bundle] << Finding.new(bundle, file_label, lineno, "#{construct} '#{lib}'", :fatal, message)
+    else
+      stats[:requires_missing_gem] += 1
+      bundle_findings[bundle] << Finding.new(bundle, file_label, lineno, "#{construct} '#{lib}'", :missing_gem, message)
     end
   end
 end
@@ -671,20 +894,32 @@ bundle_dirs.each do |bundle_dir|
   puts "== #{bundle} =="
   findings.each do |f|
     detail = f.detail ? "\t#{f.detail}" : ''
-    tag = f.classification == :fatal ? 'FATAL' : 'WARNING'
+    tag = case f.classification
+          when :fatal        then 'FATAL'
+          when :missing_gem  then 'MISSING-GEM'
+          else                    'WARNING'
+          end
     puts "#{tag}\t#{f.bundle}\t#{f.file}\t#{f.line}\t#{f.construct}#{detail}"
   end
   if local[:manual_index_calls].to_i.positive?
-    puts "MANUAL\t#{bundle}\t-\t-\t.index( call sites (ambiguous receiver -- not classified)\t#{local[:manual_index_calls]}"
+    puts "WARNING\t#{bundle}\t-\t-\t.index( call sites (ambiguous receiver -- not classified)\t#{local[:manual_index_calls]}"
+  end
+  bundle_unresolved = local[:requires_skipped_nonliteral].to_i + local[:load_path_unresolved].to_i
+  if bundle_unresolved.positive?
+    puts "UNRESOLVED\t#{bundle}\t-\t-\trequire/$LOAD_PATH arguments not statically resolvable\t#{bundle_unresolved}"
   end
   scanned = local.select { |k, _| k.to_s.start_with?('interp_') }.values.sum
   puts "  #{scanned} bodies scanned, #{local[:requires_total].to_i} literal requires found, " \
-       "#{local[:requires_skipped_nonliteral].to_i} requires skipped (non-literal), " \
+       "#{bundle_unresolved} unresolved (#{local[:requires_skipped_nonliteral].to_i} non-literal require args, " \
+       "#{local[:load_path_unresolved].to_i} non-literal $LOAD_PATH pushes), " \
        "#{local[:syntax_fatal].to_i} syntax errors, #{local[:api_fatal].to_i} fatal / #{local[:api_warning].to_i} warning removed-API hits"
   puts
 end
 
-total_fatal = stats[:syntax_fatal] + stats[:requires_fatal] + stats[:api_fatal]
+total_ruby18      = stats[:syntax_fatal] + stats[:requires_ruby18] + stats[:api_fatal]
+total_missing_gem = stats[:requires_missing_gem]
+total_unresolved  = stats[:requires_skipped_nonliteral] + stats[:load_path_unresolved]
+total_warning     = stats[:api_warning] + stats[:manual_index_calls]
 
 puts '==================== SUMMARY ===================='
 puts "Bundles scanned: #{bundle_dirs.size}"
@@ -694,11 +929,13 @@ puts "Support/ scripts: binary skipped=#{stats[:support_binary_skipped]}"
 interp_line = %i[ruby ruby18 python perl bash osascript none unknown].map { |c| "#{c}=#{stats[:"interp_#{c}"]}" }.join(' ')
 puts "Interpreter breakdown: #{interp_line}"
 puts "Syntax checks: ok=#{stats[:syntax_ok]} fatal=#{stats[:syntax_fatal]} skipped=#{stats[:syntax_skip]}"
-puts "Requires: unique=#{require_occurrences.size} occurrences_resolved=#{stats[:requires_resolved]} " \
-     "occurrences_fatal=#{stats[:requires_fatal]} skipped_nonliteral=#{stats[:requires_skipped_nonliteral]}"
+puts "Requires: unique_jobs=#{require_occurrences.size} occurrences_resolved=#{stats[:requires_resolved]} " \
+     "occurrences_ruby18=#{stats[:requires_ruby18]} occurrences_missing_gem=#{stats[:requires_missing_gem]} " \
+     "skipped_nonliteral=#{stats[:requires_skipped_nonliteral]} load_path_pushes_unresolved=#{stats[:load_path_unresolved]}"
 puts "Removed-API scan: fatal=#{stats[:api_fatal]} warning=#{stats[:api_warning]} " \
-     "needs_manual_inspection(.index)=#{stats[:manual_index_calls]}"
-puts "TOTAL FATAL: #{total_fatal}"
-puts "Exit: #{total_fatal.positive? ? 1 : 0}"
+     "needs_manual_inspection(.index, folded into warning)=#{stats[:manual_index_calls]}"
+puts "Buckets: ruby18=#{total_ruby18} missing_gem=#{total_missing_gem} unresolved=#{total_unresolved} warning=#{total_warning}"
+puts "TOTAL RUBY18 (fatal): #{total_ruby18}"
+puts "Exit: #{total_ruby18.positive? ? 1 : 0}"
 
-exit(total_fatal.positive? ? 1 : 0)
+exit(total_ruby18.positive? ? 1 : 0)
