@@ -36,7 +36,7 @@ static struct TMMandatoryBundle const kTMMandatoryBundles[] = {
 		"0BB1F01A-4F0A-475A-ACDD-0F5578F2EFC3",
 		"Bundle Support",
 		"https://github.com/sdenike/bundle-support.tmbundle",
-		"8a68c346e298ca25ac7da203585daa7c9a4093e1",
+		"1cb748427d1b4901afb596a7d6dbc3a83a4ef9bc",
 		"Other",
 	},
 	// branch: main
