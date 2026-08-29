@@ -4,6 +4,54 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-29 — RESUME HERE: three bundles forked for syntax; catalogue mechanics documented
+
+`bundles/fork-syntax-fixes` is ready to push. `sdenike/{apache,c,objective-c}.tmbundle` forked and
+fixed; `sdenike/bundle-support.tmbundle` at `1cb7484` repoints the catalogue; the pin is bumped and
+`bin/build` is green.
+
+### The checker under-reports, by design
+
+It shows the **first** syntax error per file. Two of the three had more: `apache_doc.rb` 35 *and* 36,
+`insert_missing_includes.rb` 12/13/14, the NSLog command 41-46. Anyone fixing from a checker report
+alone would have shipped a still-broken file and believed otherwise. Run `ruby -c` until clean.
+
+### Where the catalogue actually lives
+
+`Support/DefaultBundles.plist` **inside the bundle-support fork** — moved there by `2b828aa0`
+(2026-05-22). `AvailableBundles.plist` beside it is a different tier and does not contain
+default-shipped bundles at all, so looking there finds nothing and reads like the entry is missing.
+
+`bin/generate_available_bundles.rb` is **dead code**: reads a file never in git, writes a path
+deleted in May, invoked by nothing, hardcodes `textmatelives` as owner. CLAUDE.md described it as the
+generator; it has not been that since May.
+
+### Repointing does not reach existing installs
+
+`Ruling: fork and repoint anyway. seedShippedDefaults only writes category and origin on the
+existing-spec path, so a URL change reaches fresh installs only -- but "Revert to Default" enables
+itself, because bundleIsEditedShippedDefault: is true exactly when the recorded URL differs from the
+catalogue's. Existing users get a lit button, one click. Cost if wrong: users who never click keep
+the broken upstream copy, which is what they have today anyway.`
+
+**Nothing verifies the catalogue** — no test, no CI, no checksum catches a bad URL or duplicate UUID.
+That gap is worth closing and has not been.
+
+### If interrupted here
+
+Push `bundles/fork-syntax-fixes` and PR it. Checker: live 17 → 15 once the maintainer relaunches and
+picks up the Bundle Support fix → 12 with these forks.
+
+Still open, both put to the maintainer:
+1. **Python and Markdown** — five files that are Python 2 *and* have no interpreter (`command -v
+   python` is empty on macOS 26). A syntax fix alone would not make them run; a `python`→`python3`
+   shim alone would turn "command not found" into a confusing SyntaxError. Both halves or neither.
+2. **`set_grammar` profiling needs their TextMate quit** — `RMateServer.mm` unconditionally rebinds
+   `/tmp/textmate-<uid>.sock`, so a second instance steals the live session's `mate` socket.
+   `bin/bench/measure-open.sh` exists for it now.
+
+---
+
 ## 2026-08-28 — RESUME HERE: a checker for the bundles, and 14 syntax errors nobody had looked for
 
 `bin/check_bundle_commands` is on `bundles/command-checker` (PR #37) — a static checker for
