@@ -4,6 +4,66 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-29 — RESUME HERE: the documented performance lever was wrong, twice over
+
+`perf/parse-batching` (`66227985`) is ready to push: a headless parse benchmark, a correctness test,
+and a dispatch counter. **The batching change it was written to justify measured flat and was
+reverted.**
+
+### HANDOFF named a lever that cannot exist
+
+It said to parse the visible region rather than the whole file. Parser state chains line to line from
+the top, so there is no skipping to the viewport — you could only stop after it, which leaves the
+symbol list, folding and spell-check incomplete. HANDOFF now says so.
+
+### My replacement hypothesis was also wrong, and the numbers say so cleanly
+
+`initiate_repair` parses **one line per dispatch** — 64,219 lines, 64,219 `dispatch_async` +
+`CFRunLoopPerformBlock` + `CFRunLoopWakeUp` round-trips. Batching cut that to 5,838, **11× fewer**,
+and the wall clock did not move: median 1.0385 s → 1.034 s, spread 2.9%.
+
+`Ruling: revert. Third plausible parser change to measure flat here, after two attempts at deferring
+the symbol list. Keep the benchmark, the correctness test and the dispatch counter, because the
+measurement is the durable artifact and the next person will otherwise re-derive the same wrong
+hypothesis from the same code. Cost if wrong: none -- the change is recoverable from this branch.`
+
+The counter-hypothesis stands: the **synchronous continuation** `update_scopes` → `did_parse` →
+`symbols_t::did_parse` → `bundles::value_for_setting` fires every `limit_redraw` lines however the
+parse is dispatched, so batching could never have helped it.
+
+### Two traps found while measuring
+
+**`limit_redraw` is not a batch size.** It only gates how often `did_parse` fires; every step still
+dispatches one line. It reads exactly like a batch parameter.
+
+**`wait_for_repair` cancels the async dispatch and reparses inline.** A test built on it never
+exercises `initiate_repair` at all — I suggested it in the brief and it was correctly rejected. The
+benchmark pumps a runloop until a `did_parse` callback confirms coverage instead. Note also that **no
+existing test enabled async parsing**, so the new correctness test is the first coverage of that path.
+
+### Bundles: done, bar a deliberate exclusion
+
+All merged and deployed. `Ruling: leave the five Python files alone. They are Python 2 syntax AND
+have no interpreter -- command -v python is empty on macOS 26 -- so a syntax port alone would not make
+them run, and dialog.py, which they depend on, has its own Python 2 breakage. Porting inside a
+third-party bundle is a rewrite with real regression risk on commands that are currently merely
+inert. Cost if wrong: five commands stay broken, as they have been for years.`
+
+### If interrupted here
+
+Push `perf/parse-batching` and PR it — the benchmark is worth landing even though the change is not.
+
+A profile of the benchmark binary is running to find where the time actually goes now, since the 72%
+figure predates both Phase 7 fixes and nobody has re-measured. Use `sample` on the test binary;
+CLAUDE.md records that `xctrace --launch` resolves through Launch Services by bundle id and profiles
+the wrong app.
+
+Open question worth checking: `value_for_setting`'s cache is bounded at **50000**, and CLAUDE.md says
+a 1 MB C++ file produces **~61,000** distinct scope contexts. That is more contexts than the bound.
+If it is thrashing again, that is the finding.
+
+---
+
 ## 2026-08-29 — RESUME HERE: three bundles forked for syntax; catalogue mechanics documented
 
 `bundles/fork-syntax-fixes` is ready to push. `sdenike/{apache,c,objective-c}.tmbundle` forked and

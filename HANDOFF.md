@@ -251,9 +251,23 @@ Do not start this without being asked for it by name.
   document. GUI gestures cannot be synthesised in the agent sandbox; this needs the maintainer.
 - **Georg Seifert (`schriftgestalt`) offered a UI PR.** Unanswered.
 
-### The next real performance lever
+### The next real performance lever — the previous answer here was wrong
 
-Before any further micro-optimisation: the remaining open-time cost is structural. The whole file is
-parsed at open rather than the visible region — `set_grammar` dirties the entire buffer and batching
-stops at EOF, never at the viewport. That is a larger change than anything in Phase 7, and it is
-where the time actually is.
+This section used to say the lever was parsing the visible region rather than the whole file.
+**It is not, and it cannot be.** Parser state chains line to line from the top — line N's state is
+the input to line N+1 — so there is no way to skip ahead to the viewport. You could only stop
+*after* it, which leaves the symbol list, folding and spell-check incomplete.
+
+The obvious replacement was also wrong. `initiate_repair` parses one line per dispatch, so a 64,219
+line buffer costs 64,219 runloop round-trips; batching them measured **flat** (11× fewer dispatches,
+1.0385 s → 1.034 s, inside a 2.9% spread) and was reverted. That is the third plausible parser change
+to measure flat here, after two attempts at deferring the symbol list.
+
+What the evidence points at instead is the **synchronous continuation** — `update_scopes` →
+`did_parse` → `symbols_t::did_parse` → `bundles::value_for_setting` — which fires every
+`limit_redraw` lines however the parse is dispatched. A profile taken before the Phase 7 fixes put
+72% there; that figure predates both the cache-bound raise and the `does_match` fast-reject and has
+not been re-measured.
+
+**Measure before changing anything here.** `bin/build buffer/test` then `buffer_test -b` gives a
+headless baseline in about a second, with no GUI and no interference with a running app.

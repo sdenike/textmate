@@ -241,6 +241,11 @@ namespace ng
 
 	std::string to_s (buffer_t const& buf, size_t first = 0, size_t last = SIZE_T_MAX);
 
+	// Process-wide count of initiate_repair’s background parse dispatches, for
+	// benchmarking dispatch granularity (see Frameworks/buffer/tests/t_parse_benchmark.cc).
+	size_t parse_dispatch_count ();
+	void reset_parse_dispatch_count ();
+
 } /* ng */
 
 #endif /* end of include guard: COMPOSITE_H_BOKD8YWS */

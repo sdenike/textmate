@@ -593,6 +593,32 @@ the completion back every ~10-20 lines, so the main thread answers Apple Events 
 ~470 ms during a load *without* any change. Deferring the symbol list until after
 first paint was implemented twice, correctly, and measured flat both times.
 
+**Batching the parser's dispatch measured flat — the third such result here.**
+`initiate_repair` (`Frameworks/buffer/src/parsing.cc`) parses **exactly one line per invocation**,
+each costing a `dispatch_async`, a `CFRunLoopPerformBlock`, a `CFRunLoopWakeUp` and a `substr` copy.
+A 64,219-line buffer is 64,219 round-trips, and cutting that to 5,838 — **11× fewer** — moved the
+wall clock from a median of 1.0385 s to 1.034 s, inside a 2.9% spread. Reverted.
+
+So dispatch overhead is not the cost. What remains, on the evidence, is the **synchronous
+continuation**: `update_scopes` → `did_parse` → `symbols_t::did_parse` → `bundles::value_for_setting`.
+That fires every `limit_redraw` lines regardless of how the parse is dispatched, which is exactly why
+batching could not help it.
+
+**`limit_redraw` is not a batch size, whatever it looks like.** Trace the recursion through
+`update_scopes` (`parsing.cc:83-113`) and it only counts down to gate how often `did_parse` fires;
+every step still goes through `initiate_repair`'s own dispatch for a single line.
+
+**`wait_for_repair` cannot be used to exercise the async parser.** It *cancels* any in-flight
+dispatch and reparses inline, so a test built on it never touches `initiate_repair` at all. The
+headless benchmark added alongside this result pumps a runloop until a `did_parse` callback confirms
+full coverage instead.
+
+**There is a headless benchmark now: `bin/build buffer/test` then `buffer_test -b`.** It builds a
+synthetic ~1 MB / 64,219-line buffer with a real grammar and times a full async parse — no window, no
+Launch Services, no interference with a running app, which is what makes it usable while someone is
+editing. `t_parse_benchmark.cc` also carries a correctness test asserting batched output matches
+synchronous, since **no existing test enabled async parsing at all**.
+
 **And calling into the bundles layer from a background thread crashes on quit.**
 `value_for_setting`'s cache is a function-local `static`; `exit()` destroys it on
 the main thread while an in-flight parse block still uses it. The mutex does not
