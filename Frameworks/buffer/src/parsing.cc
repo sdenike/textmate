@@ -1,11 +1,27 @@
 #include "buffer.h"
 #include "meta_data.h"
+#include <atomic>
 
 namespace ng
 {
 	// ===================
 	// = buffer_parser_t =
 	// ===================
+
+	// initiate_repair still dispatches one line per background call (a
+	// batched rewrite was tried and measured -- see
+	// Frameworks/buffer/tests/t_parse_benchmark.cc -- and reverted: dispatch
+	// count dropped ~11x but wall time didn't move, because did_parse's
+	// cadence, not the dispatch itself, is what's expensive). This counter is
+	// kept so a future attempt can measure the same way rather than
+	// re-deriving it.
+	namespace
+	{
+		std::atomic<size_t> parseDispatchCount { 0 };
+	}
+
+	size_t parse_dispatch_count ()     { return parseDispatchCount.load(); }
+	void reset_parse_dispatch_count () { parseDispatchCount.store(0); }
 
 	struct result_t
 	{
@@ -49,6 +65,7 @@ namespace ng
 				size_t bufferRev = revision();
 				auto bufferRef   = parser_reference();
 				_parser_running  = true;
+				++parseDispatchCount;
 
 				CFRunLoopRef runLoop = CFRunLoopGetCurrent();
 				dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
