@@ -94,6 +94,176 @@ namespace
 		"	};\n"
 		"}\n";
 
+	// ===========================================================================
+	// = Realistic bundles::kItemTypeSettings population (STREAM.md 2026-08-29) =
+	// ===========================================================================
+	//
+	// symbols_t::did_parse (buffer/src/symbols.cc) calls bundles::value_for_setting
+	// ("showInSymbolList", scope) -- and, when that is true, ("symbolTransformation",
+	// scope) too -- once per distinct scope it sees in every did_parse batch. That
+	// query lands in bundles::cache_search (query.cc), which equal-range-scans
+	// whichever items registered "showInSymbolList" under kFieldSettingName and
+	// calls item_t::does_match -> scope::selector_t::does_match on each: this is
+	// the exact path the historical profile put at 72% of samples, and Phase 7's
+	// does_match fast-reject (match.cc's root_prefix) exists to speed up. Until
+	// this fixture had zero Settings items registered, so that bucket was always
+	// empty and cache_search/does_match never ran at all.
+	//
+	// Measured against the 54 bundles actually installed under ~/Library/
+	// Application Support/TextMate/Managed/Bundles/, not guessed: 272 Settings
+	// items total (every *.plist/*.tmDelta/*.tmPreferences under a bundle's
+	// Preferences/, per load.cc's own glob), 265 with a non-empty scope selector,
+	// 7 with none (match unconditionally). Only 53 of the 272 declare
+	// 'showInSymbolList' -- the only setting name this benchmark's own code path
+	// ever queries, so the only one cache_search's equal-range bucket here is ever
+	// non-empty for -- matching HANDOFF.md's "all 53 installed settings items"
+	// from the original profile, and 53 * ~61,000 distinct scopes (CLAUDE.md's
+	// real-1MB-file figure) lands on the ~3.25M selector evaluations it also
+	// records. Their shape breakdown: 31 descendant paths (space-separated
+	// ancestor chains), 12 bare literals, 7 comma-separated, 2 using the '-'
+	// composite operator, 1 parenthesised sub-selector -- kept verbatim below so
+	// shape AND count are both real: a fixture of only bare literals would
+	// exercise path_t::does_match's root_prefix fast-reject's REJECT branch and
+	// nothing else match.cc can do.
+	static char const* const kRealShowInSymbolListScopes[] = {
+		"entity.name.function.active4d",
+		"meta.toc-list.directory.apache-config",
+		"meta.toc-list.location.apache-config",
+		"meta.vhost.apache-config meta.toc-list.directory.apache-config",
+		"meta.vhost.apache-config meta.toc-list.location.apache-config",
+		"meta.toc-list.virtual-host.apache-config",
+		"source.plist.textmate.grammar support.constant.repository",
+		"source.plist.textmate.grammar meta.value-pair.repository-item constant.other.scope - meta.dictionary.captures",
+		"source.plist.textmate.grammar meta.dictionary.repository entity.name.section.repository",
+		"source.plist.textmate.grammar constant.other.scope - (meta.dictionary.repository|meta.value-pair.scopename)",
+		"entity.name.type.inherited.c++",
+		"source.css comment.block.css -text source.css",
+		"* source.css meta.selector, * source.css meta.at-rule.media",
+		"source.css meta.selector, source.css meta.at-rule.media",
+		"source.coffee meta.function.coffee",
+		"source.coffee entity.name.type.instance",
+		"source.erlang entity.name.function.definition",
+		"source.erlang entity.name.function.macro.definition",
+		"source.erlang entity.name.type.class.module.definition.erlang",
+		"source.erlang entity.name.type.class.record.definition",
+		"source.erlang entity.name.function, source.erlang entity.name.type.class",
+		"entity.name.section.subsection.git-config - punctuation.definition.section.subsection",
+		"entity.name.section.git-config",
+		"source.go meta.function.declaration.go",
+		"source.go meta.function.receiver.declaration.go",
+		"source.groovy meta.definition.class meta.definition.variable.name",
+		"source.groovy entity.name.type.class",
+		"source.groovy meta.definition.class meta.definition.method.signature",
+		"source.groovy meta.definition.method.signature",
+		"source.groovy meta.definition.variable.name",
+		"meta.attribute.id.html > string",
+		"source.java meta.class meta.class.identifier",
+		"source.java meta.class.body meta.class.body meta.method.identifier",
+		"source.java meta.class.body meta.class.identifier",
+		"source.java meta.class.body meta.class.body meta.class.body meta.method.identifier",
+		"source.java meta.class.body meta.class.body meta.class.identifier",
+		"source.java meta.class.body meta.method.identifier",
+		"source.js entity.name.function.js, source.js meta.function.js meta.function.variable.js",
+		"text.html.markdown markup.heading",
+		"meta.function.objc",
+		"support.function.magic.php",
+		"entity.name.goto-label.php",
+		"constant.other.name.xml.plist",
+		"source.python meta.function.python, source.python meta.class.python",
+		"source.python meta.function.decorator.python entity.name.function.decorator.python",
+		"source.ruby meta.function",
+		"meta.class.ruby",
+		"source.ruby meta.function-call entity.name.function",
+		"source.sql meta.create.sql, source.sql meta.drop.sql, source.sql meta.alter.sql",
+		"entity.name.function, entity.name.type, meta.toc-list",
+		"meta.group.toml",
+		"text.xml.xsl meta.tag.xml.template",
+		"source.yaml entity.name.tag.yaml",
+	};
+
+	// Registers the 53 real selectors above under kFieldSettingName
+	// "showInSymbolList", plus one deliberately-matching item: 'meta.function.bench'
+	// is the scope generate_function's rule pushes (kGrammarPlist above), the same
+	// shape as a language bundle's OWN symbol-list setting for whatever file is
+	// actually open -- which none of the 53 real ones (all for other languages) is.
+	// Without it, every does_match call this benchmark makes would take the
+	// fast-reject's REJECT branch, and the ACCEPT branch -- the recursive walk in
+	// path_t::does_match actually running to completion -- would go unexercised.
+	void register_real_symbol_list_settings (test::bundle_index_t& bundleIndex)
+	{
+		for(char const* scope : kRealShowInSymbolListScopes)
+			bundleIndex.add(bundles::kItemTypeSettings, std::string("{ settings = { showInSymbolList = 1; }; scope = '") + scope + "'; }");
+
+		bundleIndex.add(bundles::kItemTypeSettings, "{ settings = { showInSymbolList = 1; }; scope = 'meta.function.bench entity.name.function.bench'; }");
+	}
+
+	// The other 219 of the real install's 272 Settings items: 212 with a scope
+	// (shape distribution is the overall 265 minus the 53 above) plus the measured
+	// 7 with none. None of these declare showInSymbolList or symbolTransformation,
+	// so cache_search never scans them for this benchmark's own queries -- they
+	// exist only so AllItems, and bundles::cache_t::fetch's one-time build of the
+	// "settings" bucket map, are the real install's order of magnitude rather than
+	// just the 53 that matter to did_parse. Selectors are generated, not copied
+	// verbatim, cycling real root/leaf scope vocabulary through the measured
+	// per-shape proportions.
+	void register_settings_chaff (test::bundle_index_t& bundleIndex)
+	{
+		static char const* const kOtherKeys[] = {
+			"shellVariables", "foldingStopMarker", "foldingStartMarker", "decreaseIndentPattern",
+			"increaseIndentPattern", "smartTypingPairs", "disableIndentCorrections", "highlightPairs",
+			"completions", "spellChecking", "indentedSoftWrap", "foldingIndentedBlockStart",
+			"indentOnPaste", "softWrap", "indentNextLinePattern", "unIndentedLinePattern",
+			"foreground", "background",
+		};
+		static char const* const kRoots[] = {
+			"source.ruby", "source.python", "source.php", "text.html.basic", "source.js", "source.css",
+			"source.java", "source.go", "source.perl", "source.lua", "text.xml", "source.shell",
+		};
+		static char const* const kLeaves[] = {
+			"meta.function", "string.quoted.double", "comment.block", "entity.name.tag",
+			"keyword.control", "meta.class", "constant.numeric", "variable.parameter",
+		};
+		struct shape_count_t { std::string shape; int count; };
+		// 157/20/21/8/2/3/1 = the overall 265 (bare 169, descendant 51, comma 28,
+		// operator 10, parenthesized 3, filter 3, wildcard 1) minus the 53 real
+		// showInSymbolList items' own shapes (bare 12, descendant 31, comma 7,
+		// operator 2, parenthesized 1, filter 0, wildcard 0) -- so the two sets
+		// together reproduce the real, measured, overall distribution exactly.
+		static shape_count_t const kShapeCounts[] = {
+			{ "bare", 157 }, { "descendant", 20 }, { "comma", 21 }, { "operator", 8 },
+			{ "parenthesized", 2 }, { "filter", 3 }, { "wildcard", 1 },
+		};
+
+		size_t i = 0;
+		for(auto const& shapeCount : kShapeCounts)
+		{
+			for(int n = 0; n < shapeCount.count; ++n, ++i)
+			{
+				std::string const root  = kRoots[i % (sizeof(kRoots)/sizeof(*kRoots))];
+				std::string const root2 = kRoots[(i + 5) % (sizeof(kRoots)/sizeof(*kRoots))];
+				std::string const leaf  = kLeaves[i % (sizeof(kLeaves)/sizeof(*kLeaves))];
+				std::string const key   = kOtherKeys[i % (sizeof(kOtherKeys)/sizeof(*kOtherKeys))];
+
+				std::string scope;
+				if(shapeCount.shape == "bare")               scope = root;
+				else if(shapeCount.shape == "descendant")    scope = root + " " + leaf;
+				else if(shapeCount.shape == "comma")         scope = root + " " + leaf + ", " + root2 + " " + leaf;
+				else if(shapeCount.shape == "operator")      scope = root + " " + leaf + " - " + root + " punctuation.definition";
+				else if(shapeCount.shape == "parenthesized") scope = "(" + root + " | " + root2 + ") - " + leaf;
+				else if(shapeCount.shape == "filter")        scope = "L:" + root + " " + leaf;
+				else                                         scope = root + ".*"; // wildcard
+
+				bundleIndex.add(bundles::kItemTypeSettings, "{ settings = { " + key + " = 1; }; scope = '" + scope + "'; }");
+			}
+		}
+
+		for(int n = 0; n < 7; ++n, ++i)
+		{
+			std::string const key = kOtherKeys[i % (sizeof(kOtherKeys)/sizeof(*kOtherKeys))];
+			bundleIndex.add(bundles::kItemTypeSettings, "{ settings = { " + key + " = 1; }; }");
+		}
+	}
+
 	// Emits one leaf statement inside a function or block body -- a
 	// comment, a string literal, a numeric constant, a call-like
 	// reference, or a return -- so the token-level scopes (comment/
@@ -286,6 +456,8 @@ void benchmark_parse_cpp_like_1mb ()
 {
 	test::bundle_index_t bundleIndex;
 	bundles::item_ptr grammar = bundleIndex.add(bundles::kItemTypeGrammar, kGrammarPlist);
+	register_real_symbol_list_settings(bundleIndex);
+	register_settings_chaff(bundleIndex);
 	bundleIndex.commit();
 
 	std::string text = generate_source(1000000);
