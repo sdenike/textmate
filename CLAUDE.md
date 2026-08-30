@@ -613,6 +613,56 @@ dispatch and reparses inline, so a test built on it never touches `initiate_repa
 headless benchmark added alongside this result pumps a runloop until a `did_parse` callback confirms
 full coverage instead.
 
+**A benchmark that runs is not a benchmark that measures.** The first version of
+`t_parse_benchmark.cc` produced stable, believable timings and was useless for the question it was
+built to answer. Its grammar was flat — six sibling patterns, no nesting — so the 1 MB fixture
+generated **7 distinct scope contexts**. A real 1 MB C++ file generates ~61,000, because nesting
+extends the scope path and combinations compound.
+
+Consequence: `bundles::value_for_setting` was **0% of samples**, the settings cache never came within
+three orders of magnitude of its 50000 bound, and the whole `query` → `does_match` path the Phase 7
+work targeted was untouched. It could neither confirm nor refute anything about that code. The fix
+was to make the grammar nest (`namespace` → `class` → `function` → block, scope names spliced from
+begin-captures, the same technique `C.tmbundle` uses) and to generate correspondingly nested,
+uniquely-named source. It now yields **66,436 distinct contexts**, with a floor assertion so it
+cannot silently regress to 7.
+
+**That still was not enough**, and the second gap is subtler: the fixture registered **zero Settings
+items**, so `bundles::query()` had nothing to scan and never reached selector matching at all. The
+population matters as much as the count — measured against the real install, there are **272 Settings
+items across 54 bundles** (169 bare selectors, 51 descendant, 28 comma-separated, 10 with `&|-`, 3
+parenthesised, 3 with `L:`/`R:`/`B:`, 1 wildcard). A fixture of only trivial selectors would flatter
+the fast-reject, which explicitly falls back to the full matcher for `*` and parenthesised
+sub-selectors.
+
+**Only 53 of those 272 declare `showInSymbolList`** — and that is the only setting `did_parse`
+queries. 53 selectors × 66,436 contexts is where the historical "~3.25M evaluations" figure comes
+from.
+
+**The `does_match` fast-reject is confirmed to work, by controlled experiment rather than inference.**
+With it, runs cluster at a median of 1.096 s; with it scratch-reverted, **10 of 10** runs landed in a
+~2.10 s cluster and never in the fast one. It now accounts for ~4.3% of main-thread samples, down
+from the 72% the pre-fix profile recorded. That is the Phase 7 work doing its job, and it is the
+first time anything in this repo has actually tested it.
+
+Three traps in profiling this, each of which silently produces a wrong answer rather than an error:
+
+- **`sample` returns an empty call graph with no error** on a locally-built binary when Developer
+  Mode is off — headers present, nothing between them. The binary is adhoc/linker-signed with no
+  `get-task-allow`, so `task_for_pid` is denied. `sudo` alone is **not** sufficient;
+  `DevToolsSecurity -enable` is what makes it work. Check `DevToolsSecurity -status` before believing
+  an empty profile.
+- **`cache_search` has no symbol at `-Os` with ThinLTO** — it is inlined into `bundles::search`,
+  confirmed with `nm`. Its absence from a profile is a symbol artifact, not evidence it is cheap.
+- **This machine's timings are bimodal** — roughly 1.10 s and 2.10 s clusters for identical builds,
+  reproduced with the old fixture too, so it predates any of this work. Report clusters, not just a
+  median, or a run that lands in the wrong cluster reads as a regression.
+
+**The honest conclusion on open time: it is close to what this architecture gives.** Three plausible
+changes have now measured flat — deferring the symbol list twice, and batching the parse dispatch.
+The two Phase 7 fixes did the real work, and both are now confirmed effective against a realistic
+workload.
+
 **There is a headless benchmark now: `bin/build buffer/test` then `buffer_test -b`.** It builds a
 synthetic ~1 MB / 64,219-line buffer with a real grammar and times a full async parse — no window, no
 Launch Services, no interference with a running app, which is what makes it usable while someone is

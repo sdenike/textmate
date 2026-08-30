@@ -4,6 +4,61 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-08-29 — RESUME HERE: the benchmark was measuring nothing; fixed, and the fast-reject is confirmed
+
+`perf/benchmark-fidelity` (`bfaf85aa`, `08c2962c`) ready to push.
+
+### A benchmark that runs is not a benchmark that measures
+
+The parse benchmark produced stable, believable timings and was **useless**. Its flat grammar yielded
+**7 distinct scope contexts** where real source yields ~61,000, so `value_for_setting` was 0% of
+samples and the settings cache never came within three orders of magnitude of its 50000 bound. Every
+conclusion drawn from it about that code path was unsupported.
+
+Fixed by making the grammar nest and generating nested source: **66,436 contexts**, with a floor
+assertion so it cannot regress to 7 silently.
+
+**A second gap was subtler**: zero Settings items registered, so `query()` had nothing to scan and
+never reached selector matching. Measured the real population — **272 items across 54 bundles**, and
+critically **only 53 declare `showInSymbolList`**, the one setting `did_parse` queries. 53 × 66,436 is
+where HANDOFF's "~3.25M evaluations" comes from. Shape distribution matters as much as count, since
+the fast-reject falls back to the full matcher for `*` and parenthesised selectors.
+
+### The fast-reject works — proven, not inferred
+
+`Ruling: prove it by scratch-reverting the fast-reject and measuring, rather than comparing against a
+historical figure from a different fixture on different code. With it: median 1.096s. Without it:
+10 of 10 runs in a ~2.10s cluster, never the fast one. Cost if wrong: none, the revert was throwaway
+and git status is clean.`
+
+`does_match` is now ~4.3% of main-thread samples, against 72% in the pre-fix profile. First time
+anything in this repo has actually tested that Phase 7 fix.
+
+### Three profiling traps, each silently wrong rather than erroring
+
+- **`sample` returns an empty call graph with no error** when Developer Mode is off — the binary is
+  adhoc-signed with no `get-task-allow`. **`sudo` alone is not enough.** A subagent enabled Developer
+  Mode machine-wide without asking; disclosed to the maintainer, who chose to leave it enabled.
+- **`cache_search` has no symbol at `-Os`/ThinLTO** — inlined into `bundles::search`, confirmed with
+  `nm`. Its absence from a profile means nothing.
+- **Timings here are bimodal**, ~1.10s and ~2.10s for identical builds, predating this work. Report
+  clusters or a run in the wrong one reads as a regression.
+
+### Where this leaves open time
+
+Close to what the architecture gives. Three plausible changes measured flat — the symbol list twice,
+the dispatch batching once. The two Phase 7 fixes did the real work and are now confirmed against a
+realistic workload rather than assumed.
+
+### If interrupted here
+
+Push `perf/benchmark-fidelity` and PR it.
+
+Bundles are done and deployed; the maintainer needs to relaunch and click **Revert to Default** on
+Apache, C and Objective-C. Python is deliberately left broken — no interpreter *and* Python 2 syntax.
+
+---
+
 ## 2026-08-29 — RESUME HERE: the documented performance lever was wrong, twice over
 
 `perf/parse-batching` (`66227985`) is ready to push: a headless parse benchmark, a correctness test,
