@@ -4,6 +4,62 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-09-01 — RESUME HERE: a reported "TextMate cannot open .txt or .yaml" is an OS policy, not our bug
+
+No code changed. Docs only.
+
+### The report
+
+Opening `TautWeekly-compose.yaml` produced Gatekeeper's *"Apple could not verify … is free of
+malware"* sheet, with **Move to Trash** and **Done**. The dialog names the document, so it reads as
+an editor defect.
+
+### What it actually is
+
+macOS 26.6.2 refuses any file carrying **both** `com.apple.quarantine` and a per-file
+`com.apple.LaunchServices.OpenWith` binding. `open` returns `-128` (`userCanceledErr`) and the file
+never opens. Truth table, measured by intervention on identical content:
+
+| quarantine | OpenWith | result |
+|---|---|---|
+| yes | no | opens |
+| no | yes | opens |
+| yes | yes | **blocked** |
+
+### Two theories that looked right and were not
+
+The binding named `com.shelbydenike.TextMate`, and `/Applications/TextMate.app` is an adhoc build
+that `spctl -a` rejects (`Signature=adhoc`, `TeamIdentifier=not set`) — so "our signing" was the
+obvious answer. Rewriting the binding to point at notarized `/System/Applications/TextEdit.app`
+blocks identically, which kills it. And `open -a TextEdit` on the file fails the same way, so the
+requesting app is not the variable either: the per-file binding is resolved before the open.
+
+Content was ruled out the same way — the real 1,663-byte file with a bare quarantine xattr opens,
+`hello: world` with the full xattr set does not.
+
+The file had been downloaded from a GitHub release via Safari and then given a one-off Finder
+**Open With**. The binding survives renaming, which is why the user saw it as both `.yaml` and
+`.txt`. Only one file in `~/Downloads` (of 209, 140 of them quarantined) carried both.
+
+Escape is `xattr -d com.apple.LaunchServices.OpenWith <file>`; the durable answer is a **default**
+handler, which writes the LaunchServices database instead of an xattr. That is now recorded in
+HANDOFF as the motivation for the scoped-but-unbuilt file-type association UI.
+
+### Also corrected
+
+HANDOFF's state table still said the latest release was **v3.0.0-revived.26**. It is **.27**, shipped
+2026-08-27, and there are **7 unreleased commits** (#35-#41) on `master` with no CHANGELOG entry.
+
+**If interrupted here:** docs are committed on `docs/gatekeeper-openwith-finding`; nothing else is in
+flight. The next real task is cutting **`.28`** — write the CHANGELOG heading for #35-#41, which is
+what cuts a release. Bundles still needing work: fork SQL (`db_browser.rb`, two defects), Python and
+Markdown (Python 2, and check whether macOS 26 ships any `python` at all), and nothing yet verifies
+`DefaultBundles.plist`. Open question from 2026-08-29 still unanswered: `value_for_setting`'s cache
+is bounded at 50000 while the honest benchmark generates 66,436 distinct contexts, so it may be
+thrashing again.
+
+---
+
 ## 2026-08-29 — RESUME HERE: the benchmark was measuring nothing; fixed, and the fast-reject is confirmed
 
 `perf/benchmark-fidelity` (`bfaf85aa`, `08c2962c`) ready to push.

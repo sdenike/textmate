@@ -742,6 +742,50 @@ Diagnosing it needs care: `log show` returns nothing at all in some sandboxes, a
 silence as "the extension never ran" sent two rounds of investigation the wrong way. Sampling the
 live process (`sample <pid>`) is what actually located the hang.
 
+## Opening a downloaded file — a Gatekeeper trap that is not ours
+
+macOS 26.6.2 refuses to open a file that carries **both** `com.apple.quarantine` and a per-file
+`com.apple.LaunchServices.OpenWith` binding. `open` returns `-128` (`userCanceledErr`), the file
+never opens, and Gatekeeper puts up *"Apple could not verify "<name>" is free of malware that may
+harm your Mac or compromise your privacy."* — naming the **document**, which is what makes it read
+as an editor bug. Reported 2026-09-01 against a `.yaml` downloaded from a GitHub release.
+
+Established by intervention on identical content, not inferred:
+
+| `com.apple.quarantine` | `com.apple.LaunchServices.OpenWith` | result |
+|---|---|---|
+| yes | no | opens |
+| no | yes | opens |
+| yes | yes | **blocked** |
+
+Two controls matter, because both invite a wrong diagnosis:
+
+- **The bound app's signature is irrelevant.** The binding named `com.shelbydenike.TextMate`, an
+  adhoc-signed local build that `spctl -a` rejects, so the obvious theory is our own signing.
+  Rewriting the binding to point at notarized `/System/Applications/TextEdit.app` blocks identically.
+- **The requesting app is irrelevant.** `open -a TextEdit` on the same file fails the same way. The
+  per-file binding is resolved before the open regardless of which app was asked for, so a control
+  run with an Apple app does *not* exonerate the file.
+
+Content is irrelevant too: the real 1,663-byte compose file with only a bare quarantine xattr opens
+fine, while `hello: world` carrying the full xattr set is blocked.
+
+The binding is written by Finder's one-off **Open With**, and it survives renaming — which is why the
+same file failed as both `.yaml` and `.txt`. Per-file escape:
+
+```sh
+xattr -d com.apple.LaunchServices.OpenWith <file>    # keeps quarantine, unblocks the open
+```
+
+Choosing a **default** handler instead (Get Info → Open with → Change All) writes the LaunchServices
+database rather than an xattr, and never creates the pair. That is the concrete argument for the
+file-type association UI (`LSSetDefaultRoleHandlerForContentType`) that HANDOFF lists as scoped but
+unbuilt: it steers users onto the mechanism that does not trip this.
+
+Nothing in this tree reads or writes quarantine — `com.apple.quarantine`, `LSQuarantine` and
+`LSFileQuarantineEnabled` appear nowhere in the source — so there is no code fix here, and adding one
+would mean working around an OS policy the app is not party to.
+
 ## Versions that must track the app
 
 Three binaries carry a version that has to follow the app's, and **two of them had drifted**, each
