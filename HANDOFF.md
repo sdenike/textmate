@@ -20,8 +20,8 @@ maintainer and enforced throughout:
 
 | | |
 |---|---|
-| Released | **v3.0.0-revived.26** — Setup Assistant, PR #19 |
-| Unreleased | **Phase 6 is complete on `master`** — all 6 Settings panes, the update sheet and About are SwiftUI; zero xibs in `Frameworks/Preferences`; no `WKWebView` in the app's own chrome. Plus the `mate` and QuickLook version-drift fixes. |
+| Released | **v3.0.0-revived.27** (2026-08-27) — the `mate` command works again on Macs that once ran the original TextMate; Settings, About and the update window rebuilt |
+| Unreleased | **7 commits on `master`, no CHANGELOG entry — `.28` is uncut.** #35 Ruby 2.6 bundle shims, #36 `bin/bench/measure-open.sh`, #37 `bin/check_bundle_commands`, #38 Bundle Support pin bump, #39 Apache/C/Objective-C forks for colon-`case` syntax errors, #40-#41 a headless parse benchmark that proves the `does_match` fast-reject |
 | Phases complete | 0-7 |
 | Phase 6 | **complete** — QuickLook, onboarding, all 6 Settings panes, the update sheet and About. Everything merged; no open PRs. |
 | Phases remaining | 8 (shared modules), 9 (optional LSP) |
@@ -246,7 +246,11 @@ Do not start this without being asked for it by name.
 - **Quick Look preview theme picker.** The extension reads `darkModeThemeUUID`; the maintainer wants
   the preview theme chosen explicitly rather than inherited.
 - **File-type association UI in Settings** — `LSSetDefaultRoleHandlerForContentType`, so TextMate can
-  claim file types from within the app. Scoped, not built.
+  claim file types from within the app. Scoped, not built. It gained a concrete motivation on
+  2026-09-01: a quarantined download that also carries a per-file `com.apple.LaunchServices.OpenWith`
+  binding — what Finder's one-off *Open With* writes — cannot be opened at all on macOS 26.6.2. A
+  default handler set through this UI writes the LaunchServices database instead and never creates
+  that pair. See CLAUDE.md, "Opening a downloaded file".
 - **The window-merge gesture has never been tested by a human**, particularly with an unsaved
   document. GUI gestures cannot be synthesised in the agent sandbox; this needs the maintainer.
 - **Georg Seifert (`schriftgestalt`) offered a UI PR.** Unanswered.
