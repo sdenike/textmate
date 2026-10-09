@@ -208,42 +208,28 @@ void test_snapshot_captures_live_glass ()
 	NSBitmapImageRep* without = SnapshotView(plain,  NSAppearanceNameDarkAqua);
 	NSBitmapImageRep* with    = SnapshotView(glassy, NSAppearanceNameDarkAqua);
 
-	// Measured at 0.44 for this comparison; 0.02 is a floor far below it that
-	// still fails outright if the material stops rendering.
-	OAK_ASSERT(MeanDifference(without, with) > 0.02);
+	// Measured at 0.44 on macOS 26 and 0.0054 on macOS 27.0.1 (Retina, 2x
+	// backing), where the offscreen material is far subtler. 0.002 is a floor
+	// below both that still fails outright if the material stops rendering.
+	OAK_ASSERT(MeanDifference(without, with) > 0.002);
 }
 
-void test_offscreen_capture_cannot_see_inside_glass ()
+void test_offscreen_capture_of_glass_content ()
 {
-	// Locks in a limitation rather than a behaviour, so that the day AppKit starts
-	// compositing contentView into cacheDisplayInRect: this fails and tells us the
-	// live-window path is no longer needed. Until then it is the reason
-	// CaptureLiveWindow exists.
-	//
-	// The same label is measured twice: as an ordinary subview, and as the glass's
-	// contentView. Only the first leaves ink.
+	// On macOS 26 the offscreen path could not see inside the glass: a label
+	// assigned to glass.contentView left 0.00% ink against 4.24% as a subview.
+	// Measured 2026-10-08 on macOS 27.0.1, both leave the same ink (0.0235), so
+	// the limitation is gone and CaptureLiveWindow is no longer needed to see a
+	// glass surface's contents. The deployment target is still 26, so this only
+	// asserts what holds on both: the plain-subview baseline renders ink.
 	NSTextField* visible = [NSTextField labelWithString:@"HELLO WORLD"];
 	visible.textColor = NSColor.blackColor;
 	visible.frame     = NSMakeRect(10, 10, 160, 20);
 	NSView* plainHost = MakeSizedView(180, 40);
 	[plainHost addSubview:visible];
 
-	NSTextField* hidden = [NSTextField labelWithString:@"HELLO WORLD"];
-	hidden.textColor = NSColor.blackColor;
-	NSGlassEffectView* glass = OakCreateGlassBackground(NSGlassEffectViewStyleRegular);
-	glass.contentView = hidden;
-	NSView* glassHost = MakeSizedView(180, 40);
-	OakAddAutoLayoutViewsToSuperview(@[ glass ], glassHost);
-	[glass.centerXAnchor constraintEqualToAnchor:glassHost.centerXAnchor].active = YES;
-	[glass.centerYAnchor constraintEqualToAnchor:glassHost.centerYAnchor].active = YES;
-	[glass.widthAnchor constraintEqualToConstant:160].active                     = YES;
-	[glass.heightAnchor constraintEqualToConstant:20].active                     = YES;
-
 	double asSubview = DarkFraction(SnapshotView(plainHost, NSAppearanceNameAqua));
-	double asContent = DarkFraction(SnapshotView(glassHost, NSAppearanceNameAqua));
-
-	OAK_ASSERT(asSubview > 0.01);   // measured 0.0424
-	OAK_ASSERT(asContent < 0.001);  // measured 0.0000
+	OAK_ASSERT(asSubview > 0.01);   // 0.0424 on 26, 0.0235 on 27 (2x)
 }
 
 static OakKeyEquivalentView* MakeRecorder (NSString* eventString, CGFloat cornerRadius)
@@ -289,8 +275,8 @@ void test_key_equivalent_view_renders_in_both_appearances ()
 
 			// 180 x 22 plus PrepareWindow's 12pt padding on every side.
 			NSBitmapImageRep* rep = SnapshotView(MakeRecorder(@"@s", radius.doubleValue), appearance);
-			OAK_ASSERT_EQ(rep.pixelsWide, 204);
-			OAK_ASSERT_EQ(rep.pixelsHigh, 46);
+			OAK_ASSERT_EQ((NSInteger)rep.size.width, 204);
+			OAK_ASSERT_EQ((NSInteger)rep.size.height, 46);
 
 			if(dir)
 			{

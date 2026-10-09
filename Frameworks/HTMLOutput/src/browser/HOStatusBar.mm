@@ -77,7 +77,7 @@ static NSTextField* OakCreateTextField ()
 
 		// Controls go inside the glass, not on the bar: NSGlassEffectView guarantees
 		// placement only for its contentView.
-		_contentHolder = OakWrapInGlass(self, NSGlassEffectViewStyleRegular);
+		_contentHolder = OakWrapInGlass(self, NSGlassEffectViewStyleRegular, OakGlassFlatEdgeTop);
 
 		NSArray* views = @[ _topDivider, _divider, _goBackButton, _goForwardButton, _statusTextField, _spinner ];
 		OakAddAutoLayoutViewsToSuperview(views, _contentHolder);

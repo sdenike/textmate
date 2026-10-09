@@ -2,6 +2,47 @@ Title: Release Notes
 
 # Changes
 
+## 2026-10-09 (v3.0.0-revived.28)
+
+Bundle commands run on the system Ruby again, and the editor's bars and overlays
+fit macOS 27.
+
+### Fixed
+
+* Many bundle commands could not run at all. They were written for Ruby 1.8 and
+  failed on the Ruby that ships with macOS: missing libraries (`jcode`,
+  `parsedate`, `iconv`), a missing locale that made Word Count count bytes
+  instead of characters, and the old `ruby18` interpreter name. These are now
+  covered by compatibility shims in Bundle Support, so the affected bundles
+  work without being rewritten.
+
+* Apache, C and Objective-C each contained a command with a Ruby 1.8 `when X:`
+  clause, which is a syntax error today, so the whole command failed to load.
+  They are fixed in forks, and new installs pick them up. On an existing
+  install, open Settings → Bundles and use Revert to Default on each.
+
+### Changed
+
+* The file browser's header and action bars, the editor's status bar and the
+  HTML output status bar now have a flat top edge, so they meet a neighbouring
+  sidebar or pane without a gap at the corner. The bottom corners stay rounded.
+
+* The zoom percentage that appears when you change the text size is now a
+  glass capsule, drawn in the system label colour, in place of the grey
+  rounded box with a shadowed white number.
+
+### Internal
+
+* Build and tested against the macOS 27 SDK. Open-time performance is unchanged
+  from macOS 26 (a 1 MB source file parses in about 1.1 s in the headless
+  benchmark).
+* Added `bin/check_bundle_commands`, a static checker for Ruby 1.8-era breakage
+  in installed bundles, and `bin/bench/measure-open.sh`.
+* Added a headless parse benchmark and a check that the scope-matching fast
+  path is doing its job.
+* The glass snapshot tests were written for a 1x display and a macOS 26
+  limitation that no longer exists; they now measure in points.
+
 ## 2026-08-27 (v3.0.0-revived.27)
 
 The `mate` command works again on Macs that once ran the original TextMate, and

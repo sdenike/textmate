@@ -57,7 +57,7 @@ static NSButton* OakCreateImageButton (NSImage* image)
 
 		// Controls go inside the glass, not on the bar: NSGlassEffectView guarantees
 		// placement only for its contentView.
-		NSView* contentHolder = OakWrapInGlass(self, NSGlassEffectViewStyleRegular);
+		NSView* contentHolder = OakWrapInGlass(self, NSGlassEffectViewStyleRegular, OakGlassFlatEdgeTop);
 		OakAddAutoLayoutViewsToSuperview([views allValues], contentHolder);
 		OakSetupKeyViewLoop(@[ self, _createButton, _actionsPopUpButton, _reloadButton, _searchButton, _favoritesButton, _scmButton ]);
 

@@ -131,7 +131,7 @@ static NSButton* OakCreateImageToggleButton (NSImage* image, NSString* accessibi
 
 		// Controls go inside the glass, not on the bar: NSGlassEffectView guarantees
 		// placement only for its contentView.
-		NSView* contentHolder = OakWrapInGlass(self, NSGlassEffectViewStyleRegular);
+		NSView* contentHolder = OakWrapInGlass(self, NSGlassEffectViewStyleRegular, OakGlassFlatEdgeTop);
 		OakAddAutoLayoutViewsToSuperview([views allValues], contentHolder);
 		OakSetupKeyViewLoop(@[ self, _grammarPopUp, _tabSizePopUp, _bundleItemsPopUp, _symbolPopUp, _macroRecordingButton ]);
 

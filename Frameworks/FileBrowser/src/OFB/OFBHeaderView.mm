@@ -53,7 +53,7 @@ static NSPopUpButton* OakCreateFolderPopUpButton ()
 
 		// Controls go inside the glass, not on the bar: NSGlassEffectView guarantees
 		// placement only for its contentView.
-		NSView* contentHolder = OakWrapInGlass(self, NSGlassEffectViewStyleRegular);
+		NSView* contentHolder = OakWrapInGlass(self, NSGlassEffectViewStyleRegular, OakGlassFlatEdgeTop);
 		OakAddAutoLayoutViewsToSuperview([views allValues], contentHolder);
 		OakSetupKeyViewLoop(@[ self, _folderPopUpButton, _goBackButton, _goForwardButton ]);
 

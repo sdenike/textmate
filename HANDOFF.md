@@ -20,8 +20,8 @@ maintainer and enforced throughout:
 
 | | |
 |---|---|
-| Released | **v3.0.0-revived.27** (2026-08-27) — the `mate` command works again on Macs that once ran the original TextMate; Settings, About and the update window rebuilt |
-| Unreleased | **7 commits on `master`, no CHANGELOG entry — `.28` is uncut.** #35 Ruby 2.6 bundle shims, #36 `bin/bench/measure-open.sh`, #37 `bin/check_bundle_commands`, #38 Bundle Support pin bump, #39 Apache/C/Objective-C forks for colon-`case` syntax errors, #40-#41 a headless parse benchmark that proves the `does_match` fast-reject |
+| Released | **v3.0.0-revived.28** (2026-10-09) — bundle Ruby-compat shims and forks, flat-top glass bars, glass zoom HUD; first build against the macOS 27 SDK |
+| Unreleased | nothing. Glass work still open: tab bar (deliberately flat), titlebar scroll-edge effect, concentric corners, find/commit panels. |
 | Phases complete | 0-7 |
 | Phase 6 | **complete** — QuickLook, onboarding, all 6 Settings panes, the update sheet and About. Everything merged; no open PRs. |
 | Phases remaining | 8 (shared modules), 9 (optional LSP) |
@@ -173,6 +173,14 @@ window-move notifications and a hit-test.
 **GUI gestures cannot be verified in the agent sandbox** — no way to synthesise a sustained
 mouse-down/move/up. Anything claiming otherwise should be checked: one such claim turned out to have
 been made against `/Applications/TextMate.app`, an older installed release, not the build under test.
+
+## macOS 27 (measured 2026-10-09 on 27.0.1, Xcode 27.0)
+
+Builds against SDK 27.0 with the deployment target still 26.0; 22 of 24 test targets pass. CI and the release
+runner use Xcode 26, so 27-only API (`NSGlassEffectView.effectIsInteractive`) sits behind
+`__MAC_OS_X_VERSION_MAX_ALLOWED >= 270000` and is compiled out of release builds. Parse benchmark unchanged
+(1.09 s). **Open:** `buffer_test`'s three spelling tests find nothing; `ns::spellcheck` is never reached, so
+the fault is in `spelling_t::did_parse`'s filter (STREAM.md 2026-10-09). `buffer` is not in CI's `TESTS` list.
 
 ## Next
 

@@ -4,6 +4,83 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-10-08 — RESUME HERE: first build and test pass on macOS 27.0.1 / Xcode 27.0 (SDK 27.0)
+
+Branch `compat/macos-27`. Uncommitted: `Frameworks/OakAppKit/tests/t_glass_snapshot.mm` only.
+
+### Measured
+
+- `bin/build` succeeds against `MacOSX27.0.sdk` with the deployment target still 26.0. `bin/deploy-local`
+  installed it to `/Applications` and removed the build-tree copy. Reduce Transparency is off.
+- 22 of 24 test targets pass. `scm_test` shows the 2 documented hg/svn skips (82 of 84). Two real findings:
+  - **`buffer_test` `test_spelling` and two siblings (`t_buffer.mm:117,136,151) find 0 misspellings where 6 and 3 are
+    expected.** Not diagnosed. Unknown whether it predates 27 (no 26 machine to compare), or is
+    `NSSpellChecker` returning nothing for "en" headless. Check this before blaming the SDK.
+  - **`OakAppKit_test` glass snapshot tests broke, and the cause is the harness, not the glass.** The display is
+    Retina, so offscreen reps are 2x (408 px wide, not 204): asserts now use `rep.size`. Offscreen glass
+    material difference measured 0.0054 (was 0.44 on 26): floor lowered to 0.002. The "offscreen cannot see
+    inside glass" tripwire fired: on 27 a label in `contentView` leaves the same ink as a subview (0.0235 each),
+    so that limitation is gone; the test now asserts only the baseline. Live renders of `OakKeyEquivalentView`
+    in light and dark were looked at and are correct (flat, since the backdrop is a flat colour).
+
+### 2026-10-09 increment: glass pass started (uncommitted, deployed to /Applications)
+
+- `OTVHUD.mm`: zoom-percentage overlay moved from a hand-drawn grey rounded rect to Clear glass, label as
+  `contentView` in a centring holder, `labelColor` text, no shadow, radius = height / 2. **Not yet seen
+  rendering**: the System Events keystroke that should trigger it did nothing (likely no Accessibility
+  permission), and the HUD fades after 1 s.
+- `OakKeyEquivalentView.mm`: `effectIsInteractive = YES` behind `@available(macOS 27.0, *)`.
+- Decision: kept the deployment target at 26.0 and guarded 27-only API, rather than bumping to 27 and dropping
+  26 users. Bumping later is a one-line change plus deleting the guards.
+- **Not done**: tab bar (`OakTabBarView.mm`, custom-drawn strip with selected-tab outline; needs a design
+  decision, not a wrap), titlebar `preferredScrollEdgeEffectStyle` (26.1, only matters if content scrolls
+  under the titlebar; unverified), find/commit panels, concentric corners.
+
+### 2026-10-09 later: flat-top glass bars (uncommitted, deployed)
+
+Report from the maintainer: a rounded status-bar pill beside a square sidebar leaves a gap at its top corner.
+`OakWrapInGlass` gained `OakGlassFlatEdge`. A glass view has one uniform corner radius and no per-corner API
+on 26 (`cornerConfiguration` is read-only even on 27), so the glass is extended past the flat edge by the
+radius and the bar clips it (`masksToBounds`); the nested holder returned to callers stays exactly bar-sized.
+Applied to `OTVStatusBar`, `HOStatusBar`, `OFBActionsView`, `OFBHeaderView`.
+Measured in a throwaway harness: ancestor `masksToBounds` works (flat top, round bottom); a `layer.mask` on the
+glass view itself is ignored. Maintainer confirmed the editor status bar is fixed. My own close-up screenshots
+suggest the file-browser header and actions bars may still show rounded corners; unresolved, needs the
+maintainer's eyes on the latest build. Throwaway test deleted.
+
+### 2026-10-09 perf baseline on macOS 27.0.1 (M-series, Retina)
+
+- `buffer_test -b`, 7 runs, no other load: `benchmark_parse_cpp_like_1mb` **1.086-1.099 s**, one tight cluster.
+  Same as the ~1.10 s cluster measured on 26, so **no parse regression on 27**, and the 2.10 s cluster did not
+  appear. `benchmark_insert_50_mb` 0.19-0.22 s.
+- **Open question from 2026-08-29 answered: the `value_for_setting` cache bound is not thrashing.** Raising it
+  from 50000 to 200000 against the 66,436-context fixture measured 1.093 s vs 1.091 s (6 runs each). Reverted.
+  The benchmark visits each context once, so a wipe costs nothing; a real workload that revisits contexts could
+  still differ, but nothing here supports changing the bound.
+- **`buffer_test` spelling failures (`test_spelling`, `_2`, `_3`) are upstream of `ns::spellcheck`.** A probe in
+  `ns::spellcheck` printed nothing, so it is never called. `NSSpellChecker` itself works on 27, including from a
+  background queue and with language nil, `en` and `en_US`. The fault is in `spelling_t::did_parse`'s scope /
+  `spellChecking` setting filter or in `set_live_spelling`. Whether it predates 27 is unknown: CI has not run
+  `build-and-test` recently (only gitleaks shows in `gh run list`).
+
+### SDK 27 surface (AppKit headers)
+
+Only two glass-relevant additions are 27-only: `NSGlassEffectView.effectIsInteractive` and
+`NSViewCornerConfiguration`/`cornerConfiguration` (concentric corners). Everything else (`NSBezelStyleGlass`,
+`NSToolbarItemStyleProminent`, `NSBackgroundExtensionView`, `NSScrollEdgeEffectStyle`) is 26.0/26.1. Using the
+27 pair needs `@available(macOS 27, *)` guards until the deployment target moves.
+
+### Glass coverage
+
+Glassed: 10 sites (file browser header/actions, 3 status bars, 3 chooser footers, choice menu, tooltip, key-equivalent view).
+Not glassed and candidates: tab bar (`OakTabBarView.mm:153`, custom fill), `OTVHUD` overlay, titlebar accessory
+(no `preferredScrollEdgeEffectStyle`), find/commit panels. Deliberately not glass: gutter, text view, dividers (content layer).
+`effectIsInteractive` is unset on every site, including the interactive key-equivalent control.
+
+**If interrupted here:** decide the scope of the glass pass, then diagnose the `buffer_test` spelling failures.
+
+---
+
 ## 2026-09-01 — RESUME HERE: a reported "TextMate cannot open .txt or .yaml" is an OS policy, not our bug
 
 No code changed. Docs only.
