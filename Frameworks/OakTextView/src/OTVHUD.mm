@@ -1,17 +1,6 @@
 #import "OTVHUD.h"
 #import <OakAppKit/OakUIConstructionFunctions.h>
 
-@interface OTVHUDView : NSView
-@end
-
-@implementation OTVHUDView
-- (void)drawRect:(NSRect)aRect
-{
-	[[NSColor colorWithCalibratedWhite:0.5 alpha:0.5] set];
-	[[NSBezierPath bezierPathWithRoundedRect:[self bounds] xRadius:6 yRadius:6] fill];
-}
-@end
-
 @interface OTVHUD ()
 {
 	NSTextField* _textField;
@@ -43,17 +32,30 @@
 		window.opaque             = NO;
 		window.level              = NSPopUpMenuWindowLevel;
 
-		OTVHUDView* contentView = [[OTVHUDView alloc] initWithFrame:aRect];
+		// A transient overlay that should read through to the text beneath it, so
+		// Clear glass rather than Regular. The label is the glass's content, centred
+		// in a holder: AppKit pins contentView to fill the glass, and a label drawn
+		// to fill would sit at the top rather than the middle.
+		NSView* contentView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, kHeight)];
 		window.contentView = contentView;
+
+		NSGlassEffectView* glass = OakCreateGlassBackground(NSGlassEffectViewStyleClear);
+		glass.translatesAutoresizingMaskIntoConstraints = YES;
+		glass.autoresizingMask = NSViewWidthSizable|NSViewHeightSizable;
+		glass.frame            = contentView.bounds;
+		glass.cornerRadius     = kHeight / 2;
 
 		_textField = OakCreateLabel(@"", [NSFont systemFontOfSize:20]);
 		self.stringValue = @"88888";
 
-		[_textField sizeToFit];
-		CGFloat textHeight = NSHeight(_textField.frame);
-		[_textField setFrame:NSMakeRect(0, round((kHeight - textHeight) / 2), kWidth, textHeight)];
+		NSView* holder = [[NSView alloc] initWithFrame:NSZeroRect];
+		OakAddAutoLayoutViewsToSuperview(@[ _textField ], holder);
+		[_textField.leadingAnchor constraintEqualToAnchor:holder.leadingAnchor].active   = YES;
+		[_textField.trailingAnchor constraintEqualToAnchor:holder.trailingAnchor].active = YES;
+		[_textField.centerYAnchor constraintEqualToAnchor:holder.centerYAnchor].active   = YES;
+		glass.contentView = holder;
 
-		[contentView addSubview:_textField];
+		[contentView addSubview:glass];
 	}
 	return self;
 }
@@ -63,15 +65,9 @@
 	NSMutableParagraphStyle* pStyle = [NSMutableParagraphStyle new];
 	[pStyle setAlignment:NSTextAlignmentCenter];
 
-	NSShadow* shadow = [NSShadow new];
-	[shadow setShadowColor:[NSColor darkGrayColor]];
-	[shadow setShadowOffset:NSMakeSize(1, -1)];
-	[shadow setShadowBlurRadius:1.2];
-
 	_textField.objectValue = [[NSMutableAttributedString alloc] initWithString:someText attributes:@{
 		NSParagraphStyleAttributeName:  pStyle,
-		NSForegroundColorAttributeName: [NSColor whiteColor],
-		NSShadowAttributeName:          shadow
+		NSForegroundColorAttributeName: NSColor.labelColor
 	}];
 }
 

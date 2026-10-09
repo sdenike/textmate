@@ -84,7 +84,15 @@ OakGlassMetrics OakGlassChromeMetrics ();
 // the glass's contentView.
 //
 // Add controls to the RETURNED view, never to `bar` itself.
-NSView* OakWrapInGlass (NSView* bar, NSGlassEffectViewStyle style);
+//
+// `flatEdge` squares one edge for a bar that butts against a square neighbour. A
+// glass view has one uniform corner radius, and on macOS 26 there is no
+// per-corner API (`cornerConfiguration` is read-only even on 27), so the glass is
+// extended past that edge by the radius and `bar` clips it: the rounded corners
+// fall outside the clip and the exposed edge is straight. The returned holder is
+// still exactly `bar`'s size, so callers lay out against it as before.
+enum OakGlassFlatEdge { OakGlassFlatEdgeNone, OakGlassFlatEdgeTop, OakGlassFlatEdgeBottom };
+NSView* OakWrapInGlass (NSView* bar, NSGlassEffectViewStyle style, OakGlassFlatEdge flatEdge = OakGlassFlatEdgeNone);
 
 OakBackgroundFillView* OakCreateVerticalLine (OakBackgroundFillViewStyle style);
 void OakSetupKeyViewLoop (NSArray<NSView*>* views);

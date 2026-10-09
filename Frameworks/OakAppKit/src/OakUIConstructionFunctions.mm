@@ -332,19 +332,38 @@ OakGlassMetrics OakGlassChromeMetrics ()
 	return { .cornerRadius = 12, .contentInsets = NSEdgeInsetsMake(8, 12, 8, 12) };
 }
 
-NSView* OakWrapInGlass (NSView* bar, NSGlassEffectViewStyle style)
+NSView* OakWrapInGlass (NSView* bar, NSGlassEffectViewStyle style, OakGlassFlatEdge flatEdge)
 {
 	NSGlassEffectView* glass = OakCreateGlassBackground(style);
 
 	NSView* holder = [[NSView alloc] initWithFrame:NSZeroRect];
 	holder.translatesAutoresizingMaskIntoConstraints = NO;
-	glass.contentView = holder;
+
+	// The glass pins its contentView to fill the glass. With a flat edge the glass
+	// is taller than `bar`, so the controls' holder is nested inside with that
+	// overhang cut back out, and it is the nested one that callers get.
+	CGFloat overhang = flatEdge == OakGlassFlatEdgeNone ? 0 : glass.cornerRadius;
+	NSView* outer = holder;
+	if(overhang > 0)
+	{
+		outer = [[NSView alloc] initWithFrame:NSZeroRect];
+		outer.translatesAutoresizingMaskIntoConstraints = NO;
+		OakAddAutoLayoutViewsToSuperview(@[ holder ], outer);
+		[holder.leadingAnchor constraintEqualToAnchor:outer.leadingAnchor].active   = YES;
+		[holder.trailingAnchor constraintEqualToAnchor:outer.trailingAnchor].active = YES;
+		[holder.topAnchor constraintEqualToAnchor:outer.topAnchor constant:flatEdge == OakGlassFlatEdgeTop ? overhang : 0].active          = YES;
+		[holder.bottomAnchor constraintEqualToAnchor:outer.bottomAnchor constant:flatEdge == OakGlassFlatEdgeBottom ? -overhang : 0].active = YES;
+
+		bar.wantsLayer = YES;
+		bar.layer.masksToBounds = YES;
+	}
+	glass.contentView = outer;
 
 	OakAddAutoLayoutViewsToSuperview(@[ glass ], bar);
 	[glass.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor].active   = YES;
 	[glass.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor].active = YES;
-	[glass.topAnchor constraintEqualToAnchor:bar.topAnchor].active           = YES;
-	[glass.bottomAnchor constraintEqualToAnchor:bar.bottomAnchor].active     = YES;
+	[glass.topAnchor constraintEqualToAnchor:bar.topAnchor constant:flatEdge == OakGlassFlatEdgeTop ? -overhang : 0].active          = YES;
+	[glass.bottomAnchor constraintEqualToAnchor:bar.bottomAnchor constant:flatEdge == OakGlassFlatEdgeBottom ? overhang : 0].active = YES;
 
 	return holder;
 }
