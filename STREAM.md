@@ -6,7 +6,7 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ## 2026-10-13 15:50 — installed `mate` no longer inherits com.apple.quarantine
 
-Branch `fix/mate-quarantine`. `TerminalPreferences.mm` `cp_path` now strips `com.apple.quarantine` from the
+Branch `release/v3.0.0-revived.29` (renamed from `fix/mate-quarantine`). `TerminalPreferences.mm` `cp_path` now strips `com.apple.quarantine` from the
 installed copy (`removexattr`, or `/usr/bin/xattr -c` via the admin path).
 
 - **Why:** a Homebrew-installed bundle is quarantined; copying `mate` out of it quarantined the copy too.
@@ -16,8 +16,8 @@ installed copy (`removexattr`, or `/usr/bin/xattr -c` via the admin path).
   still produced a quarantined destination, so the strip has to be explicit and after the copy.
 - **Not tested:** the admin-privileges branch (needs `/usr/local/bin` unwritable). Not covered by
   `Preferences_test`, which does not link the full Preferences library.
-- **If interrupted here:** commit, open PR with `-R sdenike/textmate`. No CHANGELOG heading added: a new
-  `## (v...)` heading cuts a release.
+- **Release:** CHANGELOG heading `v3.0.0-revived.29` added at the maintainer's request; merging the PR cuts it.
+- **If interrupted here:** open the PR with `-R sdenike/textmate` (gh defaults to upstream).
 
 ---
 

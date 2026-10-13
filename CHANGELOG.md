@@ -2,6 +2,20 @@ Title: Release Notes
 
 # Changes
 
+## 2026-10-13 (v3.0.0-revived.29)
+
+Installing Shell Support no longer trips Gatekeeper.
+
+### Fixed
+
+* After installing or upgrading through Homebrew, macOS could refuse to open
+  TextMate with "Apple could not verify “mate” is free of malware". The
+  installed `mate` command was copied out of the quarantined app bundle and
+  inherited its quarantine flag, and TextMate runs `mate --version` at every
+  launch. The installed copy now has the flag removed. If you are already
+  affected, run `xattr -d com.apple.quarantine /usr/local/bin/mate` once (or
+  the path shown in Settings → Terminal).
+
 ## 2026-10-09 (v3.0.0-revived.28)
 
 Bundle commands run on the system Ruby again, and the editor's bars and overlays

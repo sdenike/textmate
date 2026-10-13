@@ -782,6 +782,19 @@ database rather than an xattr, and never creates the pair. That is the concrete 
 file-type association UI (`LSSetDefaultRoleHandlerForContentType`) that HANDOFF lists as scoped but
 unbuilt: it steers users onto the mechanism that does not trip this.
 
+**One place now does touch it, and it is not a workaround for an OS policy: `mate`'s installer.** A Homebrew-installed bundle is quarantined, and
+`TerminalPreferences.mm`'s `cp_path` copied `mate` out of it with the flag attached (`copyfile` with
+`COPYFILE_ALL`, or `/bin/cp -p` on the admin path). A bare Mach-O has no stapled notarization ticket,
+so Gatekeeper blocked `/usr/local/bin/mate` with *"Apple could not verify “mate”…"* the instant
+`updateMateIfRequired` ran `mate --version` at launch -- reported 2026-10-13 after a `brew upgrade`, and
+it read as an app-signing problem because stripping quarantine from the `.app` alone changed the dialog
+from "TextMate" to "mate" rather than fixing it. The signature was never wrong (`spctl` accepted the
+bundle, the stapled ticket validated, no nested Mach-O failed `codesign --verify`).
+
+**Skipping xattrs in the copy does not work**: `COPYFILE_DATA|STAT|ACL` and `cp -pX` both still produced a
+quarantined destination, so `clear_quarantine` removes it explicitly afterwards. Diagnose this class of
+report with `xattr -l` on the *installed* `mate` (`mateInstallPath` in defaults), not on the app.
+
 Nothing in this tree reads or writes quarantine — `com.apple.quarantine`, `LSQuarantine` and
 `LSFileQuarantineEnabled` appear nowhere in the source — so there is no code fix here, and adding one
 would mean working around an OS policy the app is not party to.
