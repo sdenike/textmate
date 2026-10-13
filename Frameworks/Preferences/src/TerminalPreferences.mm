@@ -10,6 +10,7 @@
 #import <ns/ns.h>
 #import <regexp/format_string.h>
 #import <oak/compat.h>
+#include <sys/xattr.h>
 
 static bool run_auth_command (AuthorizationRef& auth, std::string const cmd, ...)
 {
@@ -95,18 +96,45 @@ static bool cp_requires_admin (std::string const& dst)
 	return access(dst.c_str(), W_OK) != 0 && (access(dst.c_str(), X_OK) == 0 || access(path::parent(dst).c_str(), W_OK) != 0);
 }
 
+// A Homebrew-installed bundle is quarantined, and copying `mate` out of it gives
+// the installed copy com.apple.quarantine too. A bare Mach-O carries no stapled
+// notarization ticket, so Gatekeeper refuses it with "Apple could not verify
+// mate..." the first time TextMate runs it (updateMateIfRequired does, at every
+// launch). Skipping xattrs in the copy does not help -- copyfile(3) and cp(1)
+// both propagate the quarantine flag regardless -- so it is removed afterwards.
+// Failure here is logged, not fatal: the copy itself succeeded.
+static void clear_quarantine (std::string const& path, AuthorizationRef& auth, bool requiresAdmin)
+{
+	if(!requiresAdmin)
+	{
+		if(removexattr(path.c_str(), "com.apple.quarantine", XATTR_NOFOLLOW) != 0 && errno != ENOATTR)
+			perrorf("TerminalPreferences: removexattr(\"%s\", com.apple.quarantine)", path.c_str());
+	}
+	else if(!run_auth_command(auth, "/usr/bin/xattr", "-c", path.c_str(), NULL))
+	{
+		perrorf("TerminalPreferences: /usr/bin/xattr -c \"%s\"", path.c_str());
+	}
+}
+
 static bool cp_path (std::string const& src, std::string const& dst, AuthorizationRef& auth)
 {
-	if(!cp_requires_admin(dst))
+	bool const requiresAdmin = cp_requires_admin(dst);
+	if(!requiresAdmin)
 	{
 		if(copyfile(src.c_str(), dst.c_str(), NULL, COPYFILE_ALL | COPYFILE_NOFOLLOW_SRC) == 0)
+		{
+			clear_quarantine(dst, auth, false);
 			return true;
+		}
 		perrorf("TerminalPreferences: copyfile(\"%s\", \"%s\", NULL, COPYFILE_ALL | COPYFILE_NOFOLLOW_SRC)", src.c_str(), dst.c_str());
 	}
 	else
 	{
 		if(run_auth_command(auth, "/bin/cp", "-p", src.c_str(), dst.c_str(), NULL))
+		{
+			clear_quarantine(dst, auth, true);
 			return true;
+		}
 		perrorf("TerminalPreferences: /bin/cp -p \"%s\" \"%s\"", src.c_str(), dst.c_str());
 	}
 	return false;
