@@ -14,6 +14,9 @@ installed copy (`removexattr`, or `/usr/bin/xattr -c` via the admin path).
   moment `updateMateIfRequired` ran `mate --version` at launch. Reported 2026-10-13 after a `brew upgrade`.
 - **Measured:** skipping xattrs does NOT work. `copyfile` with `COPYFILE_DATA|STAT|ACL` and `cp -pX` both
   still produced a quarantined destination, so the strip has to be explicit and after the copy.
+- **End to end, 2026-10-13 16:18:** built .29, `deploy-local`, set a quarantine xattr (`01c1`, user-approved so
+  no dialog) on the bundle's `mate`, set `mateInstallPath`/`mateInstallVersion` (.28), launched.
+  `updateMateIfRequired` replaced `/usr/local/bin/mate` with .29 and it carried **no xattrs**.
 - **Not tested:** the admin-privileges branch (needs `/usr/local/bin` unwritable). Not covered by
   `Preferences_test`, which does not link the full Preferences library.
 - **Release:** CHANGELOG heading `v3.0.0-revived.29` added at the maintainer's request; merging the PR cuts it.

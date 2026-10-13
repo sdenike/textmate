@@ -184,8 +184,8 @@ the fault is in `spelling_t::did_parse`'s filter (STREAM.md 2026-10-09). `buffer
 
 **v3.0.0-revived.29 (2026-10-13):** the installed `mate` no longer inherits `com.apple.quarantine` from a
 Homebrew-installed bundle (`TerminalPreferences.mm` `cp_path`). Without it Gatekeeper blocked `mate` at launch.
-Skipping xattrs in the copy was measured and does not work; the strip is explicit. The admin-privileges branch
-is untested. See CLAUDE.md, "One place now does touch it".
+Skipping xattrs in the copy was measured and does not work; the strip is explicit. Verified end to end through
+`updateMateIfRequired`; the admin-privileges branch is untested. See CLAUDE.md, "One place now does touch it".
 
 ## Next
 
