@@ -4,6 +4,26 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-10-13 15:50 — installed `mate` no longer inherits com.apple.quarantine
+
+Branch `release/v3.0.0-revived.29` (renamed from `fix/mate-quarantine`). `TerminalPreferences.mm` `cp_path` now strips `com.apple.quarantine` from the
+installed copy (`removexattr`, or `/usr/bin/xattr -c` via the admin path).
+
+- **Why:** a Homebrew-installed bundle is quarantined; copying `mate` out of it quarantined the copy too.
+  A bare Mach-O has no stapled ticket, so Gatekeeper blocked `mate` ("Apple could not verify mate...") the
+  moment `updateMateIfRequired` ran `mate --version` at launch. Reported 2026-10-13 after a `brew upgrade`.
+- **Measured:** skipping xattrs does NOT work. `copyfile` with `COPYFILE_DATA|STAT|ACL` and `cp -pX` both
+  still produced a quarantined destination, so the strip has to be explicit and after the copy.
+- **End to end, 2026-10-13 16:18:** built .29, `deploy-local`, set a quarantine xattr (`01c1`, user-approved so
+  no dialog) on the bundle's `mate`, set `mateInstallPath`/`mateInstallVersion` (.28), launched.
+  `updateMateIfRequired` replaced `/usr/local/bin/mate` with .29 and it carried **no xattrs**.
+- **Not tested:** the admin-privileges branch (needs `/usr/local/bin` unwritable). Not covered by
+  `Preferences_test`, which does not link the full Preferences library.
+- **Release:** CHANGELOG heading `v3.0.0-revived.29` added at the maintainer's request; merging the PR cuts it.
+- **If interrupted here:** open the PR with `-R sdenike/textmate` (gh defaults to upstream).
+
+---
+
 ## 2026-10-08 — RESUME HERE: first build and test pass on macOS 27.0.1 / Xcode 27.0 (SDK 27.0)
 
 Branch `compat/macos-27`. Uncommitted: `Frameworks/OakAppKit/tests/t_glass_snapshot.mm` only.
