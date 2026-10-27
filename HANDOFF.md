@@ -177,10 +177,11 @@ been made against `/Applications/TextMate.app`, an older installed release, not 
 ## macOS 27 (measured 2026-10-09 on 27.0.1, Xcode 27.0)
 
 Builds against SDK 27.0 with the deployment target still 26.0; 22 of 24 test targets pass. CI and the release
-runner use Xcode 26, so 27-only API (`NSGlassEffectView.effectIsInteractive`) sits behind
-`__MAC_OS_X_VERSION_MAX_ALLOWED >= 270000` and is compiled out of release builds. Parse benchmark unchanged
-(1.09 s). **Open:** `buffer_test`'s three spelling tests find nothing; `ns::spellcheck` is never reached, so
-the fault is in `spelling_t::did_parse`'s filter (STREAM.md 2026-10-09). `buffer` is not in CI's `TESTS` list.
+runner moved to the `xcode-27` image (Xcode 27.1, a GitHub *preview* label) on 2026-10-27; CI ran green there. 27-only API
+(`NSGlassEffectView.effectIsInteractive`) keeps both its `__MAC_OS_X_VERSION_MAX_ALLOWED >= 270000` and runtime
+`@available` guards, so a release is safe on 26. **The release job on `xcode-27` is untested until the next release**;
+revert is one line (`runs-on: macos-26`) if signing or notarization misbehaves on the new image. Parse benchmark unchanged
+(1.09 s). `buffer_test`'s three spelling tests are fixed (STREAM.md 2026-10-27: `wait_for_repair` never re-checked spelling); `buffer` is now in CI's `TESTS` list.
 
 **v3.0.0-revived.29 (2026-10-13):** the installed `mate` no longer inherits `com.apple.quarantine` from a
 Homebrew-installed bundle (`TerminalPreferences.mm` `cp_path`). Without it Gatekeeper blocked `mate` at launch.

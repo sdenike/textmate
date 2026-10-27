@@ -47,8 +47,8 @@ static CGFloat const kControlHeight = 22;
 		// This is an input the user clicks and types into, which is what
 		// effectIsInteractive exists for. It is a macOS 27 property and the
 		// deployment target is 26, so it is guarded and 26 keeps the static glass.
-		// The property is absent from the macOS 26 SDK the release runner builds with,
-		// so the runtime check alone does not compile there.
+		// The property is absent from the macOS 26 SDK, so the runtime check alone
+		// does not compile when building against it.
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
 		if(@available(macOS 27.0, *))
 			_glassView.effectIsInteractive = YES;

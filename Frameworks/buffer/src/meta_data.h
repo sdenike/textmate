@@ -10,6 +10,9 @@ namespace ng
 		bool disabled () const        { return _disabled; }
 		void set_disabled (bool flag) { _disabled = flag; }
 
+		// Re-enable checking and spell check whatever did_parse() skipped while disabled.
+		void resume (buffer_t const* buffer);
+
 		void check_spelling (buffer_t const* buffer);
 		std::map<size_t, bool> misspellings (buffer_t const* buffer, size_t from, size_t to) const;
 
@@ -24,6 +27,7 @@ namespace ng
 		typedef indexed_map_t<bool> tree_t;
 		tree_t _misspellings;    // true = misspelled, false = proper
 		bool _disabled = false;
+		std::optional< std::pair<size_t, size_t> > _skipped; // range did_parse() dropped while _disabled
 	};
 
 	struct symbols_t : meta_data_t

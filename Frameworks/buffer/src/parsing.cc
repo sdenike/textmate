@@ -144,27 +144,31 @@ namespace ng
 		if(_spelling)
 			_spelling->set_disabled(true);
 
-		std::lock_guard<std::mutex> lock(grammar()->mutex());
-		while(!_dirty.empty() && !_parser_states.empty())
 		{
-			size_t n    = convert(_dirty.begin()->first).line;
-			size_t from = begin(n);
-			size_t to   = end(n);
-			auto state  = from == 0 ? _parser_states.begin() : _parser_states.find(from);
-			if(state == _parser_states.end())
+			std::lock_guard<std::mutex> lock(grammar()->mutex());
+			while(!_dirty.empty() && !_parser_states.empty())
 			{
-				os_log_error(OS_LOG_DEFAULT, "No parser state for %zu-%zu (%p)\n%{public}s", from, to, this, substr(0, size()).c_str());
-				break;
-			}
+				size_t n    = convert(_dirty.begin()->first).line;
+				size_t from = begin(n);
+				size_t to   = end(n);
+				auto state  = from == 0 ? _parser_states.begin() : _parser_states.find(from);
+				if(state == _parser_states.end())
+				{
+					os_log_error(OS_LOG_DEFAULT, "No parser state for %zu-%zu (%p)\n%{public}s", from, to, this, substr(0, size()).c_str());
+					break;
+				}
 
-			std::string const line = substr(from, to);
-			std::map<size_t, scope::scope_t> newScopes;
-			auto newState = parse::parse(line.data(), line.data() + line.size(), state->second, newScopes, from == 0);
-			update_scopes(0, from, std::make_pair(from, to), newScopes, newState);
+				std::string const line = substr(from, to);
+				std::map<size_t, scope::scope_t> newScopes;
+				auto newState = parse::parse(line.data(), line.data() + line.size(), state->second, newScopes, from == 0);
+				update_scopes(0, from, std::make_pair(from, to), newScopes, newState);
+			}
 		}
 
+		// Outside the grammar lock, and one check for the whole skipped range rather than one per parsed
+		// line, which is what the soft dispatch-thread limit above objects to.
 		if(_spelling)
-			_spelling->set_disabled(false);
+			_spelling->resume(this);
 	}
 
 } /* ng */
