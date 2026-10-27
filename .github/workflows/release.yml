@@ -18,7 +18,7 @@ on:
 jobs:
   # Fresh build + test gate. A release must not ship an untested build, so the
   # publish job below depends on this. Reuses the same isolated build/test jobs
-  # as CI via the reusable workflow (`build` and `test`, each on macos-26).
+  # as CI via the reusable workflow (`build` and `test`, each on xcode-27).
   verify:
     if: github.repository == 'sdenike/textmate'
     uses: ./.github/workflows/build-and-test.yml

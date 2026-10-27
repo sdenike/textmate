@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     if: github.repository == 'sdenike/textmate'
-    runs-on: macos-26   # Xcode 26.4.1 default → actool .icon support
+    runs-on: xcode-27   # macOS 27 image, Xcode 27.1 default (preview label; actool .icon support)
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
@@ -29,7 +29,7 @@ jobs:
 
   test:
     if: github.repository == 'sdenike/textmate'
-    runs-on: macos-26   # Xcode 26.4.1 default → actool .icon support
+    runs-on: xcode-27   # macOS 27 image, Xcode 27.1 default (preview label; actool .icon support)
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
