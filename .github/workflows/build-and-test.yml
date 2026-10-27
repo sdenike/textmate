@@ -71,7 +71,7 @@ jobs:
           # the resulting 26 -> 25 drop; this list had simply never been updated, and could
           # not fail visibly while the workflow was triggering on a branch that does not
           # exist here.
-          TESTS="authorization_test bundles_test BundlesManager_test document_test encoding_test FileBrowser_test HTMLOutput_test io_test ns_test OakAppKit_test parse_test plist_test Preferences_test regexp_test scm_test scope_test selection_test settings_test SoftwareUpdate_test text_test theme_test"
+          TESTS="authorization_test buffer_test bundles_test BundlesManager_test document_test encoding_test FileBrowser_test HTMLOutput_test io_test ns_test OakAppKit_test parse_test plist_test Preferences_test regexp_test scm_test scope_test selection_test settings_test SoftwareUpdate_test text_test theme_test"
           echo "Running tests: $TESTS"
           FAIL=0
           for t in $TESTS; do

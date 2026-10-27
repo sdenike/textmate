@@ -4,6 +4,23 @@ Running work log, newest first. Timestamp · what · why · if-interrupted-here.
 
 ---
 
+## 2026-10-27 — `buffer_test` spelling failures fixed: `wait_for_repair` never re-checked spelling
+
+Branch `fix/spelling-macos27` (from `master` at `3a654bb9`). Not a macOS 27 regression.
+
+- **Cause:** `buffer_t::wait_for_repair` sets `spelling_t::_disabled` for the whole parse (a 10.12-era guard against
+  NSSpellChecker's dispatch soft limit) and later just cleared the flag. Every `did_parse` during the repair removed
+  its misspellings and returned, so nothing was ever re-checked. The 2026-10-09 theory ("fault in the scope filter")
+  was wrong; the filter is fine.
+- **Production impact:** `-[OakDocument enumerateSymbolsUsingBlock:]` (symbol list, ⇧⌘T) calls `wait_for_repair`, so
+  squiggles in text repaired that way vanished until the next edit or recheck.
+- **Fix:** `spelling_t` records the range it skipped while disabled and `spelling_t::resume()` re-checks it once,
+  after the grammar lock is released. `wait_for_repair` calls `resume`.
+- **Verified:** `buffer_test` 27/27 (was 24/27), `document_test` passes. `buffer_test` added to the CI `TESTS` list.
+- **If interrupted here:** next is moving the release runner (`release.yml`, `build-and-test.yml` `runs-on: macos-26`) to Xcode 27.
+
+---
+
 ## 2026-10-13 15:50 — installed `mate` no longer inherits com.apple.quarantine
 
 Branch `release/v3.0.0-revived.29` (renamed from `fix/mate-quarantine`). `TerminalPreferences.mm` `cp_path` now strips `com.apple.quarantine` from the
