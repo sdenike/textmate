@@ -17,7 +17,10 @@ Branch `fix/spelling-macos27` (from `master` at `3a654bb9`). Not a macOS 27 regr
 - **Fix:** `spelling_t` records the range it skipped while disabled and `spelling_t::resume()` re-checks it once,
   after the grammar lock is released. `wait_for_repair` calls `resume`.
 - **Verified:** `buffer_test` 27/27 (was 24/27), `document_test` passes. `buffer_test` added to the CI `TESTS` list.
-- **If interrupted here:** next is moving the release runner (`release.yml`, `build-and-test.yml` `runs-on: macos-26`) to Xcode 27.
+- **Runner:** `build-and-test.yml` and `release.yml`'s release job now `runs-on: xcode-27` (macOS 27 base, Xcode 27.1; GitHub
+  preview label, no `macos-27` label exists). PR #45 CI green on it: build 4m, test 9m, includes `buffer_test`.
+  The release job (keychain, notarytool, stapler) has not run on the new image; revert is `runs-on: macos-26`.
+- **If interrupted here:** merge PR #45; the first release after is the real test of the release job.
 
 ---
 
